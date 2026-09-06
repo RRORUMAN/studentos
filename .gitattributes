@@ -1,0 +1,13 @@
+# Normalise line endings so lint, diffs and lockfiles behave the same on
+# Windows, macOS and Linux. Text files are stored and checked out as LF.
+* text=auto eol=lf
+
+# Binary assets
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.webp binary
+*.ico  binary
+*.woff binary
+*.woff2 binary

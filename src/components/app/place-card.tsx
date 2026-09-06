@@ -1,0 +1,109 @@
+import { MapPin, ShieldCheck } from "lucide-react";
+import Link from "next/link";
+
+import { FeedbackMenu } from "@/components/app/feedback-menu";
+import { Badge } from "@/components/ui/primitives";
+import type { Place } from "@/data/types";
+import type { Scored } from "@/server/engines/recommend";
+import { cn, money, walk } from "@/lib/utils";
+
+/**
+ * ============================================================================
+ * SMART PLACE CARD
+ * ----------------------------------------------------------------------------
+ * Enough to decide immediately: price, walk, student value, your match, who
+ * confirmed it, and why. Every field is on the row or produced by the scorer.
+ *
+ * Student value is printed as a word, not a bar: "Excellent" is a decision,
+ * "84" is homework.
+ * ============================================================================
+ */
+
+export function valueWord(score: number): { label: string; accent: "mint" | "signal" | "amber" } {
+  if (score >= 85) return { label: "Excellent value", accent: "mint" };
+  if (score >= 70) return { label: "Good value", accent: "signal" };
+  return { label: "Fair value", accent: "amber" };
+}
+
+export function SmartPlaceCard({
+  scored,
+  where,
+  campusSaved = false,
+  friendsSaved = false,
+}: {
+  scored: Scored<Place>;
+  where: { currency: string; locale: string };
+  campusSaved?: boolean;
+  friendsSaved?: boolean;
+}) {
+  const place = scored.item;
+  const value = valueWord(place.studentValue);
+
+  return (
+    <article className="group relative flex flex-col rounded-2xl bg-white p-4 shadow-[var(--shadow-flat)] ring-1 ring-ink-950/6 transition-shadow hover:shadow-[var(--shadow-raise)]">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="font-mono text-micro uppercase tracking-[0.1em] text-ink-400">
+            {place.category}
+          </span>
+          {place.price === 0 ? <Badge accent="mint" tone="solid">Free</Badge> : null}
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
+          {place.price !== null && place.price > 0 ? (
+            <span className="tnum font-mono text-[1.0625rem] font-semibold text-ink-950">
+              {money(place.price, where)}
+            </span>
+          ) : place.price === null ? (
+            <span className="text-[0.8125rem] text-ink-400">{place.priceLabel}</span>
+          ) : null}
+          <FeedbackMenu targetKind="place" targetId={place.id} compact className="relative z-10 -mr-1.5" />
+        </div>
+      </div>
+
+      <h3 className="mt-1.5 text-[1.0625rem] leading-snug font-semibold text-ink-950">
+        <Link href={`/discover/${place.id}`} className="after:absolute after:inset-0 after:rounded-2xl">
+          {place.name}
+        </Link>
+      </h3>
+
+      <p className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[0.8125rem] text-ink-600">
+        <span className="inline-flex items-center gap-1">
+          <MapPin className="size-3.5 text-ink-400" />
+          {walk(place.walkMinutes)} walk
+        </span>
+        {place.verifiedBy >= 10 ? (
+          <span className="inline-flex items-center gap-1 text-mint-deep">
+            <ShieldCheck className="size-3.5" />
+            <span className="tnum">{place.verifiedBy}</span> confirmed
+          </span>
+        ) : null}
+        {friendsSaved ? (
+          <span className="text-pulse-deep">Friends saved this</span>
+        ) : campusSaved ? (
+          <span className="text-flow-deep">Students from your campus saved this</span>
+        ) : null}
+      </p>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <Badge accent={value.accent}>{value.label}</Badge>
+        {scored.match >= 60 ? (
+          <span
+            className={cn(
+              "tnum inline-flex items-center rounded-full px-2.5 py-1 font-mono text-micro font-semibold",
+              scored.match >= 80 ? "bg-signal text-ink-950" : "bg-signal-soft text-signal-deep",
+            )}
+          >
+            {scored.match}% match
+          </span>
+        ) : null}
+      </div>
+
+      {scored.reasons.length > 0 ? (
+        <p className="mt-2.5 text-[0.8125rem] leading-snug text-ink-500">
+          <span className="font-mono text-micro uppercase tracking-[0.08em] text-ink-400">Why </span>
+          {scored.reasons.slice(0, 3).join(" · ")}
+        </p>
+      ) : null}
+    </article>
+  );
+}

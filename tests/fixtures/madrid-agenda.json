@@ -1,0 +1,412 @@
+{
+ "@context": {
+  "c": "http://www.w3.org/2002/12/cal#",
+  "dcterms": "http://purl.org/dc/terms/",
+  "geo": "http://www.w3.org/2003/01/geo/wgs84_pos#",
+  "loc": "http://purl.org/ctic/infraestructuras/localizacion#",
+  "org": "http://purl.org/ctic/infraestructuras/organizacion#",
+  "vcard": "http://www.w3.org/2006/vcard/ns#",
+  "schema": "https://schema.org/",
+  "title": "vcard:fn",
+  "id": "dcterms:identifier",
+  "relation": "dcterms:relation",
+  "references": "dcterms:references",
+  "address": "vcard:adr",
+  "area": "loc:barrio",
+  "district": "loc:distrito",
+  "locality": "vcard:locality",
+  "postal-code": "vcard:postal-code",
+  "street-address": "vcard:street-address",
+  "location": "vcard:geo",
+  "latitude": "geo:lat",
+  "longitude": "geo:long",
+  "organization": "vcard:org",
+  "organization-desc": "dcterms:description",
+  "accesibility": "org:accesibilidad",
+  "services": "org:servicios",
+  "schedule": "org:horario",
+  "organization-name": "vcard:organization-name",
+  "description": "c:summary",
+  "link": "c:url",
+  "uid": "c:uid",
+  "dtstart": "c:dtstart",
+  "dtend": "c:dtend",
+  "time": "c:time",
+  "excluded-days": "c:exdate",
+  "event-location": "c:location",
+  "free": "schema:free",
+  "price": "c:resource",
+  "recurrence": "c:rrule",
+  "days": "c:byday",
+  "frequency": "c:freq",
+  "interval": "c:interval",
+  "audience": "dc:audience"
+ },
+ "@graph": [
+  {
+   "@id": "https://datos.madrid.es/egob/catalogo/tipo/evento/50366129-25-anos-museo-san-isidro-origenes-madrid.json",
+   "@type": "https://datos.madrid.es/egob/kos/actividades/Exposiciones",
+   "id": "50366129",
+   "title": "25 años del Museo de San Isidro. Los Orígenes de Madrid",
+   "description": "",
+   "free": 1,
+   "price": "",
+   "dtstart": "2026-07-21 00:00:00.0",
+   "dtend": "2027-01-31 23:59:00.0",
+   "time": "",
+   "excluded-days": "24/12/2026;25/12/2026;31/12/2026;1/1/2027;",
+   "recurrence": {
+    "days": "TU,WE,TH,FR,SA,SU",
+    "frequency": "WEEKLY",
+    "interval": 1
+   },
+   "uid": "50366129",
+   "link": "http://www.madrid.es/sites/v/index.jsp?vgnextchannel=ca9671ee4a9eb410VgnVCM100000171f5a0aRCRD&vgnextoid=92684dde03f7f910VgnVCM200000f921e388RCRD",
+   "event-location": "Museo de San Isidro. Los Orígenes de Madrid",
+   "references": {
+    "@id": "http://www.madrid.es/sites/v/index.jsp?vgnextchannel=ca9671ee4a9eb410VgnVCM100000171f5a0aRCRD&vgnextoid=39b35c3f9fe7f910VgnVCM200000f921e388RCRD"
+   },
+   "relation": {
+    "@id": "https://datos.madrid.es/egob/catalogo/tipo/entidadesyorganismos/2112-museo-san-isidro-origenes-madrid.json"
+   },
+   "address": {
+    "district": {
+     "@id": "https://datos.madrid.es/egob/kos/Provincia/Madrid/Municipio/Madrid/Distrito/Centro"
+    },
+    "area": {
+     "@id": "https://datos.madrid.es/egob/kos/Provincia/Madrid/Municipio/Madrid/Distrito/Centro/Barrio/Palacio",
+     "locality": "MADRID",
+     "postal-code": "28005",
+     "street-address": "PLAZA SAN ANDRES 2"
+    }
+   },
+   "location": {
+    "latitude": 40.41207900253883,
+    "longitude": -3.7108161027466378
+   },
+   "organization": {
+    "organization-name": "Museo de San Isidro. Los Orígenes de Madrid",
+    "accesibility": "2,6"
+   }
+  },
+  {
+   "@id": "https://datos.madrid.es/egob/catalogo/tipo/evento/50381193-40-anos-madrid-tierno.json",
+   "@type": "https://datos.madrid.es/egob/kos/actividades/DanzaBaile/FolcloreEtnica",
+   "id": "50381193",
+   "title": "40 años: el Madrid de Tierno",
+   "description": "Exposición Conmemorativa.   El grupo Municipal Socialista con la colaboración del Ayuntamiento de Madrid, presenta la exposición '40 años: el Madrid de Tierno'.    Organizada en el marco del programa de actos conmemorativos por los 40 años del fallecimiento de Enrique Tierno Galván, repasa las distintas facetas de quien fue primer alcalde democrático de Madrid tras la dictadura: alcalde, profesor, intelectual y político socialista, así como su contribución decisiva a la ciudad y a la democracia en España.",
+   "free": 1,
+   "price": "",
+   "dtstart": "2026-09-03 00:00:00.0",
+   "dtend": "2026-09-24 23:59:00.0",
+   "time": "",
+   "excluded-days": "",
+   "recurrence": {
+    "days": "MO,TU,WE,TH,FR,SA",
+    "frequency": "WEEKLY",
+    "interval": 1
+   },
+   "uid": "50381193",
+   "link": "http://www.madrid.es/sites/v/index.jsp?vgnextchannel=ca9671ee4a9eb410VgnVCM100000171f5a0aRCRD&vgnextoid=3ec8895cbe310a10VgnVCM100000891ecb1aRCRD",
+   "event-location": "Auditorio y sala de exposiciones Paco de Lucía (Latina)",
+   "references": {
+    "@id": "http://www.madrid.es/sites/v/index.jsp?vgnextchannel=ca9671ee4a9eb410VgnVCM100000171f5a0aRCRD&vgnextoid=c43204688d983510VgnVCM2000001f4a900aRCRD"
+   },
+   "relation": {
+    "@id": "https://datos.madrid.es/egob/catalogo/tipo/entidadesyorganismos/139451-auditorio-sala-exposiciones-paco-lucia-latina-.json"
+   },
+   "address": {
+    "district": {
+     "@id": "https://datos.madrid.es/egob/kos/Provincia/Madrid/Municipio/Madrid/Distrito/Latina"
+    },
+    "area": {
+     "@id": "https://datos.madrid.es/egob/kos/Provincia/Madrid/Municipio/Madrid/Distrito/Latina/Barrio/LasAguilas",
+     "locality": "MADRID",
+     "postal-code": "28044",
+     "street-address": "AVENIDA LAS AGUILAS 2"
+    }
+   },
+   "location": {
+    "latitude": 40.38493929920335,
+    "longitude": -3.7641963952601154
+   },
+   "organization": {
+    "organization-name": "Auditorio y sala de exposiciones Paco de Lucía (Latina)",
+    "accesibility": "1,6"
+   }
+  },
+  {
+   "@id": "https://datos.madrid.es/egob/catalogo/tipo/evento/50386267-41-muestra-libro-infantil-juvenil-2026.json",
+   "@type": "https://datos.madrid.es/egob/kos/actividades/Exposiciones",
+   "id": "50386267",
+   "title": "41ª Muestra del libro infantil y juvenil 2026",
+   "description": "La 41ª Muestra del Libro Infantil y Juvenil, llega a la Biblioteca David Gistau en el Centro Cultural Buenavista. Ofrece una selección de 220 novedades editoriales para lectores de 0 a 16 años, destacando cuentos, cómics y libros informativos.",
+   "free": 1,
+   "price": "",
+   "dtstart": "2026-09-24 00:00:00.0",
+   "dtend": "2026-10-07 23:59:00.0",
+   "time": "",
+   "excluded-days": "",
+   "recurrence": {
+    "days": "MO,TU,WE,TH,FR,SA,SU",
+    "frequency": "WEEKLY",
+    "interval": 1
+   },
+   "uid": "50386267",
+   "link": "http://www.madrid.es/sites/v/index.jsp?vgnextchannel=ca9671ee4a9eb410VgnVCM100000171f5a0aRCRD&vgnextoid=b1b5d41751330a10VgnVCM100000891ecb1aRCRD",
+   "event-location": "Centro Cultural Buenavista (Salamanca)",
+   "references": {
+    "@id": "http://www.madrid.es/sites/v/index.jsp?vgnextchannel=ca9671ee4a9eb410VgnVCM100000171f5a0aRCRD&vgnextoid=9b3b34ade7a86710VgnVCM2000001f4a900aRCRD"
+   },
+   "relation": {
+    "@id": "https://datos.madrid.es/egob/catalogo/tipo/entidadesyorganismos/64851-centro-cultural-buenavista-salamanca-.json"
+   },
+   "address": {
+    "district": {
+     "@id": "https://datos.madrid.es/egob/kos/Provincia/Madrid/Municipio/Madrid/Distrito/Salamanca"
+    },
+    "area": {
+     "@id": "https://datos.madrid.es/egob/kos/Provincia/Madrid/Municipio/Madrid/Distrito/Salamanca/Barrio/Guindalera",
+     "locality": "MADRID",
+     "postal-code": "28028",
+     "street-address": "AVENIDA TOREROS 5"
+    }
+   },
+   "location": {
+    "latitude": 40.43200001609297,
+    "longitude": -3.670904677285496
+   },
+   "organization": {
+    "organization-name": "Centro Cultural Buenavista (Salamanca)",
+    "accesibility": "1,5,6"
+   }
+  },
+  {
+   "@id": "https://datos.madrid.es/egob/catalogo/tipo/evento/50388166-41-muestra-libro-infantil-juvenil-biblioteca-david-gistau.json",
+   "@type": "https://datos.madrid.es/egob/kos/actividades/Exposiciones",
+   "id": "50388166",
+   "title": "41ª Muestra del Libro Infantil y Juvenil - Biblioteca David Gistau",
+   "description": "La Muestra del Libro Infantil y Juvenil es una selección de las novedades literarias más destacadas publicadas en el año anterior, que sirve de guía y ayuda a la hora de valorar y recomendar libros, convirtiéndose en una herramienta útil para personal bibliotecario, educadores/as, padres y madres y, por supuesto, los propios lectores y lectoras, y que este año celebra ya su 41ª edición. Los libros elegidos corresponden a diversos géneros (narrativa, poesía, teatro, álbum ilustrado, cómic, libros informativos…) y tramos de edad (de los 0 a los 16 años). La exposición bibliográfica itinerante, compuesta por los 220 títulos de la Muestra, recorre a lo largo del año las bibliotecas de Madrid Capital y de los municipios de toda la Comunidad y entre el 24 de septiembre y el 7 de octubre la podréis disfrutar en nuestra biblioteca. ¡Os esperamos!  Acceso libre hasta completar aforo.",
+   "free": 1,
+   "price": "",
+   "dtstart": "2026-09-24 00:00:00.0",
+   "dtend": "2026-10-07 23:59:00.0",
+   "time": "",
+   "excluded-days": "",
+   "recurrence": {
+    "days": "MO,TU,WE,TH,FR,SA,SU",
+    "frequency": "WEEKLY",
+    "interval": 1
+   },
+   "audience": "Jovenes,Niños,Familias",
+   "uid": "50388166",
+   "link": "http://www.madrid.es/sites/v/index.jsp?vgnextchannel=ca9671ee4a9eb410VgnVCM100000171f5a0aRCRD&vgnextoid=2cc66f4236d30a10VgnVCM200000f921e388RCRD",
+   "event-location": "Biblioteca Pública Municipal David Gistau (Salamanca)",
+   "references": {
+    "@id": "http://www.madrid.es/sites/v/index.jsp?vgnextchannel=ca9671ee4a9eb410VgnVCM100000171f5a0aRCRD&vgnextoid=6774aa6ad84b6910VgnVCM2000001f4a900aRCRD"
+   },
+   "relation": {
+    "@id": "https://datos.madrid.es/egob/catalogo/tipo/entidadesyorganismos/1762-biblioteca-publica-municipal-david-gistau-salamanca-.json"
+   },
+   "address": {
+    "district": {
+     "@id": "https://datos.madrid.es/egob/kos/Provincia/Madrid/Municipio/Madrid/Distrito/Salamanca"
+    },
+    "area": {
+     "@id": "https://datos.madrid.es/egob/kos/Provincia/Madrid/Municipio/Madrid/Distrito/Salamanca/Barrio/Guindalera",
+     "locality": "MADRID",
+     "postal-code": "28028",
+     "street-address": "AVENIDA TOREROS 5"
+    }
+   },
+   "location": {
+    "latitude": 40.43199309720514,
+    "longitude": -3.670929243543714
+   },
+   "organization": {
+    "organization-name": "Biblioteca Pública Municipal David Gistau (Salamanca)",
+    "accesibility": "1,6"
+   }
+  },
+  {
+   "@id": "https://datos.madrid.es/egob/catalogo/tipo/evento/50346030-90-anos-declaracion-parque-retiro-bien-interes-cultural.json",
+   "@type": "https://datos.madrid.es/egob/kos/actividades/Exposiciones",
+   "id": "50346030",
+   "title": "90 años de la declaración del Parque del Retiro como Bien de Interés Cultural",
+   "description": "",
+   "free": 1,
+   "price": "",
+   "dtstart": "2026-07-01 10:00:00.0",
+   "dtend": "2026-09-30 23:59:00.0",
+   "time": "10:00",
+   "excluded-days": "",
+   "recurrence": {
+    "days": "TU,WE,TH,FR,SA,SU",
+    "frequency": "WEEKLY",
+    "interval": 1
+   },
+   "uid": "50346030",
+   "link": "http://www.madrid.es/sites/v/index.jsp?vgnextchannel=ca9671ee4a9eb410VgnVCM100000171f5a0aRCRD&vgnextoid=df7bd881d7dfe910VgnVCM200000f921e388RCRD",
+   "event-location": "Centro de Educación Ambiental El Retiro",
+   "references": {
+    "@id": "http://www.madrid.es/sites/v/index.jsp?vgnextchannel=ca9671ee4a9eb410VgnVCM100000171f5a0aRCRD&vgnextoid=1600137ff5dfe910VgnVCM200000f921e388RCRD"
+   },
+   "relation": {
+    "@id": "https://datos.madrid.es/egob/catalogo/tipo/entidadesyorganismos/5463464-centro-educacion-ambiental-retiro.json"
+   },
+   "address": {
+    "district": {
+     "@id": "https://datos.madrid.es/egob/kos/Provincia/Madrid/Municipio/Madrid/Distrito/Retiro"
+    },
+    "area": {
+     "@id": "https://datos.madrid.es/egob/kos/Provincia/Madrid/Municipio/Madrid/Distrito/Retiro/Barrio/LosJeronimos",
+     "locality": "MADRID",
+     "postal-code": "28009",
+     "street-address": "PASEO FERNAN NUÑEZ 2"
+    }
+   },
+   "location": {
+    "latitude": 40.40943503279114,
+    "longitude": -3.6861797800993257
+   },
+   "organization": {
+    "organization-name": "Centro de Educación Ambiental El Retiro",
+    "accesibility": "1"
+   }
+  },
+  {
+   "@id": "https://datos.madrid.es/egob/catalogo/tipo/evento/50377946-ti-no-te-muerdo-loco.json",
+   "@type": "https://datos.madrid.es/egob/kos/actividades/TeatroPerformance/ComediaMonologo",
+   "id": "50377946",
+   "title": "A ti no te muerdo ni loco",
+   "description": "En 'A ti no te muerdo ni loco', Toño Balach presenta un monólogo lleno de humor, ironía y situaciones disparatadas, en el que el carismático Conde Menor se convierte en uno de los grandes protagonistas. Con un estilo cercano y una constante interacción con el público, el espectáculo ofrece un ritmo trepidante y un sinfín de carcajadas, convirtiéndose en una propuesta perfecta para disfrutar de una noche de comedia.",
+   "free": 1,
+   "price": "",
+   "dtstart": "2026-09-12 20:30:00.0",
+   "dtend": "2026-09-12 23:59:00.0",
+   "time": "20:30",
+   "excluded-days": "",
+   "uid": "50377946",
+   "link": "http://www.madrid.es/sites/v/index.jsp?vgnextchannel=ca9671ee4a9eb410VgnVCM100000171f5a0aRCRD&vgnextoid=ef1a56066dbdf910VgnVCM100000891ecb1aRCRD",
+   "event-location": "Jardín del Bulevar de Peña Gorbea",
+   "references": {
+    "@id": "http://www.madrid.es/sites/v/index.jsp?vgnextchannel=ca9671ee4a9eb410VgnVCM100000171f5a0aRCRD&vgnextoid=f51520c295abb710VgnVCM1000001d4a900aRCRD"
+   },
+   "relation": {
+    "@id": "https://datos.madrid.es/egob/catalogo/tipo/entidadesyorganismos/5978923-jardin-bulevar-pena-gorbea.json"
+   },
+   "address": {
+    "district": {
+     "@id": "https://datos.madrid.es/egob/kos/Provincia/Madrid/Municipio/Madrid/Distrito/PuenteDeVallecas"
+    },
+    "area": {
+     "@id": "https://datos.madrid.es/egob/kos/Provincia/Madrid/Municipio/Madrid/Distrito/PuenteDeVallecas/Barrio/SanDiego",
+     "locality": "MADRID",
+     "postal-code": "28053",
+     "street-address": "CALLE PEÑA GORBEA 17"
+    }
+   },
+   "location": {
+    "latitude": 40.3957812018463,
+    "longitude": -3.6670346724676173
+   },
+   "organization": {
+    "organization-name": "Jardín del Bulevar de Peña Gorbea",
+    "accesibility": "2"
+   }
+  },
+  {
+   "@id": "https://datos.madrid.es/egob/catalogo/tipo/evento/50366129-25-anos-museo-san-isidro-origenes-madrid.json",
+   "@type": "https://datos.madrid.es/egob/kos/actividades/Exposiciones",
+   "id": "50366129",
+   "title": "25 años del Museo de San Isidro. Los Orígenes de Madrid",
+   "description": "",
+   "free": 1,
+   "price": "",
+   "dtstart": "2026-07-21 00:00:00.0",
+   "dtend": "2027-01-31 23:59:00.0",
+   "time": "",
+   "excluded-days": "24/12/2026;25/12/2026;31/12/2026;1/1/2027;",
+   "recurrence": {
+    "days": "TU,WE,TH,FR,SA,SU",
+    "frequency": "WEEKLY",
+    "interval": 1
+   },
+   "uid": "50366129",
+   "link": "http://www.madrid.es/sites/v/index.jsp?vgnextchannel=ca9671ee4a9eb410VgnVCM100000171f5a0aRCRD&vgnextoid=92684dde03f7f910VgnVCM200000f921e388RCRD",
+   "event-location": "Museo de San Isidro. Los Orígenes de Madrid",
+   "references": {
+    "@id": "http://www.madrid.es/sites/v/index.jsp?vgnextchannel=ca9671ee4a9eb410VgnVCM100000171f5a0aRCRD&vgnextoid=39b35c3f9fe7f910VgnVCM200000f921e388RCRD"
+   },
+   "relation": {
+    "@id": "https://datos.madrid.es/egob/catalogo/tipo/entidadesyorganismos/2112-museo-san-isidro-origenes-madrid.json"
+   },
+   "address": {
+    "district": {
+     "@id": "https://datos.madrid.es/egob/kos/Provincia/Madrid/Municipio/Madrid/Distrito/Centro"
+    },
+    "area": {
+     "@id": "https://datos.madrid.es/egob/kos/Provincia/Madrid/Municipio/Madrid/Distrito/Centro/Barrio/Palacio",
+     "locality": "MADRID",
+     "postal-code": "28005",
+     "street-address": "PLAZA SAN ANDRES 2"
+    }
+   },
+   "location": {
+    "latitude": 40.41207900253883,
+    "longitude": -3.7108161027466378
+   },
+   "organization": {
+    "organization-name": "Museo de San Isidro. Los Orígenes de Madrid",
+    "accesibility": "2,6"
+   }
+  },
+  {
+   "@id": "https://datos.madrid.es/egob/catalogo/tipo/evento/50382703-al-compas-dobemol.json",
+   "@type": "https://datos.madrid.es/egob/kos/actividades/ProgramacionDestacadaAgendaCultura",
+   "id": "50382703",
+   "title": "Al compás de Dobemol",
+   "description": "En las sesiones de música para bebés proponemos disfrutar de la música relacionándonos a través de la voz y el movimiento. Jugaremos con una serie de actividades que dejan espacio para la interacción y la creatividad de los bebés. Experimentaremos con diferentes ritmos, melodías y recitados, tocaremos instrumentos de pequeña percusión y escucharemos música en directo. En definitiva, proponemos una experiencia lúdica y creativa con la que compartir música en familia. Además, las familias inscritas en la actividad tendrán acceso a una página web privada de contenidos (MUSITECA DOBEMOL) mientras permanezcan inscritos en la actividad. El diseño y ejecución del programa corren a cargo de Dobemol (www.dobemolmusica.com) músicos y pedagogas con amplia experiencia en el desarrollo de proyectos musicales relacionados con la primera infancia. Sus propuestas están enfocadas al ámbito pedagógico sin olvidar la dimensión social, lúdica y creativa que la música nos ofrece.   Importante: para elegir el grupo se tendrá en cuenta la edad (en meses) que tendrá el bebé en octubre de 2026.  Grupo 1- Bebés 0-12 meses: martes 16.30 h.    Grupo 1B- Bebés 0-12 meses: jueves 16.30 h.    Grupo 2A- Bebés 13-24 meses: miércoles 16.30 h.    Grupo 2B- Bebés 13-24 meses: martes 17.30 h.    Grupo 2C- Bebés 13-24 meses: jueves 17.30 h.    Grupo 2D- Bebés 13-24 meses: miércoles 18.30 h.     Grupo 3A- Bebés 25-36 meses: miércoles 17.30 h.    Grupo 3B- Bebés 25-36 meses: martes 18.30 h.    Grupo 3C -Bebés 25-36 meses: jueves 18.30 h.",
+   "free": 0,
+   "price": "Matrícula: 140 euros /trimestre (más gastos de gestión).   Solo se devolverá el importe de la matrícula en caso de que la organización cancele la actividad.",
+   "dtstart": "2026-10-06 00:00:00.0",
+   "dtend": "2026-12-22 23:59:00.0",
+   "time": "",
+   "excluded-days": "",
+   "recurrence": {
+    "days": "TU,WE,TH",
+    "frequency": "WEEKLY",
+    "interval": 1
+   },
+   "audience": "Familias",
+   "uid": "50382703",
+   "link": "http://www.madrid.es/sites/v/index.jsp?vgnextchannel=ca9671ee4a9eb410VgnVCM100000171f5a0aRCRD&vgnextoid=d482ea4110e10a10VgnVCM200000f921e388RCRD",
+   "event-location": "Matadero Madrid",
+   "references": {
+    "@id": ""
+   },
+   "relation": {
+    "@id": "https://datos.madrid.es/egob/catalogo/tipo/entidadesyorganismos/4684678-matadero-madrid.json"
+   },
+   "address": {
+    "district": {
+     "@id": "https://datos.madrid.es/egob/kos/Provincia/Madrid/Municipio/Madrid/Distrito/Arganzuela"
+    },
+    "area": {
+     "@id": "https://datos.madrid.es/egob/kos/Provincia/Madrid/Municipio/Madrid/Distrito/Arganzuela/Barrio/Chopera",
+     "locality": "MADRID",
+     "postal-code": "28045",
+     "street-address": "PLAZA LEGAZPI 8"
+    }
+   },
+   "location": {
+    "latitude": 40.39130985242181,
+    "longitude": -3.6958028442054074
+   },
+   "organization": {
+    "organization-name": "Matadero Madrid",
+    "accesibility": "1"
+   }
+  }
+ ]
+}
