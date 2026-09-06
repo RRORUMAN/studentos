@@ -206,6 +206,22 @@ pnpm mascot:manifest  # regenerate the mascot asset manifest from disk
 
 ## Going to production
 
+### Hosting
+
+The app is a standard Next.js build with no custom server, so any Node host
+works. On Vercel, import the GitHub repository and accept the defaults: the
+framework preset is Next.js, the install command is `pnpm install` (pnpm is
+detected from `packageManager`) and the Node version follows `.nvmrc`. Paste
+the keys you use from `.env.example` into the project environment settings;
+none are required for a first deploy. Elsewhere, run `pnpm build` then
+`pnpm start`, and set `NEXT_PUBLIC_SITE_URL` to the public origin so share
+links and the sitemap are correct.
+
+Every push to `main` runs `.github/workflows/ci.yml`, which typechecks, lints,
+runs the unit tests, builds, and runs the Playwright flows against a production
+build. A green check on the commit means the tree builds on a clean machine.
+
+
 1. Create a Supabase project and run `supabase/migrations/0001_init.sql` then
    `0002_daily_product.sql`. They need the `postgis`, `vector` and `pgcrypto`
    extensions.

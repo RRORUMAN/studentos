@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "lint:fix": "eslint --fix",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "next typegen && tsc --noEmit",
     "check": "pnpm typecheck && pnpm lint && pnpm test && pnpm build",
     "test": "node --test --experimental-strip-types \"tests/unit/*.test.ts\"",
     "test:e2e": "playwright test",
