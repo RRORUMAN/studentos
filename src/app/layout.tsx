@@ -77,7 +77,7 @@ export const metadata: Metadata = {
     siteName: brand.name,
     title: `${brand.name} — ${brand.tagline}`,
     description: brand.description,
-    url: brand.url,
+    url: env.siteUrl ?? brand.url,
   },
   twitter: {
     card: "summary_large_image",
