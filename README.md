@@ -24,7 +24,7 @@ pnpm version pinned in `package.json`; otherwise `npm install -g pnpm` works.
 
 ```bash
 corepack enable                       # once per machine
-git clone https://github.com/<your-github-user>/studentos.git
+git clone https://github.com/RRORUMAN/studentos.git
 cd studentos
 pnpm install                          # honours pnpm-lock.yaml
 cp .env.example .env.local            # optional: everything runs with no keys
