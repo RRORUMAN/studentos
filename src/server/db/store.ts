@@ -2,7 +2,10 @@ import "server-only";
 
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { env } from "@/services/env";
 
 import type { Move } from "@/domain/lifecycle";
 import type { DealReport, Guide, OfficialFact, PriceObservation } from "@/domain/knowledge";
@@ -224,13 +227,44 @@ export type TableName = {
 /* File location                                                               */
 /* -------------------------------------------------------------------------- */
 
+export type Persistence = "disk" | "ephemeral";
+
 /**
- * `STUDENTOS_DATA_DIR` lets the e2e suite point at a throwaway directory so a
- * test run never touches the development data.
+ * Where the file lives, in order of preference:
+ *
+ * 1. `STUDENTOS_DATA_DIR`, which the e2e suite uses to point at a throwaway
+ *    directory so a test run never touches the development data.
+ * 2. On a serverless host (Vercel, Lambda, Netlify) the deployment is mounted
+ *    read-only and the only writable path is the OS temp directory. It is
+ *    per-instance and wiped on restart, so the store is *ephemeral* there and
+ *    `isEphemeralStore` puts a standing notice on every page. That is the
+ *    honest state of a deployment without a database, not a bug to hide.
+ * 3. `.data/` under the working directory: the durable development default.
  */
-function dataFile(): string {
-  const dir = process.env.STUDENTOS_DATA_DIR ?? join(process.cwd(), ".data");
-  return join(dir, "studentos.json");
+function preferredDir(): string {
+  if (env.dataDir) return env.dataDir;
+  if (env.hosting.ephemeralFilesystem) return join(tmpdir(), "studentos");
+  return join(process.cwd(), ".data");
+}
+
+function fallbackDir(): string {
+  return join(tmpdir(), "studentos");
+}
+
+function isReadOnlyError(error: unknown): boolean {
+  const code = (error as NodeJS.ErrnoException).code;
+  return code === "EROFS" || code === "EACCES" || code === "EPERM";
+}
+
+/**
+ * Prove a directory is writable with a real file rather than trusting
+ * `access()`, which reports success on some read-only mounts.
+ */
+async function proveWritable(dir: string): Promise<void> {
+  await mkdir(dir, { recursive: true });
+  const probe = join(dir, `.probe-${randomUUID()}`);
+  await writeFile(probe, "", "utf8");
+  await rm(probe, { force: true });
 }
 
 /* -------------------------------------------------------------------------- */
@@ -242,6 +276,9 @@ class JsonStore {
   private loading: Promise<Database> | null = null;
   /** Serialises writes. Every mutation appends to this chain. */
   private writeChain: Promise<unknown> = Promise.resolve();
+
+  private dir: string | null = null;
+  private mode: Persistence = env.hosting.ephemeralFilesystem ? "ephemeral" : "disk";
 
   /** Registered once by `seed.ts`, called the first time the file is absent. */
   private seeder: ((db: Database) => void | Promise<void>) | null = null;
@@ -259,8 +296,43 @@ class JsonStore {
     return this.data;
   }
 
+  /**
+   * Resolve the directory once. A directory that cannot be written falls back
+   * to the temp directory and flips the store to ephemeral, with a warning in
+   * the server log so the condition is never silent.
+   */
+  private async resolveDir(): Promise<string> {
+    if (this.dir) return this.dir;
+    const preferred = preferredDir();
+    try {
+      await proveWritable(preferred);
+      this.dir = preferred;
+    } catch (error) {
+      if (!isReadOnlyError(error)) throw error;
+      const fallback = fallbackDir();
+      await proveWritable(fallback);
+      console.warn(
+        `[studentos] ${preferred} is not writable (${(error as NodeJS.ErrnoException).code}); ` +
+          `using ${fallback}. Data on this instance is ephemeral.`,
+      );
+      this.dir = fallback;
+      this.mode = "ephemeral";
+    }
+    return this.dir;
+  }
+
+  private async file(): Promise<string> {
+    return join(await this.resolveDir(), "studentos.json");
+  }
+
+  /** Whether writes outlive this process. */
+  async persistence(): Promise<Persistence> {
+    await this.resolveDir();
+    return this.mode;
+  }
+
   private async readOrSeed(): Promise<Database> {
-    const file = dataFile();
+    const file = await this.file();
     try {
       const raw = await readFile(file, "utf8");
       const parsed = JSON.parse(raw) as Database;
@@ -276,8 +348,7 @@ class JsonStore {
   }
 
   private async persist(db: Database): Promise<void> {
-    const file = dataFile();
-    await mkdir(dirname(file), { recursive: true });
+    const file = await this.file();
 
     /* Write-then-rename. `rename` is atomic within a filesystem, so a reader
        never observes a half-written file and a crash cannot corrupt the good
@@ -343,6 +414,8 @@ class JsonStore {
   reset(): void {
     this.data = null;
     this.loading = null;
+    this.dir = null;
+    this.mode = env.hosting.ephemeralFilesystem ? "ephemeral" : "disk";
   }
 }
 
@@ -365,6 +438,11 @@ export function newId(): string {
 
 export function nowIso(): string {
   return new Date().toISOString();
+}
+
+/** `disk` when writes outlive the process, `ephemeral` on a serverless host. */
+export async function storePersistence(): Promise<Persistence> {
+  return store.persistence();
 }
 
 /** `select` a whole table. */

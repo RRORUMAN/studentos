@@ -1,9 +1,10 @@
 import type { Metadata, Viewport } from "next";
 import { Bricolage_Grotesque, Inter, JetBrains_Mono } from "next/font/google";
 
+import { EphemeralDataNotice } from "@/components/app/ephemeral-notice";
 import { ToastProvider } from "@/components/ui/toast";
 import { brand } from "@/brand/brand.config";
-import { env } from "@/services/env";
+import { env, isEphemeralStore } from "@/services/env";
 
 import "./globals.css";
 
@@ -115,6 +116,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           >
             Skip to content
           </a>
+          {isEphemeralStore ? <EphemeralDataNotice /> : null}
           {children}
         </ToastProvider>
       </body>

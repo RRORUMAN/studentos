@@ -19,6 +19,20 @@ export const env = {
   /** Set by the host in production; used for canonical URLs and share links. */
   siteUrl: optional(process.env.NEXT_PUBLIC_SITE_URL),
 
+  /** Overrides where the JSON store keeps its file. Set by the e2e config. */
+  dataDir: optional(process.env.STUDENTOS_DATA_DIR),
+
+  hosting: {
+    /**
+     * Serverless platforms mount the deployment read-only; the only writable
+     * path is the per-instance temp directory, which is wiped on restart.
+     * Vercel, Lambda and Netlify each announce themselves with one variable.
+     */
+    ephemeralFilesystem: Boolean(
+      process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.NETLIFY,
+    ),
+  },
+
   supabase: {
     url: optional(process.env.NEXT_PUBLIC_SUPABASE_URL),
     anonKey: optional(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY),
@@ -79,3 +93,12 @@ export const env = {
 export const isBackendConfigured = Boolean(env.supabase.url && env.supabase.anonKey);
 export const isAiConfigured = Boolean(env.ai.apiKey);
 export const isBillingConfigured = Boolean(env.stripe.secretKey);
+
+/**
+ * True when the JSON store runs on an ephemeral filesystem, so nothing a
+ * student saves outlives the server instance. Deliberately not silenced by
+ * `isBackendConfigured`: storage only moves once the Supabase repository exists
+ * (see `src/server/db/index.ts`), and a notice about data that is really lost
+ * must not be switched off by a key that does not yet change where it goes.
+ */
+export const isEphemeralStore = env.hosting.ephemeralFilesystem;

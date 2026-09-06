@@ -90,8 +90,9 @@ export {
   newId,
   nowIso,
   remove,
+  storePersistence,
   transaction,
   update,
   upsert,
 } from "@/server/db/store";
-export type { Database, TableName } from "@/server/db/store";
+export type { Database, Persistence, TableName } from "@/server/db/store";

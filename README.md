@@ -217,6 +217,13 @@ none are required for a first deploy. Elsewhere, run `pnpm build` then
 `pnpm start`, and set `NEXT_PUBLIC_SITE_URL` to the public origin so share
 links and the sitemap are correct.
 
+Until the Supabase repository exists, storage is the JSON store, and on a
+serverless host it can only write to the instance's temp directory. The app
+detects that and shows a standing **Preview server, nothing is kept** notice on
+every page: accounts and budgets there last until the next restart. That is a
+public preview, not production. A single long-running `pnpm start` with a disk
+keeps data; Supabase is the production path.
+
 Every push to `main` runs `.github/workflows/ci.yml`, which typechecks, lints,
 runs the unit tests, builds, and runs the Playwright flows against a production
 build. A green check on the commit means the tree builds on a clean machine.
