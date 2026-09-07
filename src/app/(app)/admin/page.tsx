@@ -5,7 +5,9 @@ import { type AiSettingKey, aiSettingMeta } from "@/config/ai";
 import { upgradeTriggerMeta, type UpgradeTrigger } from "@/config/entitlements";
 import { cityDirectory } from "@/data/cities";
 import type { CityStatus } from "@/data/types";
+import { providerHealth } from "@/server/work/providers";
 import { loadAdminMetrics, loadUnmetNeeds, loadUpgradeTriggerStats } from "@/server/queries/admin";
+import { loadInfrastructure } from "@/server/queries/infrastructure";
 import { aiConfig, degradedCopy, spendSince } from "@/server/ai/config";
 import { toolMeta, type ToolName, toolSchemas } from "@/server/ai/tools";
 import { type FlagName, flagMeta, loadSettings } from "@/server/queries/settings";
@@ -32,12 +34,14 @@ export const metadata: Metadata = {
 export default async function AdminPage() {
   await requireAdmin();
 
-  const [metrics, needs, triggers, settings, ai] = await Promise.all([
+  const [metrics, needs, triggers, settings, ai, health, infrastructure] = await Promise.all([
     loadAdminMetrics(),
     loadUnmetNeeds(),
     loadUpgradeTriggerStats(),
     loadSettings(),
     aiConfig(),
+    providerHealth(),
+    loadInfrastructure(),
   ]);
 
   const dayStart = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate())).toISOString();
@@ -283,6 +287,102 @@ export default async function AdminPage() {
             ))}
           </ul>
         )}
+      </section>
+
+      {/* ---- infrastructure -------------------------------------------------- */}
+      <section className="mt-8">
+        <h2 className="mb-1 text-[1.0625rem] font-semibold text-ink-950">Services</h2>
+        <p className="mb-3 text-[0.875rem] leading-relaxed text-ink-600">
+          What is connected in the process serving this page, read from the process rather than
+          from a checklist. Each line says what it costs the product while it is like this, because
+          &ldquo;not configured&rdquo; and &ldquo;students are losing their accounts&rdquo; are the
+          same fact stated two ways and only one of them gets acted on.
+        </p>
+
+        {infrastructure.blockers.length > 0 ? (
+          <p className="mb-3 rounded-lg border border-amber-deep/30 bg-amber-deep/5 p-4 text-[0.875rem] leading-relaxed text-ink-800">
+            <span className="font-semibold">
+              {infrastructure.blockers.length} thing
+              {infrastructure.blockers.length === 1 ? "" : "s"} still block a public launch:
+            </span>{" "}
+            {infrastructure.blockers.map((service) => service.label).join(", ")}. PRODUCTION_SETUP.md
+            has the steps for each.
+          </p>
+        ) : (
+          <p className="mb-3 rounded-lg border border-ink-200 bg-white p-4 text-[0.875rem] leading-relaxed text-ink-800">
+            Nothing on this list blocks a public launch. That is a statement about configuration
+            only — it says nothing about whether the cities have real content or anyone has walked
+            the product on a phone.
+          </p>
+        )}
+
+        <ul className="space-y-2">
+          {infrastructure.services.map((service) => (
+            <li
+              key={service.key}
+              className="flex flex-wrap items-baseline justify-between gap-3 rounded-lg border border-ink-200 bg-white p-4"
+            >
+              <div className="min-w-0 flex-1">
+                <p className="text-[0.9375rem] font-semibold text-ink-950">{service.label}</p>
+                <p className="mt-0.5 text-[0.8125rem] text-ink-600">{service.state}</p>
+                {service.consequence ? (
+                  <p className="mt-1 text-[0.8125rem] text-ink-500">{service.consequence}</p>
+                ) : null}
+              </div>
+              <p
+                className={cn(
+                  "shrink-0 font-mono text-micro uppercase tracking-[0.08em]",
+                  service.level === "ready" && "text-ink-400",
+                  service.level === "degraded" && "text-ink-600",
+                  service.level === "missing" && "text-amber-deep",
+                )}
+              >
+                {service.level === "ready" ? "Ready" : service.level === "degraded" ? "Degraded" : "Missing"}
+              </p>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      {/* ---- work providers -------------------------------------------------- */}
+      <section className="mt-8">
+        <h2 className="mb-1 text-[1.0625rem] font-semibold text-ink-950">Work providers</h2>
+        <p className="mb-3 text-[0.875rem] leading-relaxed text-ink-600">
+          Every source Work knows about, configured or not. A provider that has been failing is the
+          most useful thing this page can show, so failed runs are stored with the real error rather
+          than logged and forgotten. There is no scraper here by design — a source that has not
+          published a feed has not agreed to be republished.
+        </p>
+        <ul className="space-y-2">
+          {health.map(({ provider, status, lastRun }) => (
+            <li
+              key={provider.slug}
+              className="flex flex-wrap items-baseline justify-between gap-3 rounded-lg border border-ink-200 bg-white p-4"
+            >
+              <div className="min-w-0">
+                <p className="text-[0.9375rem] font-semibold text-ink-950">{provider.label}</p>
+                <p className="mt-0.5 text-[0.8125rem] text-ink-500">
+                  {status.configured ? status.detail : status.missing}
+                </p>
+              </div>
+              <div className="shrink-0 text-right">
+                <p
+                  className={cn(
+                    "font-mono text-micro uppercase tracking-[0.08em]",
+                    status.configured ? "text-ink-400" : "text-amber-deep",
+                  )}
+                >
+                  {status.configured ? "Configured" : "Not configured"}
+                </p>
+                <p className="mt-0.5 text-[0.8125rem] text-ink-600">
+                  {lastRun
+                    ? `${lastRun.ok ? "OK" : "Failed"} · ${lastRun.imported} in, ${lastRun.updated} updated${lastRun.error ? ` · ${lastRun.error}` : ""}`
+                    : "Never synced"}
+                </p>
+              </div>
+            </li>
+          ))}
+        </ul>
       </section>
 
       {/* ---- community ------------------------------------------------------ */}

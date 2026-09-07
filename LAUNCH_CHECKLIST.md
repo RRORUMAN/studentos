@@ -1,7 +1,7 @@
 # Launch checklist
 
-Ordered by what blocks what. `docs/configuration.md` has the dashboard steps for
-every service named here.
+Ordered by what blocks what. `PRODUCTION_SETUP.md` has the dashboard steps
+for every service named here, in the order to do them.
 
 Anything marked **BLOCKER** means the product is not safe to put in front of the
 public until it is done — not that it is missing a nice-to-have.
@@ -10,30 +10,46 @@ public until it is done — not that it is missing a nice-to-have.
 
 ## 1. Data
 
+The Supabase store now exists (`src/server/db/supabase-store.ts`), so this
+section is configuration rather than engineering. `docs/data-layer.md` explains
+the shape and where it stops.
+
 - [ ] **BLOCKER** Supabase production project created, separate from any
       staging project
-- [ ] **BLOCKER** Every migration applied in order: `0001_init.sql`,
-      `0002_daily_product.sql`, `0003_operations.sql`,
-      `0004_lifeops_missions_exchange.sql`
-- [ ] **BLOCKER** `postgis`, `vector` and `pgcrypto` extensions enabled
-- [ ] **BLOCKER** The Supabase repository behind the six functions in
-      `src/server/db/store.ts` is implemented. **Until this exists, setting the
-      Supabase variables changes nothing: storage is still a JSON file on the
-      instance, and on a serverless host it is wiped on every restart.** This is
-      the one remaining engineering task between here and production.
-- [ ] RLS verified by hand, not just by reading the migration. Sign in as two
-      accounts and confirm: B cannot read A's budget, transactions, private
-      plan, DM channel, or `home_point`. The e2e suite covers the first four
-      against the JSON store; repeat them against Postgres.
+- [ ] **BLOCKER** `supabase/migrations/0005_row_store.sql` applied
+- [ ] **BLOCKER** `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` and
+      `STUDENTOS_STORE=supabase` set in the Vercel **production** environment.
+      Without the service role key the app silently runs on the JSON file — the
+      anon key alone is not enough and is not meant to be.
+- [ ] **BLOCKER** `pnpm db:verify` exits 0 against production. It writes a probe
+      row, reads it back, confirms a stale write is rejected and cleans up.
+- [ ] **BLOCKER** The real test: deploy, sign up, redeploy, confirm the account
+      is still there. Nothing else on this page proves storage works.
+- [ ] Preview deployments pointed at a **second** Supabase project. A preview
+      wired to production is a preview that can delete real accounts.
+- [ ] `/admin` → Services shows `Database (Supabase)` as Ready
+- [ ] Authorisation reviewed as **application-level**, which is what it is. The
+      row store has RLS on with no policies, so nothing but the service role
+      reads anything; there is no per-row database policy protecting one student
+      from another. Sign in as two accounts and confirm through the UI and the
+      API that B cannot read A's budget, transactions, private plan, DM channel
+      or `home_point`. The e2e suite covers the first four.
 - [ ] Point-in-time recovery on
 - [ ] A restore actually tested once, into a scratch project
+- [ ] Migrations `0001`–`0004` deliberately **not** applied. They describe the
+      relational schema the product is heading for and nothing reads them yet;
+      applying them creates empty tables that will mislead whoever looks next.
 
 ## 2. Identity
 
 - [ ] **BLOCKER** `RESEND_API_KEY` and `RESEND_FROM` set, domain verified with
-      SPF, DKIM and DMARC. **While the key is unset the app shows the email
-      verification link on screen instead of sending it**, which means anyone
-      can verify any address.
+      SPF, DKIM and DMARC. **When email cannot be sent, sign-up verifies its own
+      address and a password reset hands the link to whoever typed the address.**
+      Both fallbacks exist so the product works on a laptop; both are
+      account-takeover holes in public.
+- [ ] **BLOCKER** Confirmed by hand: sign up with a real address on the deployed
+      site, receive the email, and check you are *not* verified until you click
+      it. Being verified without touching your inbox means the fallback ran.
 - [ ] Google OAuth client created, redirect URI
       `https://<domain>/api/auth/google/callback` registered
 - [ ] `NEXT_PUBLIC_SITE_URL` set to the real domain (share links, sitemap and
@@ -46,7 +62,9 @@ public until it is done — not that it is missing a nice-to-have.
 ## 3. Money
 
 - [ ] Stripe in **live** mode, three products with monthly and annual prices
-- [ ] All six `STRIPE_PRICE_*` ids set
+- [ ] All six `STRIPE_PRICE_*` ids set. `/admin` → Services names any that are
+      missing; a missing one fails that plan's checkout rather than charging the
+      wrong amount.
 - [ ] Webhook endpoint added at `https://<domain>/api/stripe/webhook` with
       `STRIPE_WEBHOOK_SECRET` set
 - [ ] Customer portal enabled, with plan change and cancellation allowed
@@ -59,7 +77,11 @@ public until it is done — not that it is missing a nice-to-have.
 
 - [ ] Decide whether to launch with a model at all. The product is complete
       without one; a key only makes explanations more fluent.
-- [ ] If yes: `AI_PROVIDER` and `AI_API_KEY` set
+- [ ] If yes: `ANTHROPIC_API_KEY` set. That alone implies
+      `AI_PROVIDER=anthropic`; the per-tier model names in `.env.example` are
+      already the code defaults and only need setting to override them.
+- [ ] A spend limit set on the Anthropic side too, not only in `/admin`. One
+      protects the product, the other protects the card.
 - [ ] Daily and monthly euro spend caps set in `/admin` (defaults: €12/day,
       €200/month across all users)
 - [ ] Per-user daily call cap reviewed (default 40)
@@ -73,9 +95,12 @@ public until it is done — not that it is missing a nice-to-have.
       that word.
 - [ ] `event_sources` rows added for the launch cities
 - [ ] Official facts re-checked against their sources, and `checked_at` updated
-- [ ] `isSeededData` in `src/server/db/index.ts` returns false only once the
-      content is real. While it is true the app carries a standing "sample city
-      data" notice, which is correct and must not be switched off early.
+- [ ] `STUDENTOS_CONTENT_MODE` left at `sample` until the seeded events, deals
+      and places have actually been replaced. While it is `sample` the app
+      carries a standing "sample city data" notice, which is correct and must
+      not be switched off early. Connecting a database does not make an invented
+      event real, which is why this is a separate declaration from the
+      Supabase variables.
 
 ## 6. Safety
 
@@ -93,6 +118,7 @@ public until it is done — not that it is missing a nice-to-have.
 
 ## 7. Operations
 
+- [ ] `/admin` → Services reviewed: every line Ready, or a Degraded you chose
 - [ ] `NEXT_PUBLIC_SENTRY_DSN` and `SENTRY_ENVIRONMENT` set
 - [ ] PostHog set, or a deliberate decision not to
 - [ ] Uptime check on `/` and on `/api/stripe/webhook`
@@ -101,6 +127,7 @@ public until it is done — not that it is missing a nice-to-have.
 ## 8. The product itself
 
 - [ ] `pnpm check` green: typecheck, lint, unit tests, production build
+- [ ] `pnpm db:verify` green against the production project
 - [ ] `pnpm test:e2e` green on both the mobile and the desktop project
 - [ ] Walked by hand on a real phone at 375px: sign-up, onboarding, Home,
       LifeOps, an event, Anyone Down?, a Pulse post, Ask, Budget, Exchange

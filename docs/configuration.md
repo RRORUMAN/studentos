@@ -24,13 +24,13 @@ pretending.
 
 ## Supabase
 
-**Why.** Today every read and write goes through the JSON store in
-`src/server/db/store.ts`. It is durable for one Node process and is wiped on
-every restart on a serverless host. `supabase/migrations/` is the production
-schema, with the constraints and Row Level Security policies the JSON store
-cannot express — including the one that matters most,
-`profiles_home_point_owner_only`, which makes a student's precise home
-coordinate readable only by them under every policy.
+**Why.** Storage. With these set, every read and write goes to the Postgres row
+store in `src/server/db/supabase-store.ts`; without them it goes to a JSON file
+that is wiped on every restart on a serverless host. `docs/data-layer.md` is the
+full account of how it works and where it stops — read that first.
+
+**Which variables decide it:** `NEXT_PUBLIC_SUPABASE_URL` **and**
+`SUPABASE_SERVICE_ROLE_KEY`. The anon key is deliberately not part of the test.
 
 **Environment**
 
@@ -43,21 +43,36 @@ SUPABASE_SERVICE_ROLE_KEY=<service role key>
 **Dashboard**
 
 1. Create a project. Choose the region closest to your students.
-2. SQL Editor → run every file in `supabase/migrations/` in filename order:
-   `0001_init.sql`, `0002_daily_product.sql`, `0003_operations.sql`,
-   `0004_lifeops_missions_exchange.sql`.
-3. Database → Extensions → enable `postgis`, `vector`, `pgcrypto`.
+2. SQL Editor → run `supabase/migrations/0005_row_store.sql`. That is the one
+   the application speaks.
+3. Do **not** run `0001`–`0004`. They describe the relational schema the product
+   is heading for, table by table, and nothing reads them yet; applying them
+   creates empty tables that will mislead the next person who looks. The same
+   goes for the `postgis`, `vector` and `pgcrypto` extensions — nothing needs
+   them until a table is promoted to that schema.
 4. Settings → API → copy the URL, the anon key and the service role key.
 5. Authentication → URL Configuration → set the Site URL to your domain and add
    `https://<your-domain>/api/auth/google/callback` to the redirect allow-list.
 6. Database → Backups → confirm point-in-time recovery is on before launch.
 
-**Still to build.** The repository-layer adapter behind the six functions in
-`src/server/db/store.ts` (`findOne`, `findMany`, `insert`, `update`, `remove`,
-`transaction`). Setting these variables today hides nothing and moves nothing —
-`src/server/db/index.ts` says so in a comment, and `isSeededData` stays true
-until the adapter exists. This is the single remaining task between the current
-state and real production.
+**Verify, do not assume.**
+
+```bash
+pnpm db:verify
+```
+
+It writes a probe row, reads it back, requires a deliberately stale write to be
+refused, and cleans up. Variables being set proves nothing on its own: the
+migration may not be applied, the key may be the wrong one, or the project may
+be paused, and all three produce a deployment that looks connected.
+
+**Authorisation, stated plainly.** The row store has RLS on with no policies, so
+nothing but the service role can read it, and the service role never leaves the
+server. There is no per-row database policy separating one student from another
+— `requireUserId()` and the entitlement checks in `src/server/**` are what do
+that. The policies in migrations `0001`–`0004`, including
+`profiles_home_point_owner_only`, are part of the schema the product is heading
+for and are not in force today.
 
 ---
 
