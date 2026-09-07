@@ -1,122 +1,250 @@
-import { ArrowRight } from "lucide-react";
+"use client";
 
-import { MascotArt } from "@/components/mascot/mascot-art";
-import { BudgetPanel } from "@/components/product/budget-panel";
+import { motion, useReducedMotion } from "motion/react";
+import { ArrowRight, Check } from "lucide-react";
+import { useState } from "react";
+
+import { MascotStill } from "@/components/mascot/mascot";
+import { accents } from "@/components/ui/accent";
 import { ButtonLink } from "@/components/ui/button";
-import { Eyebrow, Section } from "@/components/ui/primitives";
-import { Reveal, RevealGroup, RevealItem } from "@/components/ui/reveal";
+import {
+  Meter,
+  ProductPanel,
+  SampleTag,
+  Section,
+  SectionHeader,
+} from "@/components/ui/primitives";
+import { Reveal } from "@/components/ui/reveal";
 import { brand } from "@/brand/brand.config";
-import { budgetMonth, categoryRemaining, safeToday, tonightPlanCost, weeklyDelta } from "@/data/budget";
-import { money } from "@/lib/utils";
+import {
+  affordCheck,
+  budgetMonth,
+  cheaperAlternatives,
+  safeThisWeek,
+  safeToday,
+  tonightPlanCost,
+} from "@/data/budget";
+import { duration, ease } from "@/lib/motion";
+import { cn, money } from "@/lib/utils";
+import { track } from "@/services/analytics";
 
+const AMOUNTS = [12, 20, 35, 60];
+
+const VERDICT_TONE = {
+  easy: { bg: "bg-mint-soft", text: "text-mint-deep", mascot: "budget" },
+  "yes-but": { bg: "bg-amber-soft", text: "text-amber-deep", mascot: "budget" },
+  careful: { bg: "bg-amber-soft", text: "text-amber-deep", mascot: "concerned" },
+  no: { bg: "bg-pulse-soft", text: "text-pulse-deep", mascot: "concerned" },
+} as const;
+
+/**
+ * ============================================================================
+ * SMART BUDGET
+ * ----------------------------------------------------------------------------
+ * Every other budgeting app explains a month that already happened. This one
+ * answers the only question a student asks it: can I do this thing tonight?
+ *
+ * Two numbers do the work — safe today and safe this week — and both are
+ * derived in `data/budget.ts` from the same seeded month the rest of the page
+ * uses, so the figure here can never disagree with the figure in Today or in
+ * an Ask answer. The afford check is real arithmetic on the amount you pick.
+ * ============================================================================
+ */
 export function BudgetSection() {
-  const safe = safeToday();
-  const goingOut = categoryRemaining("going-out");
-  const delta = weeklyDelta();
+  const reduced = useReducedMotion();
+  const [amount, setAmount] = useState(35);
+
+  const today = safeToday();
+  const week = safeThisWeek();
+  const check = affordCheck(amount);
+  const tone = VERDICT_TONE[check.verdict];
+  const weekUsed = (budgetMonth.weekSoFar / budgetMonth.weeklyTarget) * 100;
 
   return (
     <Section id="budget" tone="flow">
       <div className="page">
-        <div className="grid gap-10 lg:grid-cols-[minmax(0,30rem)_minmax(0,1fr)] lg:items-center lg:gap-14">
-          <Reveal kind="blur" className="order-2 w-full lg:order-1">
-            <BudgetPanel />
-          </Reveal>
+        <SectionHeader
+          eyebrow={brand.surfaces.budget}
+          eyebrowIndex="07"
+          title="Your budget should tell you what you can do."
+          lead="Not a pie chart of what you already spent. Two numbers that decide tonight, and a cheaper version of the plan when the answer is no."
+        />
 
-          <div className="order-1 lg:order-2">
-            <Reveal>
-              <Eyebrow index="07">
-                {brand.surfaces.budget}
-              </Eyebrow>
-              <h2 className="mt-4 text-display-md text-ink-950">
-                Your budget should tell you what you <em className="not-italic text-signal-deep">can</em>{" "}
-                do.
-              </h2>
-              <p className="mt-5 max-w-xl text-lg leading-relaxed text-ink-600">
-                Budgeting apps are built for people with salaries. They show you a pie chart of a
-                month that already happened. This answers the only question that matters on a
-                Thursday night: can I go out, and for how much.
-              </p>
-            </Reveal>
-
-            <RevealGroup className="mt-8 grid gap-3 sm:grid-cols-3">
-              {[
-                {
-                  label: "Safe today",
-                  value: money(safe),
-                  note: `After ${budgetMonth.upcoming.length} known charges, across ${budgetMonth.daysLeft} days`,
-                },
-                {
-                  label: "Going out left",
-                  value: money(goingOut),
-                  note: "This month, in the category that decides your weekend",
-                },
-                {
-                  label: "Versus target",
-                  value: `${delta >= 0 ? "−" : "+"}${money(Math.abs(delta))}`,
-                  note: delta >= 0 ? "Under your weekly target" : "Over your weekly target",
-                },
-              ].map((stat) => (
-                <RevealItem
-                  key={stat.label}
-                  className="rounded-lg border border-ink-200 bg-paper p-4"
-                >
-                  <p className="font-mono text-micro uppercase tracking-[0.1em] text-ink-400">
-                    {stat.label}
+        <div className="mt-10 grid gap-6 lg:grid-cols-2 lg:gap-8">
+          {/* ---- the two numbers -------------------------------------------- */}
+          <Reveal>
+            <ProductPanel className="h-full">
+              <div className="mb-4 flex justify-end">
+                <SampleTag onDark />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="font-mono text-micro uppercase tracking-[0.12em] text-white/40">
+                    Safe today
                   </p>
-                  <p className="tnum mt-1.5 font-mono text-2xl font-semibold text-ink-950">
-                    {stat.value}
+                  <p className="tnum mt-1 font-mono text-[2.5rem] leading-none font-semibold text-mint">
+                    {money(today)}
                   </p>
-                  <p className="mt-1.5 text-xs leading-snug text-ink-500">{stat.note}</p>
-                </RevealItem>
-              ))}
-            </RevealGroup>
+                </div>
+                <div>
+                  <p className="font-mono text-micro uppercase tracking-[0.12em] text-white/40">
+                    Safe this week
+                  </p>
+                  <p className="tnum mt-1 font-mono text-[2.5rem] leading-none font-semibold text-white">
+                    {money(week)}
+                  </p>
+                </div>
+              </div>
 
-            {/* ---- the mascot verdict --------------------------------------
-                The whole budget argument in one line: not a chart of a month
-                that already happened, but an answer to tonight. He is the
-                supporting voice here rather than the focus — a money surface
-                has to read as trustworthy first, and a character delivering
-                the numbers themselves would undercut that. */}
-            <Reveal delay={0.08}>
-              <div className="mt-8 flex items-center gap-3.5 rounded-xl border border-ink-950/10 bg-white p-4">
-                <MascotArt
-                  state={tonightPlanCost <= safe ? "excited" : "warning"}
-                  className="size-12 shrink-0"
-                />
-                <p className="text-[0.9375rem] leading-snug text-ink-700">
-                  {tonightPlanCost <= safe ? (
-                    <>
-                      <span className="font-semibold text-ink-950">
-                        Tonight&rsquo;s {money(tonightPlanCost)} plan fits.
-                      </span>{" "}
-                      You are still inside the day.
-                    </>
-                  ) : (
-                    <>
-                      <span className="font-semibold text-ink-950">
-                        That is {money(tonightPlanCost - safe)} over today.
-                      </span>{" "}
-                      Take the free option tonight.
-                    </>
-                  )}
+              <div className="mt-4">
+                <Meter value={weekUsed} accent="flow" onDark label="Week spent so far" />
+                <p className="mt-2 text-xs text-white/40">
+                  {money(budgetMonth.weekSoFar)} of this week&rsquo;s {money(budgetMonth.weeklyTarget)}{" "}
+                  target used · rent already paid
                 </p>
               </div>
-            </Reveal>
 
-            <Reveal delay={0.1}>
-              <p className="mt-6 max-w-xl text-[0.875rem] leading-relaxed text-ink-500">
-                Budget data never leaves your account. It is not sold, not shared with venues, and
-                never attached to an error report.
+              <div className="mt-5 flex items-start gap-3 rounded-lg bg-mint/12 p-3.5">
+                <MascotStill state="budget" size="sm" className="shrink-0" />
+                <p className="text-[0.9375rem] leading-snug text-white">
+                  You can comfortably afford tonight&rsquo;s {money(tonightPlanCost)} plan.
+                </p>
+              </div>
+
+              <p className="mt-5 font-mono text-micro uppercase tracking-[0.12em] text-white/40">
+                Cheaper versions of the same night
               </p>
-              <ButtonLink href="/get-started" variant="signal" size="lg" className="group mt-6">
-                Plan around my budget
-                <ArrowRight
-                  className="size-4.5 transition-transform duration-200 group-hover:translate-x-0.5"
-                  aria-hidden
+              <ul className="mt-2 flex flex-col gap-1.5">
+                {cheaperAlternatives.map((option) => (
+                  <li
+                    key={option.label}
+                    className="flex items-center gap-3 rounded-md bg-white/5 px-3 py-2"
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[0.875rem] text-white">
+                        {option.label}
+                      </span>
+                      <span className="block truncate text-xs text-white/40">{option.note}</span>
+                    </span>
+                    <span
+                      className={cn(
+                        "tnum shrink-0 font-mono text-sm font-medium",
+                        option.price === 0 ? "text-mint" : "text-white",
+                      )}
+                    >
+                      {option.price === 0 ? "Free" : money(option.price)}
+                    </span>
+                    <span className="tnum shrink-0 text-xs text-mint">
+                      −{money(tonightPlanCost - option.price)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </ProductPanel>
+          </Reveal>
+
+          {/* ---- can I afford this? ------------------------------------------ */}
+          <Reveal delay={0.05}>
+            <div className="flex h-full flex-col rounded-2xl bg-white p-5 shadow-[var(--shadow-raise)] ring-1 ring-ink-950/5 sm:p-6">
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="font-mono text-micro uppercase tracking-[0.12em] text-ink-400">
+                  Can I afford this?
+                </h3>
+                <SampleTag label="Demo control" />
+              </div>
+
+              <div className="mt-4">
+                <label htmlFor="afford-amount" className="text-[0.9375rem] font-medium text-ink-900">
+                  A {money(amount)} dinner
+                </label>
+                <input
+                  id="afford-amount"
+                  type="range"
+                  min={5}
+                  max={90}
+                  step={1}
+                  value={amount}
+                  onChange={(event) => setAmount(Number(event.target.value))}
+                  onPointerUp={() => track("budget_scenario_changed", { cost: amount })}
+                  className="mt-3 h-1.5 w-full cursor-pointer appearance-none rounded-full bg-ink-100 accent-flow"
+                  aria-describedby="afford-verdict"
                 />
-              </ButtonLink>
-            </Reveal>
-          </div>
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {AMOUNTS.map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      aria-pressed={amount === preset}
+                      onClick={() => {
+                        setAmount(preset);
+                        track("budget_scenario_changed", { cost: preset });
+                      }}
+                      className={cn(
+                        "tnum rounded-full border px-3 py-1 font-mono text-xs transition-colors",
+                        amount === preset
+                          ? "border-transparent bg-flow text-white"
+                          : "border-ink-200 text-ink-600 hover:border-ink-300 hover:text-ink-950",
+                      )}
+                    >
+                      {money(preset)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <motion.div
+                id="afford-verdict"
+                key={check.verdict}
+                initial={reduced ? false : { opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: reduced ? 0 : duration.quick, ease: ease.out }}
+                aria-live="polite"
+                className={cn("mt-5 rounded-xl p-4", tone.bg)}
+              >
+                <p className={cn("text-display-xs", tone.text)}>{check.headline}</p>
+                <p className="mt-1.5 text-[0.9375rem] leading-relaxed text-ink-700">
+                  {check.detail}
+                </p>
+                <div className="mt-3 flex items-center gap-2">
+                  <MascotStill state={tone.mascot} size="xs" />
+                  <span className="text-xs text-ink-500">
+                    Safe today {money(check.safeToday)} · safe this week {money(check.safeWeek)}
+                  </span>
+                </div>
+              </motion.div>
+
+              {check.alternative ? (
+                <div className="mt-3 flex items-center gap-3 rounded-xl border border-ink-200 p-3.5">
+                  <span className="grid size-8 shrink-0 place-items-center rounded-full bg-mint-soft text-mint-deep">
+                    <Check className="size-4" aria-hidden />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[0.875rem] font-medium text-ink-950">
+                      {check.alternative.label} · {money(check.alternative.price)}
+                    </span>
+                    <span className="block text-xs text-ink-500">{check.alternative.note}</span>
+                  </span>
+                  <span className={cn("tnum shrink-0 text-sm font-medium", accents.mint.text)}>
+                    −{money(check.alternative.saves)}
+                  </span>
+                </div>
+              ) : (
+                <p className="mt-3 rounded-xl border border-dashed border-ink-200 p-3.5 text-[0.875rem] text-ink-500">
+                  Nothing to change. It already fits inside today.
+                </p>
+              )}
+
+              <div className="mt-auto pt-5">
+                <ButtonLink href="/get-started?intent=budget" variant="primary">
+                  Set up your budget
+                  <ArrowRight className="size-4" aria-hidden />
+                </ButtonLink>
+                <p className="mt-2.5 text-[0.8125rem] text-ink-400">
+                  Works on numbers you enter. No bank connection, on any tier.
+                </p>
+              </div>
+            </div>
+          </Reveal>
         </div>
       </div>
     </Section>

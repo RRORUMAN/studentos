@@ -1,33 +1,48 @@
 import { CalendarDays, Tag } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { after } from "next/server";
 
 import { DiscoverFilters, type DiscoverTab } from "@/components/app/discover-filters";
+import { DiscoverLayout } from "@/components/app/discover-layout";
+import type { MapPlace } from "@/components/app/discover-map";
+import { DiscoverRightNow } from "@/components/app/discover-right-now";
 import { RadarCard } from "@/components/app/event-card";
 import { SmartPlaceCard } from "@/components/app/place-card";
 import { Locked } from "@/components/app/locked";
 import { Upsell } from "@/components/app/upsell";
 import { MascotArt } from "@/components/mascot/mascot-art";
 import { TripPicker } from "@/components/app/trip-picker";
-import { CityMap } from "@/components/product/city-map";
 import { Badge } from "@/components/ui/primitives";
+import { placeLayers } from "@/data/places";
 import { cityDirectory, resolveCity } from "@/data/cities";
-import type { PlaceLayer } from "@/data/types";
+import type { Place, PlaceLayer } from "@/data/types";
+import type { CityEvent } from "@/domain/types";
 import { recordUpgradeTrigger } from "@/server/actions/upgrade";
 import { isFlagOn } from "@/server/queries/settings";
 import { confidenceMeta } from "@/domain/knowledge";
 import {
+  dealsByPlace,
+  loadCityEvents,
   loadCommunitySignals,
   loadDeals,
   loadPlaces,
   loadRecommendContext,
+  loadSavedKeys,
   loadScoredEvents,
+  savedKey,
+  type DealWithConfidence,
 } from "@/server/queries/discovery";
-import { loadEventEnergy } from "@/server/queries/events";
+import { loadEventEnergy, UNDER_TEN_CENTS } from "@/server/queries/events";
+import { loadTrending } from "@/server/queries/loop";
 import { loadMoney } from "@/server/queries/money";
+import { loadOpenInvites } from "@/server/queries/plans";
+import { rightNow } from "@/server/engines/right-now";
+import type { Scored } from "@/server/engines/recommend";
 import { recordSearchMiss } from "@/server/actions/insight";
 import { requestDate } from "@/server/now";
 import { requireViewer } from "@/server/viewer";
+import { fmtDay } from "@/lib/dates";
 import { money } from "@/lib/utils";
 
 export const metadata: Metadata = {
@@ -39,39 +54,104 @@ export const metadata: Metadata = {
  * ============================================================================
  * DISCOVER
  * ----------------------------------------------------------------------------
- * Map plus smart feed. On mobile the map is a compact panel above the list; on
- * desktop it sits alongside and stays put while the list scrolls.
+ * Map plus smart feed. On mobile the map is on top with a draggable sheet over
+ * it; on desktop the map sits alongside and stays put while the list scrolls.
  *
- * The tabs are the questions students actually ask — cheap, free, food, study,
- * events, deals — not the data model. Free gets the three core layers plus the
- * price caps; paid stacks the rest. A locked tab is visible and says so.
+ * The categories are the questions students actually ask — free, under ten,
+ * food, study, what is on right now — not the data model. A category is only
+ * listed when rows in *this* city can answer it, so a student never taps into a
+ * promise the data cannot keep.
  *
- * A search that returns nothing is recorded as an unmet need, which is how the
- * product learns what a city is missing.
+ * Every visible control applies to the current category. A refinement a
+ * category cannot honour is not rendered: deals carry no price, so the price
+ * caps are absent there rather than present and inert.
+ *
+ * Nothing is written during render. A search that returns nothing is recorded
+ * as an unmet need, and an upsell impression is counted, in `after()` — after
+ * the response is done.
  * ============================================================================
  */
+
+type TabKind = "places" | "events" | "deals" | "mixed" | "right-now";
 
 type Tab = {
   value: string;
   label: string;
-  layer?: PlaceLayer;
   core: boolean;
-  kind: "places" | "events" | "deals";
-  cheapOnly?: boolean;
+  kind: TabKind;
+  /** Which places belong to this category. Omitted when it has none. */
+  place?: (place: Place) => boolean;
+  /** Which events belong to this category. Omitted when it has none. */
+  event?: (event: CityEvent) => boolean;
 };
 
+const hasLayer = (layer: PlaceLayer) => (place: Place) => place.layers.includes(layer);
+const hasTag = (...tags: string[]) => (event: CityEvent) =>
+  tags.includes(event.kind) || event.tags.some((tag) => tags.includes(tag));
+
 const TABS: readonly Tab[] = [
-  { value: "for-you", label: "For you", layer: "for-you", core: true, kind: "places" },
-  { value: "cheap", label: "Cheap", core: true, kind: "places", cheapOnly: true },
-  { value: "free", label: "Free", layer: "free", core: true, kind: "places" },
-  { value: "food", label: "Food", layer: "cheap-food", core: true, kind: "places" },
-  { value: "groceries", label: "Groceries", layer: "groceries", core: false, kind: "places" },
-  { value: "events", label: "Events", core: true, kind: "events" },
+  { value: "for-you", label: "For you", core: true, kind: "places", place: () => true },
+  { value: "right-now", label: "Right now", core: true, kind: "right-now" },
+  {
+    value: "free",
+    label: "Free",
+    core: true,
+    kind: "mixed",
+    place: (place) => place.price === 0,
+    event: (event) => event.priceCents === 0,
+  },
+  {
+    value: "under-10",
+    label: "Under 10",
+    core: true,
+    kind: "mixed",
+    place: (place) => place.price !== null && place.price * 100 <= UNDER_TEN_CENTS,
+    event: (event) => event.priceCents <= UNDER_TEN_CENTS,
+  },
+  { value: "food", label: "Food", core: true, kind: "places", place: hasLayer("cheap-food") },
+  { value: "groceries", label: "Groceries", core: false, kind: "places", place: hasLayer("groceries") },
+  { value: "events", label: "Events", core: true, kind: "events", event: () => true },
   { value: "deals", label: "Deals", core: true, kind: "deals" },
-  { value: "study", label: "Study", layer: "study", core: false, kind: "places" },
-  { value: "nightlife", label: "Nightlife", layer: "nightlife", core: false, kind: "places" },
-  { value: "fitness", label: "Fitness", layer: "fitness", core: false, kind: "places" },
+  {
+    value: "nightlife",
+    label: "Nightlife",
+    core: false,
+    kind: "mixed",
+    place: hasLayer("nightlife"),
+    event: hasTag("nightlife", "music", "clubbing"),
+  },
+  { value: "study", label: "Study", core: false, kind: "places", place: hasLayer("study") },
+  {
+    value: "fitness",
+    label: "Fitness",
+    core: false,
+    kind: "mixed",
+    place: hasLayer("fitness"),
+    event: hasTag("sports", "running", "fitness", "football", "cycling"),
+  },
+  {
+    value: "culture",
+    label: "Culture",
+    core: false,
+    kind: "mixed",
+    place: (place) => /museum|gallery|cinema|theatre|art/i.test(place.category),
+    event: hasTag("culture", "art", "museums", "cinema"),
+  },
+  {
+    value: "nature",
+    label: "Nature",
+    core: false,
+    kind: "mixed",
+    place: (place) => /park|garden|swim|pool|outdoor|river/i.test(`${place.category} ${place.why}`),
+    event: hasTag("outdoor", "nature", "cycling", "running"),
+  },
 ];
+
+const CAPS = [
+  { value: "free", cents: 0 },
+  { value: "5", cents: 500 },
+  { value: "10", cents: 1000 },
+] as const;
 
 export default async function DiscoverPage(props: PageProps<"/discover">) {
   const viewer = await requireViewer();
@@ -85,36 +165,44 @@ export default async function DiscoverPage(props: PageProps<"/discover">) {
     return Array.isArray(value) ? value[0] : value;
   };
 
-  /* Legacy links: ?filter=under-10, ?layer=study. */
+  /* Legacy links: ?filter=under-10, ?layer=study, ?tab=cheap. */
   const legacyLayer = one("layer");
   const legacyFilter = one("filter");
-  const requested =
+  const requestedRaw =
     one("tab") ??
-    (legacyLayer ? TABS.find((tab) => tab.layer === legacyLayer)?.value : undefined) ??
-    (legacyFilter === "free" ? "free" : legacyFilter?.startsWith("under") ? "cheap" : undefined) ??
+    (legacyLayer ? TABS.find((tab) => tab.value === legacyLayer || tab.value === legacyLayer.replace("cheap-", ""))?.value : undefined) ??
+    (legacyFilter === "free" ? "free" : legacyFilter?.startsWith("under") ? "under-10" : undefined) ??
     "for-you";
+  const requested = requestedRaw === "cheap" ? "under-10" : requestedRaw;
 
   const tabMeta = TABS.find((tab) => tab.value === requested) ?? TABS[0];
-  /* A tab a free user is not entitled to falls back to For you rather than
-     refusing; the chip they tapped still shows as locked. */
+  /* A category a free user is not entitled to falls back to For you rather
+     than refusing; the chip they tapped still shows as locked. */
   const tab = tabMeta.core || can.allMapLayers ? tabMeta : TABS[0];
 
   /* ---- trip mode --------------------------------------------------------
      `?city=` opens another city read-only. Pro (tripPlanner); a free student
-     asking for it is shown their own city and the value-first upsell below. */
-  const tripSlug = one("city") && one("city") !== viewer.profile.citySlug ? one("city")! : null;
+     asking for it is shown their own city and the value-first upsell below.
+     With the flag off there is no trip mode at all and no picker. */
   const tripsOn = await isFlagOn("trips");
-  const tripCity = tripSlug && tripsOn ? resolveCity(tripSlug) : null;
+  const tripSlug = tripsOn && one("city") && one("city") !== viewer.profile.citySlug ? one("city")! : null;
+  const tripCity = tripSlug ? resolveCity(tripSlug) : null;
   const trip = tripCity && can.tripPlanner ? tripCity : null;
-  if (tripCity && !can.tripPlanner) await recordUpgradeTrigger("another-city");
+  if (tripCity && !can.tripPlanner) after(() => recordUpgradeTrigger("another-city"));
+
   const citySlug = trip?.slug ?? viewer.profile.citySlug;
   const cityName = trip?.name ?? viewer.city.name;
-  const scopedProfile = trip ? { ...viewer.profile, citySlug: trip.slug, campusSlug: null, homePoint: null } : viewer.profile;
+  const timeZone = trip?.timezone ?? viewer.city.timezone;
+  const mapSeed = trip?.mapSeed ?? viewer.city.mapSeed;
+  const scopedProfile = trip
+    ? { ...viewer.profile, citySlug: trip.slug, campusSlug: null, homePoint: null }
+    : viewer.profile;
 
-  const cap = one("max") ?? (legacyFilter === "under-10" ? "10" : legacyFilter === "under-5" ? "5" : null);
-  const capCents = cap && /^\d+$/.test(cap) ? Number(cap) * 100 : tab.cheapOnly ? 1000 : null;
+  const capValue = CAPS.some((cap) => cap.value === one("max")) ? one("max")! : null;
+  const capCents = capValue === null ? null : CAPS.find((cap) => cap.value === capValue)!.cents;
   const verified = one("verified") === "1" && can.combinedFilters;
-  const query = one("q") ?? "";
+  const query = (one("q") ?? "").trim();
+  const needle = query.toLowerCase();
 
   const money$ = await loadMoney(viewer.user.id, now);
   const context = await loadRecommendContext({
@@ -124,46 +212,267 @@ export default async function DiscoverPage(props: PageProps<"/discover">) {
     now,
   });
 
-  const [places, events, deals, signals] = await Promise.all([
-    tab.kind === "places"
-      ? loadPlaces(context, {
-          layers: tab.layer && tab.layer !== "for-you" ? [tab.layer] : undefined,
-          freeOnly: tab.value === "free",
-          maxPriceCents: capCents,
-          verifiedOnly: verified,
-          query: query || undefined,
-        })
-      : Promise.resolve([]),
-    tab.kind === "events"
-      ? loadScoredEvents(viewer.user.id, context, {
-          when: "week",
-          maxPriceCents: capCents,
-          freeOnly: cap === "free",
-        })
-      : Promise.resolve([]),
-    tab.kind === "deals" ? loadDeals(citySlug) : Promise.resolve([]),
+  const [allPlaces, allEvents, deals, signals, savedKeys] = await Promise.all([
+    loadPlaces(context),
+    loadScoredEvents(viewer.user.id, context, { when: "week" }),
+    loadDeals(citySlug),
     loadCommunitySignals(viewer.user.id, viewer.profile.campusSlug),
+    loadSavedKeys(viewer.user.id),
   ]);
 
+  const dealFor = dealsByPlace(deals);
+
+  /* ---- the current view -------------------------------------------------- */
+  const placeMatches = (scored: Scored<Place>) => {
+    const place = scored.item;
+    if (!tab.place?.(place)) return false;
+    if (capCents !== null && (place.price === null || place.price * 100 > capCents)) return false;
+    if (capValue === "free" && place.price !== 0) return false;
+    if (verified && place.verifiedBy < 10) return false;
+    if (needle && !`${place.name} ${place.category} ${place.why}`.toLowerCase().includes(needle)) return false;
+    return true;
+  };
+
+  const eventMatches = (scored: Scored<CityEvent>) => {
+    const event = scored.item;
+    if (!tab.event?.(event)) return false;
+    if (capCents !== null && event.priceCents > capCents) return false;
+    if (verified && event.confirmations < 10) return false;
+    if (needle && !`${event.title} ${event.venue} ${event.blurb} ${event.kind} ${event.tags.join(" ")}`.toLowerCase().includes(needle)) {
+      return false;
+    }
+    return true;
+  };
+
+  const dealMatches = (deal: DealWithConfidence) =>
+    !needle || `${deal.title} ${deal.detail} ${deal.value} ${deal.category}`.toLowerCase().includes(needle);
+
+  const places = tab.place ? allPlaces.filter(placeMatches) : [];
+  const events = tab.event ? allEvents.filter(eventMatches) : [];
+  const shownDeals = tab.kind === "deals" ? deals.filter(dealMatches) : [];
+
+  /* ---- right now --------------------------------------------------------- */
+  const live =
+    tab.kind === "right-now"
+      ? rightNow({
+          now,
+          events: await loadCityEvents(citySlug),
+          invites: await loadOpenInvites({ userId: viewer.user.id, citySlug, now }),
+          posts: await loadTrending(citySlug, 8),
+          limit: 12,
+        })
+      : [];
+
   const energy =
-    tab.kind === "events"
+    events.length > 0
       ? await loadEventEnergy({
           viewerId: viewer.user.id,
           campusSlug: viewer.profile.campusSlug,
           eventIds: events.map((entry) => entry.item.id),
+          now,
         })
       : new Map();
 
-  const total = tab.kind === "places" ? places.length : tab.kind === "events" ? events.length : deals.length;
+  const total =
+    tab.kind === "deals" ? shownDeals.length : tab.kind === "right-now" ? live.length : places.length + events.length;
+
   if (total === 0 && query) {
-    await recordSearchMiss({ query, surface: "explore", resultCount: 0 });
+    after(() => recordSearchMiss({ query, surface: "explore", resultCount: 0 }));
   }
 
-  const tabs: DiscoverTab[] = TABS.map((entry) => ({
+  /* ---- which categories this city can actually answer --------------------- */
+  const tabs: DiscoverTab[] = TABS.filter((entry) => {
+    if (entry.value === tab.value) return true;
+    if (entry.kind === "deals") return deals.length > 0;
+    if (entry.kind === "right-now") return true;
+    const anyPlace = entry.place ? allPlaces.some((scored) => entry.place!(scored.item)) : false;
+    const anyEvent = entry.event ? allEvents.some((scored) => entry.event!(scored.item)) : false;
+    return anyPlace || anyEvent;
+  }).map((entry) => ({
     value: entry.value,
-    label: entry.label,
+    label: entry.value === "under-10" ? `Under ${money(10, where)}` : entry.label,
     locked: !entry.core && !can.allMapLayers,
   }));
+
+  const mapPlaces: MapPlace[] = places.map((scored) => {
+    const place = scored.item;
+    const primary = place.layers[0];
+    const deal = dealFor.get(place.id) ?? null;
+    return {
+      id: place.id,
+      name: place.name,
+      category: place.category,
+      x: place.x,
+      y: place.y,
+      priceCents: place.price === null ? null : Math.round(place.price * 100),
+      priceLabel: place.priceLabel,
+      walkMinutes: place.walkMinutes,
+      studentValue: place.studentValue,
+      verifiedBy: place.verifiedBy,
+      match: scored.match,
+      accent: placeLayers.find((layer) => layer.key === primary)?.accent ?? "signal",
+      community: signals.savedByFriends.has(place.id)
+        ? "friends"
+        : signals.savedByCampus.has(place.id)
+          ? "campus"
+          : null,
+      deal: deal ? deal.value : null,
+      reasons: scored.reasons,
+    };
+  });
+
+  const countLabel =
+    tab.kind === "deals"
+      ? `${total} ${total === 1 ? "deal" : "deals"}`
+      : tab.kind === "right-now"
+        ? `${total} ${total === 1 ? "thing" : "things"} in the next few hours`
+        : [
+            places.length > 0 ? `${places.length} ${places.length === 1 ? "place" : "places"}` : null,
+            events.length > 0 ? `${events.length} ${events.length === 1 ? "event" : "events"}` : null,
+          ]
+            .filter(Boolean)
+            .join(" · ") || "Nothing here";
+
+  const filters = (
+    <DiscoverFilters
+      tabs={tabs}
+      activeTab={tab.value}
+      activeCap={capValue}
+      query={query}
+      caps={[
+        { value: "free", label: "Free" },
+        { value: "5", label: `Under ${money(5, where)}` },
+        { value: "10", label: `Under ${money(10, where)}` },
+      ]}
+      showCaps={tab.kind !== "deals" && tab.kind !== "right-now"}
+      showVerified={tab.kind !== "deals" && tab.kind !== "right-now"}
+      verifiedLocked={!can.combinedFilters}
+      verifiedActive={verified}
+      placeholder={tab.kind === "deals" ? "student discount, gym, transport" : "cheap pizza, quiet café, student gym"}
+    />
+  );
+
+  const results = (
+    <div>
+      <p className="mb-3 font-mono text-micro uppercase tracking-[0.1em] text-ink-400">{countLabel}</p>
+
+      {total === 0 ? (
+        <div className="flex flex-col items-center rounded-2xl bg-white px-5 py-10 text-center ring-1 ring-ink-950/6">
+          <MascotArt state="empty" className="size-16" />
+          <p className="mt-4 text-[0.9375rem] text-ink-700">
+            {query
+              ? `Nothing matches “${query}” in ${cityName} yet. Noted.`
+              : trip && !trip.deep
+                ? `No local rows for ${trip.name} yet.`
+                : tab.kind === "right-now"
+                  ? "Nothing is under way or starting in the next few hours."
+                  : "Nothing in this category yet."}
+          </p>
+          <div className="mt-4 flex flex-wrap justify-center gap-2">
+            <Link href="/discover" className="rounded-full bg-ink-950 px-4 py-2 text-[0.875rem] font-medium text-paper">
+              Show everything nearby
+            </Link>
+            {capValue || verified || query ? (
+              <Link
+                href={`/discover?tab=${tab.value}`}
+                className="rounded-full border border-ink-200 bg-white px-4 py-2 text-[0.875rem] font-medium text-ink-700"
+              >
+                Clear the filters
+              </Link>
+            ) : null}
+          </div>
+        </div>
+      ) : tab.kind === "right-now" ? (
+        <DiscoverRightNow items={live} where={where} />
+      ) : tab.kind === "deals" ? (
+        <ul className="space-y-3">
+          {shownDeals.map((deal) => {
+            const meta = confidenceMeta[deal.confidence];
+            return (
+              <li key={deal.id} className="rounded-2xl bg-white p-4 shadow-[var(--shadow-flat)] ring-1 ring-ink-950/6">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="grid size-8 place-items-center rounded-full bg-amber-soft">
+                      <Tag className="size-4 text-amber-deep" />
+                    </span>
+                    <Badge accent={meta.accent}>{meta.label}</Badge>
+                    {deal.requiresStudentId ? (
+                      <span className="text-[0.75rem] text-ink-500">Student card needed</span>
+                    ) : null}
+                  </div>
+                  <span className="tnum shrink-0 font-mono text-[1rem] font-semibold text-ink-950">{deal.value}</span>
+                </div>
+                <h3 className="mt-2 text-[1.0625rem] leading-snug font-semibold text-ink-950">{deal.title}</h3>
+                <p className="mt-1 text-[0.875rem] leading-snug text-ink-600">{deal.detail}</p>
+                <p className="mt-2 text-[0.8125rem] text-ink-500">
+                  {meta.note}
+                  {deal.workedCount > 0 ? ` ${deal.workedCount} students said it worked.` : ""}
+                  {deal.lastConfirmedAt ? ` Last confirmed ${fmtDay(deal.lastConfirmedAt, timeZone, now)}.` : ""}
+                </p>
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <div className="space-y-6">
+          {places.length > 0 ? (
+            <ul className="space-y-3">
+              {places.slice(0, 40).map((scored) => (
+                <li key={scored.item.id}>
+                  <SmartPlaceCard
+                    scored={scored}
+                    where={where}
+                    campusSaved={signals.savedByCampus.has(scored.item.id)}
+                    friendsSaved={signals.savedByFriends.has(scored.item.id)}
+                    saved={savedKeys.has(savedKey("place", scored.item.id))}
+                    deal={dealFor.get(scored.item.id) ?? null}
+                  />
+                </li>
+              ))}
+            </ul>
+          ) : null}
+
+          {events.length > 0 ? (
+            <section>
+              <h2 className="mb-3 flex items-center gap-2 text-[1.0625rem] font-semibold text-ink-950">
+                <CalendarDays className="size-4 text-ink-400" />
+                What is on
+              </h2>
+              <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+                {events.slice(0, 24).map((entry) => (
+                  <li key={entry.item.id}>
+                    <RadarCard
+                      scored={entry}
+                      energy={energy.get(entry.item.id)}
+                      where={where}
+                      now={now}
+                      timeZone={timeZone}
+                      campusName={viewer.campusName}
+                      saved={savedKeys.has(savedKey("event", entry.item.id))}
+                    />
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+        </div>
+      )}
+
+      {!can.allMapLayers ? (
+        <div className="mt-5">
+          <Locked feature="allMapLayers" compact />
+        </div>
+      ) : null}
+      {tripCity && !can.tripPlanner ? (
+        <div className="mt-5">
+          <Upsell
+            feature="tripPlanner"
+            line={`Open ${tripCity.name} as a trip — places, budget and what is on — without moving home. Pro.`}
+          />
+        </div>
+      ) : null}
+    </div>
+  );
 
   return (
     <div className="page py-6 sm:py-8">
@@ -186,145 +495,38 @@ export default async function DiscoverPage(props: PageProps<"/discover">) {
         </Link>
       </header>
 
-      <DiscoverFilters
-        tabs={tabs}
-        activeTab={tab.value}
-        activeCap={cap}
-        query={query}
-        caps={[
-          { value: "free", label: "Free" },
-          { value: "5", label: `Under ${money(5, where)}` },
-          { value: "10", label: `Under ${money(10, where)}` },
-        ]}
-        verifiedLocked={!can.combinedFilters}
-        verifiedActive={verified}
-      />
-
-      <div className="mt-5 grid gap-5 lg:grid-cols-[1fr_1.05fr] lg:items-start">
-        {/* ---- map ---------------------------------------------------------- */}
-        <div className="lg:sticky lg:top-24">
-          <TripPicker
-            cities={cityDirectory.map((entry) => ({ slug: entry.slug, name: entry.name, country: entry.country, status: entry.status, deep: entry.deep }))}
-            homeSlug={viewer.profile.citySlug}
-            currentSlug={citySlug}
-            unlocked={can.tripPlanner}
-          />
-          {trip && !trip.deep ? (
-            <p className="mb-3 rounded-xl bg-amber-soft/70 px-4 py-3 text-[0.8125rem] leading-snug text-amber-deep">
-              {trip.name} has no local places or events yet. The map is the city outline only; nothing below is invented.
-            </p>
-          ) : null}
-          <CityMap citySlug={citySlug} />
-          <p className="mt-2 text-[0.8125rem] text-ink-400">
-            Our own rows on a stylised map — no third-party tiles, so nothing about where you look
-            is sent anywhere.
-          </p>
-        </div>
-
-        {/* ---- results ------------------------------------------------------ */}
-        <div>
-          <p className="mb-3 font-mono text-micro uppercase tracking-[0.1em] text-ink-400">
-            {total} {tab.kind === "events" ? (total === 1 ? "event" : "events") : tab.kind === "deals" ? (total === 1 ? "deal" : "deals") : total === 1 ? "place" : "places"}
-            {tab.cheapOnly && !cap ? ` under ${money(10, where)}` : ""}
-          </p>
-
-          {total === 0 ? (
-            <div className="flex flex-col items-center rounded-2xl bg-white px-5 py-10 text-center ring-1 ring-ink-950/6">
-              <MascotArt state="empty" className="size-16" />
-              <p className="mt-4 text-[0.9375rem] text-ink-700">
-                {query ? `Nothing matches "${query}" in ${cityName} yet. Noted.` : trip && !trip.deep ? `No local rows for ${trip.name} yet.` : "Nothing good in this filter yet."}
+      <DiscoverLayout
+        places={mapPlaces}
+        seed={mapSeed}
+        where={where}
+        eventCount={events.length}
+        filters={filters}
+        aside={
+          <>
+            {tripsOn ? (
+              <TripPicker
+                cities={cityDirectory.map((entry) => ({
+                  slug: entry.slug,
+                  name: entry.name,
+                  country: entry.country,
+                  status: entry.status,
+                  deep: entry.deep,
+                }))}
+                homeSlug={viewer.profile.citySlug}
+                currentSlug={citySlug}
+                unlocked={can.tripPlanner}
+              />
+            ) : null}
+            {trip && !trip.deep ? (
+              <p className="mb-3 rounded-xl bg-amber-soft/70 px-4 py-3 text-[0.8125rem] leading-snug text-amber-deep">
+                {trip.name} has no local places or events yet. The map is the city outline only; nothing below is invented.
               </p>
-              <div className="mt-4 flex flex-wrap justify-center gap-2">
-                <Link href="/discover" className="rounded-full bg-ink-950 px-4 py-2 text-[0.875rem] font-medium text-paper">
-                  Show everything nearby
-                </Link>
-                {capCents ? (
-                  <Link
-                    href={`/discover?tab=${tab.value}`}
-                    className="rounded-full border border-ink-200 bg-white px-4 py-2 text-[0.875rem] font-medium text-ink-700"
-                  >
-                    Remove the price cap
-                  </Link>
-                ) : null}
-              </div>
-            </div>
-          ) : tab.kind === "places" ? (
-            <ul className="space-y-3">
-              {places.slice(0, 40).map((scored) => (
-                <li key={scored.item.id}>
-                  <SmartPlaceCard
-                    scored={scored}
-                    where={where}
-                    campusSaved={signals.savedByCampus.has(scored.item.id)}
-                    friendsSaved={signals.savedByFriends.has(scored.item.id)}
-                  />
-                </li>
-              ))}
-            </ul>
-          ) : tab.kind === "events" ? (
-            <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
-              {events.map((entry) => (
-                <li key={entry.item.id}>
-                  <RadarCard
-                    scored={entry}
-                    energy={energy.get(entry.item.id)}
-                    where={where}
-                    now={now}
-                    campusName={viewer.campusName}
-                  />
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <ul className="space-y-3">
-              {deals.map((deal) => {
-                const meta = confidenceMeta[deal.confidence];
-                return (
-                  <li
-                    key={deal.id}
-                    className="rounded-2xl bg-white p-4 shadow-[var(--shadow-flat)] ring-1 ring-ink-950/6"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="grid size-8 place-items-center rounded-full bg-amber-soft">
-                          <Tag className="size-4 text-amber-deep" />
-                        </span>
-                        <Badge accent={meta.accent}>{meta.label}</Badge>
-                        {deal.requiresStudentId ? (
-                          <span className="text-[0.75rem] text-ink-500">Student card needed</span>
-                        ) : null}
-                      </div>
-                      <span className="tnum shrink-0 font-mono text-[1rem] font-semibold text-ink-950">
-                        {deal.value}
-                      </span>
-                    </div>
-                    <h3 className="mt-2 text-[1.0625rem] leading-snug font-semibold text-ink-950">{deal.title}</h3>
-                    <p className="mt-1 text-[0.875rem] leading-snug text-ink-600">{deal.detail}</p>
-                    <p className="mt-2 text-[0.8125rem] text-ink-500">
-                      {meta.note}
-                      {deal.workedCount > 0 ? ` ${deal.workedCount} students said it worked.` : ""}
-                      {deal.lastConfirmedAt
-                        ? ` Last confirmed ${new Date(deal.lastConfirmedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}.`
-                        : ""}
-                    </p>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-
-          {!can.allMapLayers ? (
-            <div className="mt-5">
-              <Locked feature="allMapLayers" compact />
-            </div>
-          ) : null}
-          {tripCity && !can.tripPlanner ? (
-            <div className="mt-5">
-              <Upsell feature="tripPlanner" line={`Open ${tripCity.name} as a trip — places, budget and what is on — without moving home. Pro.`} />
-            </div>
-          ) : null}
-        </div>
-      </div>
+            ) : null}
+          </>
+        }
+      >
+        {results}
+      </DiscoverLayout>
     </div>
   );
 }

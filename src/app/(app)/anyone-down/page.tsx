@@ -1,3 +1,4 @@
+import { Users } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
@@ -5,10 +6,12 @@ import { AnyoneDownButton } from "@/components/app/anyone-down-button";
 import { Empty } from "@/components/app/cards";
 import { MascotArt } from "@/components/mascot/mascot-art";
 import { findMany } from "@/server/db";
-import { canSeeInvite } from "@/server/queries/social";
-import { requestNow } from "@/server/now";
+import { canSeeInvite, resolveInviteAnchor } from "@/server/queries/social";
+import { whereFor } from "@/server/queries/loop";
+import { requestDate, requestNow } from "@/server/now";
 import { requireViewer } from "@/server/viewer";
 import { brand } from "@/brand/brand.config";
+import { fmtWhen } from "@/lib/dates";
 import { money } from "@/lib/utils";
 
 export const metadata: Metadata = {
@@ -26,7 +29,8 @@ export const metadata: Metadata = {
 export default async function AnyoneDownPage() {
   const viewer = await requireViewer();
   const now = requestNow();
-  const where = viewer.currency;
+  const today = requestDate();
+  const where = whereFor(viewer.profile.citySlug, viewer.profile);
 
   const [invites, responses, profiles] = await Promise.all([
     findMany(
@@ -48,6 +52,8 @@ export default async function AnyoneDownPage() {
   const visible = invites
     .filter((_, index) => allowed[index])
     .sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+
+  const anchors = await Promise.all(visible.map((invite) => resolveInviteAnchor(invite, where, today)));
 
   const goingCount = (inviteId: string) =>
     responses.filter((row) => row.inviteId === inviteId && row.status === "in").length;
@@ -75,32 +81,27 @@ export default async function AnyoneDownPage() {
         <Empty line="Nothing open in your city right now. Being the one who posts is the fastest way in." />
       ) : (
         <ul className="space-y-3">
-          {visible.map((invite) => {
+          {visible.map((invite, index) => {
             const going = goingCount(invite.id);
             const host = byUser.get(invite.hostId);
             const full = going >= invite.capacity;
+            const anchor = anchors[index];
+            const mine = responses.find((row) => row.inviteId === invite.id && row.userId === viewer.user.id);
 
             return (
               <li key={invite.id}>
-                <Link
-                  href={`/anyone-down/${invite.id}`}
-                  className="block rounded-lg border border-ink-200 bg-white p-4 transition-colors hover:border-ink-300"
-                >
+                <div className="relative rounded-2xl bg-white p-4 shadow-[var(--shadow-flat)] ring-1 ring-ink-950/6 transition-shadow hover:shadow-[var(--shadow-raise)]">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="text-[1.0625rem] font-semibold text-ink-950">{invite.title}</p>
+                      <h2 className="text-[1.0625rem] font-semibold text-ink-950">
+                        <Link href={`/anyone-down/${invite.id}`} className="after:absolute after:inset-0 after:rounded-2xl">
+                          {invite.title}
+                        </Link>
+                      </h2>
                       <p className="mt-1 text-[0.8125rem] text-ink-500">
-                        {new Date(invite.startsAt).toLocaleString("en-GB", {
-                          weekday: "short",
-                          day: "numeric",
-                          month: "short",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
+                        {fmtWhen(invite.startsAt, where.timeZone, today)}
                         {host ? ` · ${host.avatarEmoji} ${host.displayName}` : ""}
-                        {invite.budgetCents
-                          ? ` · ~${money(invite.budgetCents / 100, where)} each`
-                          : ""}
+                        {invite.budgetCents ? ` · ${money(invite.budgetCents / 100, where)} each` : ""}
                       </p>
                     </div>
 
@@ -114,7 +115,34 @@ export default async function AnyoneDownPage() {
                       {full ? "Full" : `${invite.capacity - going} spots`}
                     </span>
                   </div>
-                </Link>
+
+                  <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[0.8125rem] text-ink-500">
+                    <span className="inline-flex items-center gap-1.5">
+                      <Users className="size-3.5" />
+                      <span className="tnum">{going}</span> in
+                    </span>
+                    {mine?.status === "in" ? (
+                      <span className="rounded-full bg-mint-soft px-2 py-0.5 text-[0.75rem] font-medium text-mint-deep">
+                        You are in
+                      </span>
+                    ) : null}
+                    {invite.audience !== "city" ? (
+                      <span className="rounded-full bg-paper-2 px-2 py-0.5 text-[0.75rem] font-medium text-ink-600 capitalize">
+                        {invite.audience}
+                      </span>
+                    ) : null}
+                  </p>
+
+                  {anchor ? (
+                    <p className="relative z-10 mt-2 truncate text-[0.8125rem] text-ink-600">
+                      <span className="text-ink-400">At </span>
+                      <Link href={anchor.href} className="font-medium underline underline-offset-4 hover:text-ink-950">
+                        {anchor.title}
+                      </Link>
+                      <span className="text-ink-400"> · {anchor.meta}</span>
+                    </p>
+                  ) : null}
+                </div>
               </li>
             );
           })}

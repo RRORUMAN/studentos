@@ -5,10 +5,9 @@ import { cache } from "react";
 import { places as seededPlaces } from "@/data/places";
 import type { Place } from "@/data/types";
 import { dealConfidence, type Confidence } from "@/domain/knowledge";
-import type { Cents, CityEvent, Deal, Profile } from "@/domain/types";
+import type { Cents, CityEvent, Deal, Profile, SavedKind } from "@/domain/types";
 import { ensureFreshSeedData, findMany } from "@/server/db";
 import {
-  diversify,
   recommendEvents,
   recommendPlaces,
   type RecommendContext,
@@ -99,6 +98,19 @@ export const loadCommunitySignals = cache(
   },
 );
 
+/**
+ * What the viewer has saved, as `kind:targetId` keys, so a card can render a
+ * filled bookmark without a query per row.
+ */
+export const loadSavedKeys = cache(async (userId: string): Promise<Set<string>> => {
+  const rows = await findMany("saved", (row) => row.userId === userId);
+  return new Set(rows.map((row) => savedKey(row.kind, row.targetId)));
+});
+
+export function savedKey(kind: SavedKind, targetId: string): string {
+  return `${kind}:${targetId}`;
+}
+
 /* -------------------------------------------------------------------------- */
 /* Context                                                                     */
 /* -------------------------------------------------------------------------- */
@@ -143,10 +155,11 @@ export type PlaceFilter = {
   layers?: readonly string[];
   maxPriceCents?: Cents | null;
   freeOnly?: boolean;
-  openNow?: boolean;
   verifiedOnly?: boolean;
   maxWalkMinutes?: number;
   query?: string;
+  /** An extra predicate for views the named filters cannot express. */
+  test?: (place: Place) => boolean;
 };
 
 /** Score and rank the places in a student's city. */
@@ -179,17 +192,9 @@ export async function loadPlaces(
         place.why.toLowerCase().includes(needle),
     );
   }
+  if (filter.test) candidates = candidates.filter(filter.test);
 
   return recommendPlaces(candidates, context);
-}
-
-/** The Home feed slice: scored, then diversified so one category cannot own it. */
-export async function loadForYouPlaces(
-  context: RecommendContext,
-  limit = 4,
-): Promise<Scored<Place>[]> {
-  const scored = await loadPlaces(context);
-  return diversify(scored, (place) => place.category, 1).slice(0, limit);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -202,6 +207,11 @@ export type EventFilter = {
   maxPriceCents?: Cents | null;
   kinds?: readonly string[];
   campusOnly?: boolean;
+  /** Ten independent confirmations, the same bar a place is held to. */
+  verifiedOnly?: boolean;
+  query?: string;
+  /** An extra predicate for views the named filters cannot express. */
+  test?: (event: CityEvent) => boolean;
 };
 
 export const loadCityEvents = cache(async (citySlug: string): Promise<CityEvent[]> => {
@@ -259,7 +269,13 @@ export function filterEventsByWhen(
   });
 }
 
-/** Score events for a student, with walking time from their home area. */
+/**
+ * Score events for a student, with walking time from their home area.
+ *
+ * When no home point is set the walk is `null` on every result, and the card
+ * omits it. It is never defaulted: a fabricated "15 min" is precisely the kind
+ * of plausible wrongness this product refuses to print.
+ */
 export async function loadScoredEvents(
   userId: string,
   context: RecommendContext,
@@ -280,6 +296,19 @@ export async function loadScoredEvents(
   if (filter.campusOnly && context.profile.campusSlug) {
     events = events.filter((event) => event.campusSlug === context.profile.campusSlug);
   }
+  if (filter.verifiedOnly) events = events.filter((event) => event.confirmations >= 10);
+  if (filter.query) {
+    const needle = filter.query.toLowerCase();
+    events = events.filter(
+      (event) =>
+        event.title.toLowerCase().includes(needle) ||
+        event.venue.toLowerCase().includes(needle) ||
+        event.blurb.toLowerCase().includes(needle) ||
+        event.kind.includes(needle) ||
+        event.tags.some((tag) => tag.includes(needle)),
+    );
+  }
+  if (filter.test) events = events.filter(filter.test);
 
   /* The precise home point is read here and immediately reduced to a number of
      minutes. It never leaves this function. */
@@ -287,7 +316,7 @@ export async function loadScoredEvents(
 
   return recommendEvents(events, {
     ...context,
-    walkMinutesFor: (event) => (home ? walkMinutesBetween(home, event.point) : 15),
+    walkMinutesFor: (event) => (home ? walkMinutesBetween(home, event.point) : null),
   });
 }
 
@@ -329,39 +358,17 @@ export const loadDeals = cache(async (citySlug: string): Promise<DealWithConfide
     });
 });
 
-/* -------------------------------------------------------------------------- */
-/* Free and cheap                                                              */
-/* -------------------------------------------------------------------------- */
-
 /**
- * Everything free in the next few days.
- *
- * A first-class query rather than a filter on the events list, because "what
- * can I do for nothing" is one of the most-asked student questions and it
- * spans events, places and campus activity. It deserves its own retrieval.
+ * Live deals keyed by the place they belong to, so a place card can carry a
+ * deal badge without a lookup per row. Expired and disputed deals are left out:
+ * a badge for a discount that ended is worse than no badge.
  */
-export async function loadFreeThings(
-  userId: string,
-  context: RecommendContext,
-): Promise<{ events: Scored<CityEvent>[]; places: Scored<Place>[] }> {
-  const [events, places] = await Promise.all([
-    loadScoredEvents(userId, context, { when: "week", freeOnly: true }),
-    loadPlaces(context, { freeOnly: true }),
-  ]);
-
-  return { events, places };
-}
-
-/** The "under €X" rail. `capCents` is the whole filter. */
-export async function loadUnder(
-  userId: string,
-  context: RecommendContext,
-  capCents: Cents,
-): Promise<{ events: Scored<CityEvent>[]; places: Scored<Place>[] }> {
-  const [events, places] = await Promise.all([
-    loadScoredEvents(userId, context, { when: "week", maxPriceCents: capCents }),
-    loadPlaces(context, { maxPriceCents: capCents }),
-  ]);
-
-  return { events, places };
+export function dealsByPlace(deals: readonly DealWithConfidence[]): Map<string, DealWithConfidence> {
+  const out = new Map<string, DealWithConfidence>();
+  for (const deal of deals) {
+    if (!deal.placeId) continue;
+    if (deal.confidence === "expired" || deal.confidence === "disputed") continue;
+    if (!out.has(deal.placeId)) out.set(deal.placeId, deal);
+  }
+  return out;
 }

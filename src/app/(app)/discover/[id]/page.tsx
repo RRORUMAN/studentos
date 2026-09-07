@@ -16,7 +16,9 @@ import { isStudentVerified } from "@/services/db/schema";
 import { betterOption } from "@/server/engines/better-option";
 import { loadCommunitySignals, loadPlaces, loadRecommendContext } from "@/server/queries/discovery";
 import { loadMoney } from "@/server/queries/money";
+import { loadPlanChoices } from "@/server/queries/plans";
 import { findMany, findOne } from "@/server/db";
+import { requestDate } from "@/server/now";
 import { requireViewer } from "@/server/viewer";
 import { money, walk } from "@/lib/utils";
 
@@ -44,6 +46,7 @@ export default async function PlacePage(props: PageProps<"/discover/[id]">) {
 
   const where = viewer.currency;
   const social = !viewer.profile.socialGoals.includes("private");
+  const now = requestDate();
   const money$ = await loadMoney(viewer.user.id);
 
   const context = await loadRecommendContext({
@@ -52,7 +55,7 @@ export default async function PlacePage(props: PageProps<"/discover/[id]">) {
     budgetCents: money$.unset ? null : money$.reading.safeTodayCents,
   });
 
-  const [scoredAll, saved, signals, mentions] = await Promise.all([
+  const [scoredAll, saved, signals, mentions, plans] = await Promise.all([
     loadPlaces(context),
     findOne("saved", (row) => row.userId === viewer.user.id && row.kind === "place" && row.targetId === id),
     loadCommunitySignals(viewer.user.id, viewer.profile.campusSlug),
@@ -63,6 +66,7 @@ export default async function PlacePage(props: PageProps<"/discover/[id]">) {
         row.hiddenAt === null &&
         (row.placeId === id || row.title.toLowerCase().includes(place.name.split(",")[0].toLowerCase())),
     ),
+    loadPlanChoices({ userId: viewer.user.id, citySlug: viewer.profile.citySlug, now }),
   ]);
 
   const scored = scoredAll.find((entry) => entry.item.id === id);
@@ -187,7 +191,7 @@ export default async function PlacePage(props: PageProps<"/discover/[id]">) {
           Directions
           <ExternalLink className="size-3" />
         </a>
-        <AddToPlanButton refKind="place" refId={place.id} />
+        <AddToPlanButton refKind="place" refId={place.id} plans={plans} title={place.name} />
       </div>
 
       {social ? (

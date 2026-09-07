@@ -1,21 +1,25 @@
-import { ArrowLeft, Clock, ExternalLink, MapPin, MessagesSquare, ShieldCheck, Users } from "lucide-react";
+import { ArrowLeft, Clock, ExternalLink, Footprints, MapPin, MessagesSquare, ShieldCheck, Users } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { AnyoneDownButton } from "@/components/app/anyone-down-button";
 import { AddToPlanButton, EventResponseButtons } from "@/components/app/event-actions";
+import { eventKindLabel } from "@/components/app/event-card";
 import { FeedbackMenu } from "@/components/app/feedback-menu";
 import { SaveButton } from "@/components/app/save-button";
 import { ShareButton } from "@/components/app/share-button";
 import { MascotArt } from "@/components/mascot/mascot-art";
-import { Badge } from "@/components/ui/primitives";
-import { loadCityEvents } from "@/server/queries/discovery";
+import { Badge, Meter } from "@/components/ui/primitives";
+import { loadRecommendContext, loadScoredEvents } from "@/server/queries/discovery";
 import { loadEventEnergy } from "@/server/queries/events";
+import { loadMoney } from "@/server/queries/money";
+import { loadPlanChoices } from "@/server/queries/plans";
 import { findMany, findOne } from "@/server/db";
 import { requestDate } from "@/server/now";
 import { requireViewer } from "@/server/viewer";
-import { money } from "@/lib/utils";
+import { fmtLongDay, fmtTime } from "@/lib/dates";
+import { cn, money } from "@/lib/utils";
 
 export const metadata: Metadata = {
   title: "Event",
@@ -26,39 +30,56 @@ export const metadata: Metadata = {
  * ============================================================================
  * EVENT
  * ----------------------------------------------------------------------------
- * One event, its energy, and the way in.
+ * One event, why it is being shown, its energy, and the way in.
  *
  * The chat appears once the student has said Interested or Going. It is the
  * "who is going / where are we meeting / anyone coming alone" room, and it
  * closes with the event.
+ *
+ * On mobile the two decisions that matter — Interested and Going — are pinned
+ * to the bottom of the screen, because the page is long and the actions were
+ * below the fold on every phone.
  * ============================================================================
  */
 export default async function EventPage(props: PageProps<"/events/[id]">) {
   const viewer = await requireViewer();
   const { id } = await props.params;
   const now = requestDate();
-
-  const events = await loadCityEvents(viewer.profile.citySlug);
-  const event = events.find((entry) => entry.id === id);
-  if (!event) notFound();
-
   const where = viewer.currency;
+  const timeZone = viewer.city.timezone;
   const social = !viewer.profile.socialGoals.includes("private");
 
-  const [saved, energyMap, chat, discussion] = await Promise.all([
+  const money$ = await loadMoney(viewer.user.id, now);
+  const context = await loadRecommendContext({
+    userId: viewer.user.id,
+    profile: viewer.profile,
+    budgetCents: money$.unset ? null : money$.reading.safeTodayCents,
+    now,
+  });
+
+  /* Scored rather than raw, so the "why" block is the same computation the
+     radar used rather than a second, subtly different one. */
+  const scoredAll = await loadScoredEvents(viewer.user.id, context, { when: "all" });
+  const scored = scoredAll.find((entry) => entry.item.id === id) ?? null;
+  const event = scored?.item ?? (await findOne("events", (row) => row.id === id && row.citySlug === viewer.profile.citySlug));
+  if (!event) notFound();
+
+  const [saved, energyMap, chat, discussion, plans] = await Promise.all([
     findOne("saved", (row) => row.userId === viewer.user.id && row.kind === "event" && row.targetId === id),
-    loadEventEnergy({ viewerId: viewer.user.id, campusSlug: viewer.profile.campusSlug, eventIds: [id] }),
+    loadEventEnergy({ viewerId: viewer.user.id, campusSlug: viewer.profile.campusSlug, eventIds: [id], now }),
     findMany("chat", (row) => row.channel === `event-${id}`),
     findMany("posts", (row) => row.placeId === id && row.hiddenAt === null),
+    loadPlanChoices({ userId: viewer.user.id, citySlug: viewer.profile.citySlug, now }),
   ]);
 
   const energy = energyMap.get(id)!;
-  const starts = new Date(event.startsAt);
   const past = Date.parse(event.endsAt ?? event.startsAt) + 2 * 3_600_000 < now.getTime();
   const inChat = energy.mine !== null;
+  const interestedCount = event.interested + energy.interested;
+  const walk = scored?.walkMinutes ?? null;
 
   return (
-    <div className="page max-w-2xl py-6 sm:py-8">
+    <div className="page max-w-2xl py-6 pb-32 sm:py-8 sm:pb-8">
       <Link
         href="/events"
         className="mb-6 inline-flex items-center gap-1.5 text-[0.875rem] font-medium text-ink-500 hover:text-ink-950"
@@ -77,7 +98,7 @@ export default async function EventPage(props: PageProps<"/events/[id]">) {
             </span>
           )}
           <span className="font-mono text-micro uppercase tracking-[0.1em] text-ink-400">
-            {event.kind}
+            {eventKindLabel[event.kind]}
           </span>
           {past ? <Badge accent="amber">Finished</Badge> : null}
         </div>
@@ -91,13 +112,8 @@ export default async function EventPage(props: PageProps<"/events/[id]">) {
 
       <dl className="mt-5 space-y-2.5">
         <Row icon={<Clock className="size-4" />} label="When">
-          {starts.toLocaleString("en-GB", {
-            weekday: "long",
-            day: "numeric",
-            month: "long",
-            hour: "2-digit",
-            minute: "2-digit",
-          })}
+          {fmtLongDay(event.startsAt, timeZone)} · {fmtTime(event.startsAt, timeZone)}
+          {event.endsAt ? `–${fmtTime(event.endsAt, timeZone)}` : ""}
         </Row>
         <Row icon={<MapPin className="size-4" />} label="Where">
           {event.venue}
@@ -111,16 +127,62 @@ export default async function EventPage(props: PageProps<"/events/[id]">) {
             <ExternalLink className="size-3" />
           </a>
         </Row>
+        {walk !== null ? (
+          <Row icon={<Footprints className="size-4" />} label="Walk">
+            <span className="tnum">{walk} min</span> walk from home
+          </Row>
+        ) : null}
       </dl>
 
+      {/* ---- why you'll like this ------------------------------------------ */}
+      {scored && (scored.reasons.length > 0 || scored.match >= 60) ? (
+        <section className="mt-6 rounded-2xl bg-white p-5 shadow-[var(--shadow-flat)] ring-1 ring-ink-950/6">
+          <div className="flex items-start justify-between gap-3">
+            <h2 className="text-[1.0625rem] font-semibold text-ink-950">Why you&rsquo;ll like this</h2>
+            {scored.match >= 60 ? (
+              <span
+                className={cn(
+                  "tnum shrink-0 rounded-full px-2.5 py-1 font-mono text-micro font-semibold",
+                  scored.match >= 80 ? "bg-signal text-ink-950" : "bg-signal-soft text-signal-deep",
+                )}
+              >
+                {scored.match}% match
+              </span>
+            ) : null}
+          </div>
+          <Meter value={scored.match} accent="signal" label={`Match ${scored.match} of 100`} className="mt-3" />
+          <ul className="mt-3.5 space-y-1.5">
+            {scored.reasons.map((reason) => (
+              <li key={reason} className="flex items-start gap-2 text-[0.9375rem] text-ink-700">
+                <span aria-hidden className="mt-2 size-1.5 shrink-0 rounded-full bg-signal" />
+                {reason}
+              </li>
+            ))}
+            {energy.fromCampus > 0 ? (
+              <li className="flex items-start gap-2 text-[0.9375rem] text-flow-deep">
+                <span aria-hidden className="mt-2 size-1.5 shrink-0 rounded-full bg-flow" />
+                <span className="tnum">{energy.fromCampus}</span>&nbsp;from {viewer.campusName ?? "your university"}
+              </li>
+            ) : null}
+            {energy.friends.length > 0 ? (
+              <li className="flex items-start gap-2 text-[0.9375rem] text-pulse-deep">
+                <span aria-hidden className="mt-2 size-1.5 shrink-0 rounded-full bg-pulse" />
+                {energy.friends.map((friend) => `${friend.avatarEmoji} ${friend.displayName}`).join(", ")}
+                {energy.friends.length === 1 ? ` is ${energy.friends[0].status}` : " are in"}
+              </li>
+            ) : null}
+          </ul>
+        </section>
+      ) : null}
+
       {/* ---- energy -------------------------------------------------------- */}
-      <section className="mt-6 rounded-2xl bg-white p-5 shadow-[var(--shadow-flat)] ring-1 ring-ink-950/6">
+      <section className="mt-4 rounded-2xl bg-white p-5 shadow-[var(--shadow-flat)] ring-1 ring-ink-950/6">
         <h2 className="flex items-center gap-2 text-[1.0625rem] font-semibold text-ink-950">
           <Users className="size-4.5 text-ink-400" />
           Who is around
         </h2>
         <ul className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Stat value={event.interested + energy.interested} label="interested" />
+          <Stat value={interestedCount} label="interested" />
           <Stat value={energy.going} label="going" />
           {viewer.profile.campusSlug ? (
             <Stat value={energy.fromCampus} label={`from ${viewer.campusName ?? "campus"}`} accent />
@@ -143,12 +205,13 @@ export default async function EventPage(props: PageProps<"/events/[id]">) {
         ) : null}
 
         {!past ? (
-          <div className="mt-5">
+          <div className="mt-5 hidden sm:block">
             <EventResponseButtons
               eventId={event.id}
               status={energy.mine}
               goingCount={energy.going}
-              interestedCount={event.interested + energy.interested}
+              interestedCount={interestedCount}
+              chatOnResponse={social}
             />
           </div>
         ) : null}
@@ -158,7 +221,17 @@ export default async function EventPage(props: PageProps<"/events/[id]">) {
       <div className="mt-4 flex flex-wrap gap-2">
         <SaveButton kind="event" targetId={event.id} saved={Boolean(saved)} />
         <ShareButton path={`/events/${event.id}`} title={event.title} />
-        <AddToPlanButton refKind="event" refId={event.id} />
+        <AddToPlanButton refKind="event" refId={event.id} plans={plans} title={event.title} />
+        <a
+          href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${event.venue}, ${viewer.city.name}`)}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1.5 rounded-full border border-ink-200 bg-white px-3.5 py-2 text-[0.875rem] font-medium text-ink-700 hover:border-ink-300"
+        >
+          <MapPin className="size-4" />
+          Directions
+          <ExternalLink className="size-3" />
+        </a>
       </div>
 
       {/* ---- chat ---------------------------------------------------------- */}
@@ -208,10 +281,7 @@ export default async function EventPage(props: PageProps<"/events/[id]">) {
             Confirmed by {event.confirmations} students
           </span>
         ) : null}
-        <span>
-          Checked{" "}
-          {new Date(event.observedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
-        </span>
+        <span>Checked {fmtLongDay(event.observedAt, timeZone)}</span>
         {event.sourceUrl ? (
           <a
             href={event.sourceUrl}
@@ -255,6 +325,24 @@ export default async function EventPage(props: PageProps<"/events/[id]">) {
             ))}
           </ul>
         </section>
+      ) : null}
+
+      {/* ---- sticky actions, mobile ------------------------------------------
+          Sits *above* the bottom navigation, not under it. `bottom-0` put these
+          buttons behind the nav bar, where they were visible and completely
+          untappable on every phone. 4.75rem is the nav height, the same figure
+          the Pulse composer floating button uses. */}
+      {!past ? (
+        <div className="fixed inset-x-0 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-40 border-t border-ink-200/70 bg-paper/95 px-5 pt-3 pb-3 backdrop-blur-md sm:hidden">
+          <EventResponseButtons
+            eventId={event.id}
+            status={energy.mine}
+            goingCount={energy.going}
+            interestedCount={interestedCount}
+            compact
+            chatOnResponse={social}
+          />
+        </div>
       ) : null}
     </div>
   );

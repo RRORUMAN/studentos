@@ -281,6 +281,57 @@ function movesFor(input: { tight: boolean; city: SurvivalCity; allowedMeals: num
 }
 
 /* -------------------------------------------------------------------------- */
+/* Saving a plan                                                               */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * A plan line in the shape the saved-plans store accepts.
+ *
+ * Mirrors `SavedPlanItem` without importing the store: the survival engine
+ * stays free of anything but arithmetic, and the action that saves the plan
+ * hands these to `savePlanFromAnswer`, which validates them again.
+ */
+export type SurvivalPlanLine = {
+  time: string;
+  title: string;
+  detail: string | null;
+  priceCents: Cents;
+  walkMinutes: number | null;
+  kind: "food" | "event" | "drink" | "transport" | "culture" | "activity";
+  source: "students" | "official" | "venue";
+  refKind: "place" | "event" | null;
+  refId: string | null;
+};
+
+const LINE_KIND: Record<SurvivalLine["key"], SurvivalPlanLine["kind"]> = {
+  groceries: "food",
+  meals: "food",
+  transport: "transport",
+  activities: "activity",
+  buffer: "activity",
+};
+
+/** Every line of the plan, buffer included, as saveable rows. */
+export function survivalPlanLines(plan: SurvivalPlan): SurvivalPlanLine[] {
+  return plan.lines.map((line) => ({
+    time: "",
+    title: line.label,
+    detail: line.basis,
+    priceCents: line.amountCents,
+    walkMinutes: null,
+    kind: LINE_KIND[line.key],
+    source: "students",
+    refKind: null,
+    refId: null,
+  }));
+}
+
+/** The saved plan's title: "Survival plan: €45 for 4 days". */
+export function survivalPlanTitle(plan: SurvivalPlan, formatMoney: (cents: Cents) => string): string {
+  return `Survival plan: ${formatMoney(plan.amountCents)} for ${plan.days} day${plan.days === 1 ? "" : "s"}`;
+}
+
+/* -------------------------------------------------------------------------- */
 /* Free preview                                                                */
 /* -------------------------------------------------------------------------- */
 

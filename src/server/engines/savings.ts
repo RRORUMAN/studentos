@@ -2,7 +2,7 @@ import type { Place } from "@/data/types";
 import type { PriceObservation } from "@/domain/knowledge";
 import { summarisePrices } from "@/domain/knowledge";
 import type { Cents, Transaction } from "@/domain/types";
-import { categoryLabel, isDiscretionary } from "@/server/engines/budget";
+import { categoryLabel, isDiscretionary, layersForCategory } from "@/server/engines/budget";
 
 /**
  * ============================================================================
@@ -27,6 +27,9 @@ import { categoryLabel, isDiscretionary } from "@/server/engines/budget";
  * entirely rather than rounded into a headline. `annualise` deliberately does
  * not exist — projecting a term's worth of savings from two weeks of lunches
  * is exactly the fake precision this guards against.
+ *
+ * When the sample is too small for a saving at all, `cheapOptions` still
+ * names cheap places nearby — phrased as options, with no saving attached.
  *
  * No model is called. This is arithmetic over the student's own transactions
  * and the community price graph.
@@ -65,6 +68,14 @@ export type Alternative = {
   verifiedBy: number;
 };
 
+export type CityBand = {
+  item: string;
+  lowCents: Cents;
+  medianCents: Cents;
+  highCents: Cents;
+  sampleSize: number;
+};
+
 export type SavingOpportunity = {
   category: string;
   label: string;
@@ -83,6 +94,8 @@ export type SavingOpportunity = {
    */
   weeklyDifferenceCents: Cents;
   confidence: SavingConfidence;
+  /** What students here report paying for the matching item, when enough have. */
+  city: CityBand | null;
   /** The honest sentence for this opportunity. */
   headline: string;
   detail: string;
@@ -101,7 +114,7 @@ export function findSavings(input: {
   maxWalkMinutes: number;
   formatMoney: (cents: Cents) => string;
 }): SavingOpportunity[] {
-  const { now, transactions, places, maxWalkMinutes, formatMoney } = input;
+  const { now, transactions, places, priceObservations, maxWalkMinutes, formatMoney } = input;
 
   const since = now.getTime() - RULES.windowDays * 86_400_000;
   const recent = transactions.filter((tx) => Date.parse(tx.spentAt) >= since);
@@ -146,6 +159,9 @@ export function findSavings(input: {
     const confidence = confidenceFor(rows.length, alternatives.length);
     if (confidence === "insufficient") continue;
 
+    const item = benchmarkItemFor(category);
+    const city = item ? cityBand(priceObservations, item) : null;
+
     opportunities.push({
       category,
       label: categoryLabel(category),
@@ -156,6 +172,7 @@ export function findSavings(input: {
       alternativeAverageCents,
       weeklyDifferenceCents,
       confidence,
+      city,
       ...phrase({
         category,
         averageCents,
@@ -163,6 +180,7 @@ export function findSavings(input: {
         weeklyDifferenceCents,
         transactionCount: rows.length,
         confidence,
+        city,
         formatMoney,
       }),
     });
@@ -175,24 +193,14 @@ export function findSavings(input: {
 /* Alternatives                                                                */
 /* -------------------------------------------------------------------------- */
 
-/** Which place layers stand in for which budget category. */
-const CATEGORY_LAYERS: Record<string, readonly string[]> = {
-  "eating-out": ["cheap-food"],
-  groceries: ["groceries"],
-  nightlife: ["nightlife"],
-  fitness: ["fitness"],
-  entertainment: ["free", "events"],
-  shopping: ["deals"],
-};
-
 function cheaperPlaces(input: {
   category: string;
   averageCents: Cents;
   places: readonly Place[];
   maxWalkMinutes: number;
 }): Alternative[] {
-  const layers = CATEGORY_LAYERS[input.category];
-  if (!layers) return [];
+  const layers = layersForCategory(input.category);
+  if (layers.length === 0) return [];
 
   const ceiling = Math.round(input.averageCents * (1 - RULES.minGapFraction));
 
@@ -204,14 +212,44 @@ function cheaperPlaces(input: {
        "saving" turns into a wasted trip. */
     .sort((a, b) => b.verifiedBy - a.verifiedBy || a.walkMinutes - b.walkMinutes)
     .slice(0, 3)
-    .map((place) => ({
-      placeId: place.id,
-      name: place.name,
-      priceCents: Math.round((place.price ?? 0) * 100),
-      walkMinutes: place.walkMinutes,
-      why: place.why,
-      verifiedBy: place.verifiedBy,
-    }));
+    .map(toAlternative);
+}
+
+function toAlternative(place: Place): Alternative {
+  return {
+    placeId: place.id,
+    name: place.name,
+    priceCents: Math.round((place.price ?? 0) * 100),
+    walkMinutes: place.walkMinutes,
+    why: place.why,
+    verifiedBy: place.verifiedBy,
+  };
+}
+
+/**
+ * Cheap places for a category, with no saving claimed.
+ *
+ * This is what the Budget screen shows when a category is drifting but the
+ * student has too few transactions for `findSavings` to say anything honest:
+ * "cheap options nearby" is true with one transaction; "saves €9 a week" is
+ * not. Cheapest first, verified breaking ties.
+ */
+export function cheapOptions(input: {
+  category: string;
+  places: readonly Place[];
+  maxWalkMinutes: number;
+  limit?: number;
+}): Alternative[] {
+  const layers = layersForCategory(input.category);
+  if (layers.length === 0) return [];
+
+  return input.places
+    .filter((place) => place.layers.some((layer) => layers.includes(layer)))
+    .filter((place) => place.price !== null)
+    .filter((place) => place.walkMinutes <= input.maxWalkMinutes)
+    .sort((a, b) => (a.price ?? 0) - (b.price ?? 0) || b.verifiedBy - a.verifiedBy)
+    .slice(0, input.limit ?? 3)
+    .map(toAlternative);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -239,19 +277,23 @@ function phrase(input: {
   weeklyDifferenceCents: Cents;
   transactionCount: number;
   confidence: SavingConfidence;
+  city: CityBand | null;
   formatMoney: (cents: Cents) => string;
 }): { headline: string; detail: string } {
   const { formatMoney: fmt } = input;
   const label = categoryLabel(input.category).toLowerCase();
+  const cityNote = input.city
+    ? ` Students here report ${fmt(input.city.lowCents)}–${fmt(input.city.highCents)} for ${itemLabel(input.city.item)}.`
+    : "";
 
   if (input.confidence === "measured") {
     return {
       headline: `You average ${fmt(input.averageCents)} on ${label}.`,
-      detail: `These three are around ${fmt(
+      detail: `These are around ${fmt(
         input.alternativeAverageCents,
       )}. Switching where it suits you is about ${fmt(
         input.weeklyDifferenceCents,
-      )} a week — from ${input.transactionCount} of your own transactions, not an estimate.`,
+      )} a week — from ${input.transactionCount} of your own transactions, not an estimate.${cityNote}`,
     };
   }
 
@@ -265,13 +307,41 @@ function phrase(input: {
       input.alternativeAverageCents,
     )} nearby — roughly ${fmt(low)}–${fmt(high)} a week. Only ${
       input.transactionCount
-    } transactions so far, so treat that as a direction rather than a figure.`,
+    } transactions so far, so treat that as a direction rather than a figure.${cityNote}`,
   };
 }
 
 /* -------------------------------------------------------------------------- */
 /* City price context                                                          */
 /* -------------------------------------------------------------------------- */
+
+/** Which price-graph item stands in for a budget category, if any. */
+export function benchmarkItemFor(category: string): string | null {
+  return (
+    (
+      {
+        "eating-out": "lunch",
+        nightlife: "pint",
+        groceries: "weekly-basket",
+        fitness: "gym-month",
+      } as Record<string, string>
+    )[category] ?? null
+  );
+}
+
+export function itemLabel(item: string): string {
+  return (
+    (
+      {
+        lunch: "lunch",
+        pint: "a pint",
+        "weekly-basket": "a weekly shop",
+        "gym-month": "a month of gym",
+        coffee: "a coffee",
+      } as Record<string, string>
+    )[item] ?? item.replace(/-/g, " ")
+  );
+}
 
 /**
  * What a thing costs here, from community reports.
@@ -293,6 +363,11 @@ export function cityPrice(
     highCents: reading.highCents,
     sampleSize: reading.sampleSize,
   };
+}
+
+function cityBand(observations: readonly PriceObservation[], item: string): CityBand | null {
+  const price = cityPrice(observations, item);
+  return price ? { item, ...price } : null;
 }
 
 /**
@@ -328,5 +403,52 @@ export function compareToCity(input: {
     cityMedianCents: city.medianCents,
     above: yoursCents > city.medianCents,
     sampleSize: city.sampleSize,
+  };
+}
+
+/**
+ * The benchmark line for the Budget screen.
+ *
+ * Two sentences, two audiences. `cityLine` is the community figure and is
+ * free to everyone — it is other students' data, not a paid insight.
+ * `personalLine` is the comparison against the student's own average and is
+ * the Max feature; it is null when either side lacks data.
+ */
+export type SpendBenchmark = {
+  category: string;
+  item: string;
+  city: CityBand;
+  cityLine: string;
+  comparison: { yoursCents: Cents; above: boolean } | null;
+  personalLine: string | null;
+};
+
+export function spendBenchmark(input: {
+  transactions: readonly Transaction[];
+  observations: readonly PriceObservation[];
+  category: string;
+  now: Date;
+  formatMoney: (cents: Cents) => string;
+}): SpendBenchmark | null {
+  const item = benchmarkItemFor(input.category);
+  if (!item) return null;
+  const city = cityBand(input.observations, item);
+  if (!city) return null;
+
+  const fmt = input.formatMoney;
+  const label = itemLabel(item);
+  const comparison = compareToCity({ ...input, item });
+
+  return {
+    category: input.category,
+    item,
+    city,
+    cityLine: `Students here report ${fmt(city.lowCents)}–${fmt(city.highCents)} for ${label} (${city.sampleSize} reports).`,
+    comparison: comparison ? { yoursCents: comparison.yoursCents, above: comparison.above } : null,
+    personalLine: comparison
+      ? comparison.above
+        ? `You average ${fmt(comparison.yoursCents)} — above the ${fmt(city.medianCents)} most students here pay.`
+        : `You average ${fmt(comparison.yoursCents)} — at or under the ${fmt(city.medianCents)} most students here pay.`
+      : null,
   };
 }

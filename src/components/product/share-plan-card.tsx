@@ -87,9 +87,13 @@ export function SharePlanCard({
             </span>
           </div>
         </div>
+        {/* The saved-by count is optional and usually absent: a save count is
+            social proof, and the site prints none it cannot stand behind. */}
         <p className="mt-3 flex items-center justify-between font-mono text-micro uppercase tracking-[0.1em] text-ink-950/50">
           <span>{brand.domain}</span>
-          <span className="tnum">saved by {count(plan.savedBy)}</span>
+          {plan.savedBy !== undefined ? (
+            <span className="tnum">saved by {count(plan.savedBy)}</span>
+          ) : null}
         </p>
       </div>
     </motion.article>

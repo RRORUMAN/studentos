@@ -97,6 +97,11 @@ export function quickActions(context: QuickActionContext): QuickAction[] {
 
   out.push({ key: "food", label: "Cheap food near me", href: "/discover?tab=food", icon: "food" });
 
+  /* Spontaneous use: what is actually on in the next few hours. */
+  if (context.hour >= 10 && context.hour <= 22) {
+    out.push({ key: "now", label: "Right now", href: "/discover?tab=right-now", icon: "tonight" });
+  }
+
   if (context.social) {
     out.push({
       key: "people",
@@ -111,7 +116,7 @@ export function quickActions(context: QuickActionContext): QuickAction[] {
   }
 
   if (!weekendish) {
-    out.push({ key: "week", label: "Plan my week", href: "/plans/week", icon: "weekend" });
+    out.push({ key: "week", label: "What is on this week", href: "/lifeops?view=week", icon: "weekend" });
   }
 
   /* De-duplicate by key, cap at six. */

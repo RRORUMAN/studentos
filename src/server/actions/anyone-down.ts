@@ -3,7 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
-import { findOne, newId, nowIso, remove, transaction } from "@/server/db";
+import { placesForCity } from "@/data/places";
+import type { Invite } from "@/domain/types";
+import { findOne, newId, nowIso, transaction, update } from "@/server/db";
 import { QuotaError, assertQuota } from "@/server/entitlements";
 import { recordOutcome } from "@/server/actions/insight";
 import { canSeeInvite } from "@/server/queries/social";
@@ -17,10 +19,10 @@ import { requireUserId } from "@/server/viewer";
  * Turning a place, an event or an idea into a group.
  *
  * **Joining is never gated and never quota-limited, at any tier.** Hosting is
- * capped on free (one live plan at a time), which is the right side of the
- * line: capping participation would shrink the network that makes every paid
- * feature work, while capping hosting only asks the person creating the tenth
- * simultaneous plan to pay.
+ * capped on free (a couple of live plans at a time), which is the right side
+ * of the line: capping participation would shrink the network that makes
+ * every paid feature work, while capping hosting only asks the person
+ * creating the tenth simultaneous plan to pay.
  *
  * Groups close after the thing happens. That is deliberate — a temporary group
  * that dissolves is far easier to join than a permanent one, because nobody is
@@ -35,11 +37,46 @@ const createSchema = z.object({
   detail: z.string().trim().max(500).optional(),
   startsAt: z.string().min(1, "When?"),
   audience: z.enum(["friends", "campus", "city"]),
-  capacity: z.coerce.number().int().min(2).max(50),
-  budget: z.string().optional(),
-  anchorKind: z.enum(["place", "event", "plan"]).nullable().optional(),
-  anchorId: z.string().nullable().optional(),
+  capacity: z.coerce.number().int().min(2, "At least two people.").max(50, "Fifty at most."),
+  /** Per person, in the student's currency, as typed: "8", "8.50", "8,50". */
+  budget: z.string().trim().max(12).optional(),
+  /* "post" is accepted from the button so a post can seed a plan, but the
+     Invite row can only carry place / event / plan anchors today — see the
+     note in `createInvite`. */
+  anchorKind: z.enum(["place", "event", "plan", "post"]).nullable().optional(),
+  anchorId: z.string().max(80).nullable().optional(),
 });
+
+/** Only an anchor that exists in the host's city is stored. */
+async function resolveAnchor(
+  citySlug: string,
+  kind: "place" | "event" | "plan" | "post" | null | undefined,
+  id: string | null | undefined,
+): Promise<Pick<Invite, "anchorKind" | "anchorId">> {
+  const none = { anchorKind: null, anchorId: null };
+  if (!kind || !id) return none;
+  switch (kind) {
+    case "event":
+      return (await findOne("events", (row) => row.id === id && row.citySlug === citySlug)) ? { anchorKind: "event", anchorId: id } : none;
+    case "place":
+      return placesForCity(citySlug).some((place) => place.id === id) ? { anchorKind: "place", anchorId: id } : none;
+    case "plan":
+      return (await findOne("plans", (row) => row.id === id)) ? { anchorKind: "plan", anchorId: id } : none;
+    case "post":
+      /* `Invite.anchorKind` does not include "post" yet (domain schema). The
+         plan is still created, with the post's title as its title; the
+         anchor is dropped rather than stored under a kind the schema and the
+         SQL CHECK constraint would reject. */
+      return none;
+  }
+}
+
+function parseBudgetCents(raw: string | undefined): number | null {
+  if (!raw) return null;
+  const value = Number(raw.replace(",", "."));
+  if (!Number.isFinite(value) || value < 0) return null;
+  return Math.round(value * 100);
+}
 
 export async function createInvite(formData: FormData): Promise<InviteResult> {
   const userId = await requireUserId();
@@ -68,7 +105,7 @@ export async function createInvite(formData: FormData): Promise<InviteResult> {
     if (error instanceof QuotaError) {
       return {
         ok: false,
-        message: "Free hosts one plan at a time. Close that one, or upgrade to host more.",
+        message: "Free hosts two plans at a time. Close one, or upgrade to host more.",
       };
     }
     return { ok: false, message: "Could not create that." };
@@ -79,10 +116,12 @@ export async function createInvite(formData: FormData): Promise<InviteResult> {
 
   const startsAt = new Date(parsed.data.startsAt);
   if (Number.isNaN(startsAt.getTime())) return { ok: false, message: "That date did not parse." };
+  if (startsAt.getTime() < Date.now() - 60 * 60_000) return { ok: false, message: "That time has already passed." };
 
-  const budgetCents = parsed.data.budget
-    ? Math.round(Number(parsed.data.budget.replace(",", ".")) * 100)
-    : null;
+  const budgetCents = parseBudgetCents(parsed.data.budget);
+  if (parsed.data.budget && budgetCents === null) return { ok: false, message: "Budget should be a number, like 8 or 8.50." };
+
+  const anchor = await resolveAnchor(profile.citySlug, parsed.data.anchorKind, parsed.data.anchorId);
 
   const id = newId();
 
@@ -93,12 +132,11 @@ export async function createInvite(formData: FormData): Promise<InviteResult> {
       hostId: userId,
       title: parsed.data.title,
       detail: parsed.data.detail ?? null,
-      anchorKind: parsed.data.anchorKind ?? null,
-      anchorId: parsed.data.anchorId ?? null,
+      ...anchor,
       startsAt: startsAt.toISOString(),
       audience: parsed.data.audience,
       capacity: parsed.data.capacity,
-      budgetCents: Number.isFinite(budgetCents) ? budgetCents : null,
+      budgetCents,
       /* Closes six hours after it starts. A group for Tuesday football is
          useless on Wednesday, and leaving it open just accumulates clutter. */
       closesAt: new Date(startsAt.getTime() + 6 * 3_600_000).toISOString(),
@@ -113,10 +151,10 @@ export async function createInvite(formData: FormData): Promise<InviteResult> {
   await recordOutcome("plan-created", parsed.data.title);
 
   revalidatePath("/anyone-down");
+  revalidatePath("/pulse/chat");
   revalidatePath("/home");
   return { ok: true, id };
 }
-
 
 /* -------------------------------------------------------------------------- */
 /* Responding                                                                  */
@@ -157,8 +195,12 @@ export async function respondToInvite(
       return { ok: false, message: "That one is full." };
     }
 
-    if (mine) mine.status = status;
-    else db.inviteResponses.push({ inviteId, userId, status, respondedAt: nowIso() });
+    if (mine) {
+      mine.status = status;
+      mine.respondedAt = nowIso();
+    } else {
+      db.inviteResponses.push({ inviteId, userId, status, respondedAt: nowIso() });
+    }
 
     return { ok: true };
   });
@@ -167,17 +209,29 @@ export async function respondToInvite(
 
   revalidatePath(`/anyone-down/${inviteId}`);
   revalidatePath("/anyone-down");
+  revalidatePath("/pulse/chat");
   return result;
 }
 
-/** Host closes their own plan early. */
-export async function closeInvite(inviteId: string): Promise<{ ok: boolean }> {
+/**
+ * Host closes their own plan early.
+ *
+ * Closing sets `closesAt` to now rather than deleting: the people who joined
+ * keep the chat and the memory of who was there, "do it again" can copy it,
+ * and the hosted-plans quota frees up because it counts live rows only.
+ */
+export async function closeInvite(inviteId: string): Promise<{ ok: boolean; message?: string }> {
   const userId = await requireUserId();
-  const removed = await remove(
-    "invites",
-    (row) => row.id === inviteId && row.hostId === userId,
-  );
-  if (removed > 0) await remove("inviteResponses", (row) => row.inviteId === inviteId);
+
+  const invite = await findOne("invites", (row) => row.id === inviteId);
+  if (!invite || invite.hostId !== userId) return { ok: false, message: "That plan is not yours." };
+  if (Date.parse(invite.closesAt) < Date.now()) return { ok: true };
+
+  await update("invites", (row) => row.id === inviteId, { closesAt: nowIso() });
+
+  revalidatePath(`/anyone-down/${inviteId}`);
   revalidatePath("/anyone-down");
-  return { ok: removed > 0 };
+  revalidatePath("/pulse/chat");
+  revalidatePath("/home");
+  return { ok: true };
 }

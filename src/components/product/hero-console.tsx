@@ -1,105 +1,100 @@
 "use client";
 
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import {
-  ArrowLeft,
-  ArrowUp,
-  Bookmark,
-  BookmarkCheck,
-  Check,
-  CornerDownLeft,
-  Hand,
-  Loader2,
-  Share2,
-} from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { ArrowUp, Bookmark, Check, Loader2, Share2, UsersRound } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 
 import { BrandMark } from "@/components/brand/logo";
 import { Mascot } from "@/components/mascot/mascot";
 import { AppSurface } from "@/components/product/app-surface";
 import { PlanView } from "@/components/product/plan-view";
-import { Button, ButtonLink } from "@/components/ui/button";
-import { Avatar, AvatarStack } from "@/components/ui/primitives";
-import { useToast } from "@/components/ui/toast";
+import { ButtonLink } from "@/components/ui/button";
+import { AvatarStack, SampleTag } from "@/components/ui/primitives";
 import { brand } from "@/brand/brand.config";
-import { mascotLine } from "@/brand/mascot.config";
 import type { MascotState } from "@/brand/mascot.config";
-import { defaultCity } from "@/data/cities";
-import { defaultPlan, heroPlans, planTotal } from "@/data/plans";
-import { loopSummaries } from "@/data/loop";
-import { nearbyInterested } from "@/data/social";
-import type { Plan } from "@/data/types";
-import { useCopy } from "@/hooks/use-copy";
+import { mascotLine } from "@/brand/mascot.config";
+import { getCity } from "@/data/cities";
+import {
+  demoCities,
+  demoIntents,
+  intentMeta,
+  moneyIn,
+  planFor,
+  type DemoIntent,
+} from "@/services/ai/demo-planner";
 import { duration, ease, spring } from "@/lib/motion";
 import { cn, money } from "@/lib/utils";
 import { track } from "@/services/analytics";
 
-type Phase = "typing" | "thinking" | "result" | "empty";
-type View = "plan" | "group";
+type Phase = "typing" | "thinking" | "result";
 
-const TYPE_SPEED_MS = 42;
-const THINK_STEP_MS = 420;
+const TYPE_SPEED_MS = 34;
+const THINK_STEP_MS = 380;
+const DEFAULT_CITY = "madrid";
+const DEFAULT_INTENT: DemoIntent = "tonight";
 
 /**
  * ============================================================================
  * HERO CONSOLE
  * ----------------------------------------------------------------------------
- * The product, running, at the top of the page. It is a real form with real
- * state, not a video: the visitor can pick a different question, save the
- * result, turn it into a group or copy it.
+ * The product, running, at the top of the page.
  *
- * Answers come from the seeded set (see services/ai/provider.ts). The site
- * never calls a model or a billed maps API for an anonymous visitor, and the
- * surface says so with the sample marker rather than pretending otherwise.
+ * The question types itself, the mascot thinks, and the plan assembles row by
+ * row — but none of that is a video. Every row is computed by
+ * `services/ai/demo-planner.ts` from the selected city's own price anchors, so
+ * switching to London reprices the evening in pounds and switching to Berlin
+ * drops the transport row because the semester ticket already covers it.
+ *
+ * There is no network call and no model behind this. The three actions under
+ * the plan are links into onboarding: the demo never pretends to save
+ * something for a visitor who does not have an account.
  * ============================================================================
  */
 export function HeroConsole() {
   const reduced = useReducedMotion();
-  const toast = useToast();
-  const { copy } = useCopy();
 
-  const [value, setValue] = useState(reduced ? defaultPlan.query : "");
+  const [citySlug, setCitySlug] = useState<string>(DEFAULT_CITY);
+  const [intent, setIntent] = useState<DemoIntent>(DEFAULT_INTENT);
   const [phase, setPhase] = useState<Phase>(reduced ? "result" : "typing");
-  const [plan, setPlan] = useState<Plan>(defaultPlan);
-  const [view, setView] = useState<View>("plan");
+  const [typed, setTyped] = useState("");
   const [thinkStep, setThinkStep] = useState(0);
-  const [saved, setSaved] = useState(false);
-  const [joined, setJoined] = useState(false);
 
-  const typingCancelled = useRef(reduced);
+  const city = getCity(citySlug) ?? getCity(DEFAULT_CITY)!;
+  const plan = planFor(citySlug, intent);
+  const where = moneyIn(city);
+  const query = intentMeta(intent).query(city);
 
-  /* ---- opening type-out ------------------------------------------------- */
+  /* The opening type-out runs once. Any interaction after that swaps the
+     question instantly — a visitor who has taken control should never wait for
+     a typewriter. */
+  const typingDone = useRef(Boolean(reduced));
+
   useEffect(() => {
-    if (typingCancelled.current) return;
-    const target = defaultPlan.query;
+    if (typingDone.current) {
+      setTyped(query);
+      return;
+    }
     let index = 0;
     const timer = window.setInterval(() => {
-      if (typingCancelled.current) {
-        window.clearInterval(timer);
-        return;
-      }
       index += 1;
-      setValue(target.slice(0, index));
-      if (index >= target.length) {
+      setTyped(query.slice(0, index));
+      if (index >= query.length) {
         window.clearInterval(timer);
+        typingDone.current = true;
         setThinkStep(0);
         setPhase("thinking");
       }
     }, TYPE_SPEED_MS);
     return () => window.clearInterval(timer);
+    /* Deliberately runs once: `query` changes when the visitor picks a city or
+       a question, and re-typing under their cursor would be theatre. */
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /* ---- retrieval steps --------------------------------------------------- */
+  /* Retrieval steps. Nothing enters `thinking` under reduced motion, so there
+     is no reduced-motion branch to write here. */
   useEffect(() => {
-    /* Under reduced motion nothing ever enters `thinking` — `run` resolves
-       straight to `result` — so the effect has no reduced-motion branch to
-       write. Setting state from an effect body to undo a state we should not
-       have entered is a cascading render; not entering it is the fix. */
-    if (phase !== "thinking" || reduced) return;
-
-    /* The step counter lives in the closure, not in state, so the effect body
-       writes no state at all: the only setState calls happen from the interval
-       callback. `thinkStep` is reset to 0 by whoever enters the phase. */
+    if (phase !== "thinking") return;
     let step = 0;
     const timer = window.setInterval(() => {
       step += 1;
@@ -111,333 +106,230 @@ export function HeroConsole() {
       setThinkStep(step);
     }, THINK_STEP_MS);
     return () => window.clearInterval(timer);
-  }, [phase, reduced]);
+  }, [phase]);
 
-  const run = useCallback(
-    (query: string) => {
-      typingCancelled.current = true;
-      const match = heroPlans.find(
-        (candidate) => candidate.query.toLowerCase() === query.trim().toLowerCase(),
-      );
+  /* Plain function on purpose: wrapping it in useCallback is memoization the
+     React Compiler already does, and hand-written memoization here defeats it
+     for the whole component. */
+  function rerun(nextCity: string, nextIntent: DemoIntent) {
+    typingDone.current = true;
+    const nextQuery = intentMeta(nextIntent).query(getCity(nextCity) ?? city);
+    setCitySlug(nextCity);
+    setIntent(nextIntent);
+    setTyped(nextQuery);
+    setThinkStep(0);
+    setPhase(reduced ? "result" : "thinking");
+  }
 
-      setValue(query);
-      setView("plan");
-      setSaved(false);
-      setJoined(false);
-
-      if (!match) {
-        setPhase("empty");
-        return;
-      }
-
-      setPlan(match);
-      setThinkStep(0);
-      setPhase(reduced ? "result" : "thinking");
-      track("hero_query_run", { query: match.query, planId: match.id });
-    },
-    [reduced],
-  );
+  const busy = phase !== "result";
 
   const steps = [
-    `Reading ${loopSummaries[defaultCity.slug]?.sourceCount ?? 0} posts from ${defaultCity.name} students`,
+    `Reading what students in ${city.name} posted`,
     "Checking official hours, fares and free windows",
-    plan.budget
-      ? `Fitting it inside ${money(plan.budget)}`
-      : "Ranking by walking time and student value",
+    `Fitting it inside ${money(plan.budget, where)}`,
   ];
 
-  const busy = phase === "typing" || phase === "thinking";
-
-  /* The mascot is driven by the console rather than decorating it. He is the
-     visible form of "the AI is working / the AI found something", which is a
-     job a spinner does badly and a face does instantly.
-
-     Under budget is the only case that earns the excited face: a plan that
-     comes in over the number is a correct answer too, and celebrating it would
-     make him a cheerleader instead of a student who watches what things cost. */
-  const underBudget =
-    plan.budget !== undefined && planTotal(plan) <= plan.budget;
-
-  const mascotState: MascotState = busy
-    ? "thinking"
-    : phase === "empty"
-      ? "empty"
-      : view === "group"
-        ? "social"
-        : underBudget
-          ? "excited"
-          : "neutral";
-
-  const mascotSays = busy
-    ? mascotLine("thinking")
-    : phase === "empty"
-      ? mascotLine("empty")
-      : view === "group"
-        ? mascotLine("social", 1)
-        : underBudget && plan.budget
-          ? `${money(plan.budget - planTotal(plan))} left. Not bad.`
-          : mascotLine("found", 1);
+  const mascotState: MascotState = busy ? "thinking" : plan.over ? "budget" : "happy";
+  const mascotSays = busy ? mascotLine("thinking") : plan.over ? mascotLine("budgetTight", 1) : "Tonight fits.";
 
   return (
-    <div className="relative mx-auto w-full max-w-[34rem]">
+    <div className="relative mx-auto w-full max-w-[36rem]">
       <AppSurface
-      title={
-        <span className="flex items-center gap-2">
-          <BrandMark className="size-3.5 text-signal" />
-          {defaultCity.name} · {brand.name}
-        </span>
-      }
-      meta="Tonight · budget aware · 3 sources"
-      live
-      className="w-full"
-      bodyClassName="p-0 sm:p-0"
-    >
-      {/* ---- command input ------------------------------------------------ */}
-      <form
-        className="border-b border-white/8 px-4 py-3.5 sm:px-5"
-        onSubmit={(event) => {
-          event.preventDefault();
-          run(value);
-        }}
+        title={
+          <span className="flex items-center gap-2">
+            <BrandMark className="size-3.5 text-signal" />
+            {brand.name} · {city.name}
+          </span>
+        }
+        meta="Budget aware · sources attached"
+        live
+        bodyClassName="p-0 sm:p-0"
       >
-        <label htmlFor="hero-query" className="sr-only">
-          Ask {brand.name} about your city
-        </label>
-        <div className="flex items-center gap-3">
-          <div className="relative flex-1">
-            <input
-              id="hero-query"
-              value={value}
-              onChange={(event) => {
-                typingCancelled.current = true;
-                setValue(event.target.value);
-              }}
-              placeholder="Ask anything about your city"
-              autoComplete="off"
-              spellCheck={false}
-              className={cn(
-                "w-full bg-transparent pr-6 font-mono text-[0.9375rem] text-white",
-                "placeholder:text-white/30 focus:outline-none",
-              )}
-            />
-            {phase === "typing" ? (
-              <span
-                aria-hidden
-                className="pointer-events-none absolute top-1/2 h-4.5 w-px -translate-y-1/2 bg-signal animate-blink"
-                style={{ left: `calc(${value.length}ch + 1px)` }}
-              />
-            ) : null}
-          </div>
-          <Button
-            type="submit"
-            size="icon"
-            variant="signal"
-            className="size-9"
-            disabled={busy || value.trim().length === 0}
-            aria-label="Run this question"
-          >
-            {busy ? (
-              <Loader2 className="size-4 animate-spin" aria-hidden />
-            ) : (
-              <ArrowUp className="size-4" aria-hidden />
-            )}
-          </Button>
-        </div>
-      </form>
-
-      {/* ---- body --------------------------------------------------------- */}
-      <div className="px-4 py-4 sm:px-5 sm:py-5">
-        <AnimatePresence mode="wait" initial={false}>
-          {busy ? (
-            <motion.div
-              key="thinking"
-              initial={reduced ? false : { opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={reduced ? { opacity: 0 } : { opacity: 0, y: -6 }}
-              transition={{ duration: reduced ? 0 : duration.quick }}
-              className="flex flex-col gap-2.5 py-2"
-              aria-live="polite"
-            >
-              {steps.map((step, index) => (
-                <div
-                  key={step}
-                  className={cn(
-                    "flex items-center gap-2.5 text-sm transition-colors",
-                    index <= thinkStep && phase === "thinking"
-                      ? "text-white/70"
-                      : "text-white/25",
-                  )}
-                >
-                  {index < thinkStep && phase === "thinking" ? (
-                    <Check className="size-3.5 shrink-0 text-mint" aria-hidden />
-                  ) : (
-                    <span
-                      className={cn(
-                        "size-1.5 shrink-0 rounded-full",
-                        index === thinkStep && phase === "thinking"
-                          ? "bg-signal"
-                          : "bg-white/20",
-                      )}
-                      aria-hidden
-                    />
-                  )}
-                  {step}
-                </div>
-              ))}
-            </motion.div>
-          ) : phase === "empty" ? (
-            <motion.div
-              key="empty"
-              initial={reduced ? false : { opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: reduced ? 0 : duration.base, ease: ease.out }}
-              className="py-2"
-            >
-              <p className="text-[0.9375rem] font-medium text-white">
-                This demo answers from a fixed set of questions.
-              </p>
-              <p className="mt-1 text-sm leading-relaxed text-white/55">
-                The real thing answers whatever you ask, using your city, your location and your
-                budget. Try one of these, or build your own {brand.name}.
-              </p>
-              <ButtonLink
-                href="/get-started"
-                variant="signal"
-                size="sm"
-                className="mt-4"
-                onClick={() => track("cta_clicked", { location: "hero-empty-state" })}
-              >
-                Build my {brand.name}
-              </ButtonLink>
-            </motion.div>
-          ) : view === "group" ? (
-            <GroupView
-              key="group"
-              plan={plan}
-              joined={joined}
-              onBack={() => setView("plan")}
-            />
-          ) : (
-            <motion.div
-              key={plan.id}
-              initial={reduced ? false : { opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={reduced ? { opacity: 0 } : { opacity: 0, y: -8 }}
-              transition={{ duration: reduced ? 0 : duration.base, ease: ease.out }}
-            >
-              <PlanView plan={plan} animate={!reduced} />
-
-              {plan.interested > 0 ? (
-                <div className="mt-4 flex items-center gap-3">
-                  <AvatarStack people={nearbyInterested.slice(0, plan.interested)} size="xs" onDark />
-                  <p className="text-[0.8125rem] text-white/55">
-                    <span className="tnum font-medium text-white">{plan.interested} students</span>{" "}
-                    nearby are interested.
-                  </p>
-                </div>
-              ) : null}
-
-              <div className="mt-4 flex flex-wrap gap-2">
-                <Button
-                  size="sm"
-                  variant={saved ? "onDarkGhost" : "onDark"}
-                  onClick={() => {
-                    setSaved((current) => !current);
-                    track("plan_saved", { planId: plan.id, saved: !saved });
-                    toast({
-                      title: saved ? "Plan removed" : "Plan saved",
-                      description: saved
-                        ? undefined
-                        : `${plan.title} is in your saved plans.`,
-                    });
-                  }}
-                  aria-pressed={saved}
-                >
-                  {saved ? (
-                    <BookmarkCheck className="size-4" aria-hidden />
-                  ) : (
-                    <Bookmark className="size-4" aria-hidden />
-                  )}
-                  {saved ? "Saved" : "Save plan"}
-                </Button>
-
-                <Button
-                  size="sm"
-                  variant="onDarkGhost"
-                  onClick={() => {
-                    setView("group");
-                    setJoined(true);
-                    track("invite_responded", { planId: plan.id, response: "host" });
-                  }}
-                >
-                  <Hand className="size-4" aria-hidden />
-                  {brand.surfaces.anyoneDown}
-                </Button>
-
-                <Button
-                  size="sm"
-                  variant="onDarkGhost"
-                  onClick={async () => {
-                    const text = `${plan.title} — ${money(planTotal(plan))} in ${defaultCity.name}. Built with ${brand.name}: ${brand.url}`;
-                    const ok = await copy(text);
-                    track("plan_shared", { planId: plan.id, method: "clipboard" });
-                    toast({
-                      title: ok ? "Plan copied" : "Could not copy",
-                      description: ok
-                        ? "Paste it into any chat."
-                        : "Your browser blocked clipboard access.",
-                      tone: ok ? "success" : "warning",
-                    });
-                  }}
-                >
-                  <Share2 className="size-4" aria-hidden />
-                  Share
-                </Button>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-
-      {/* ---- suggestions -------------------------------------------------- */}
-      <div className="border-t border-white/8 px-4 py-3 sm:px-5">
-        <p className="mb-2 font-mono text-micro uppercase tracking-[0.12em] text-white/35">
-          Try another question
-        </p>
-        <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 no-scrollbar edge-fade-x">
-          {heroPlans.map((candidate) => {
-            const active = candidate.id === plan.id && phase === "result";
+        {/* ---- city switcher ------------------------------------------------ */}
+        <div className="flex gap-1.5 overflow-x-auto border-b border-white/8 px-4 py-2.5 no-scrollbar edge-fade-x sm:px-5">
+          {demoCities.map((slug) => {
+            const option = getCity(slug);
+            if (!option) return null;
+            const active = slug === citySlug;
             return (
               <button
-                key={candidate.id}
+                key={slug}
                 type="button"
-                onClick={() => run(candidate.query)}
+                aria-pressed={active}
+                onClick={() => {
+                  rerun(slug, intent);
+                  track("demo_city_changed", { city: slug });
+                }}
                 className={cn(
-                  "shrink-0 rounded-full border px-3 py-1.5 text-[0.8125rem] transition-colors",
+                  "shrink-0 rounded-full border px-3 py-1 text-[0.8125rem] font-medium transition-colors",
                   active
-                    ? "border-signal/40 bg-signal/15 text-signal"
+                    ? "border-transparent bg-white text-ink-950"
                     : "border-white/12 bg-white/4 text-white/60 hover:border-white/25 hover:text-white",
                 )}
               >
-                {candidate.query}
+                {option.name}
               </button>
             );
           })}
         </div>
-      </div>
+
+        {/* ---- the question ------------------------------------------------- */}
+        <div className="border-b border-white/8 px-4 py-3.5 sm:px-5">
+          <div className="flex items-center gap-3">
+            <p className="min-w-0 flex-1 font-mono text-[0.9375rem] break-words text-white">
+              {typed}
+              {phase === "typing" ? (
+                <span
+                  aria-hidden
+                  className="ml-px inline-block h-4 w-px translate-y-0.5 bg-signal animate-blink"
+                />
+              ) : null}
+            </p>
+            <span
+              aria-hidden
+              className="grid size-9 shrink-0 place-items-center rounded-full bg-signal text-ink-950"
+            >
+              {busy ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <ArrowUp className="size-4" />
+              )}
+            </span>
+          </div>
+        </div>
+
+        {/* ---- answer ------------------------------------------------------- */}
+        <div className="px-4 py-4 sm:px-5 sm:py-5">
+          <AnimatePresence mode="wait" initial={false}>
+            {busy ? (
+              <motion.div
+                key="thinking"
+                initial={reduced ? false : { opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={reduced ? { opacity: 0 } : { opacity: 0, y: -6 }}
+                transition={{ duration: reduced ? 0 : duration.quick }}
+                className="flex flex-col gap-2.5 py-2"
+                aria-live="polite"
+              >
+                {steps.map((step, index) => (
+                  <div
+                    key={step}
+                    className={cn(
+                      "flex items-center gap-2.5 text-sm transition-colors",
+                      index <= thinkStep && phase === "thinking" ? "text-white/70" : "text-white/25",
+                    )}
+                  >
+                    {index < thinkStep && phase === "thinking" ? (
+                      <Check className="size-3.5 shrink-0 text-mint" aria-hidden />
+                    ) : (
+                      <span
+                        aria-hidden
+                        className={cn(
+                          "size-1.5 shrink-0 rounded-full",
+                          index === thinkStep && phase === "thinking" ? "bg-signal" : "bg-white/20",
+                        )}
+                      />
+                    )}
+                    {step}
+                  </div>
+                ))}
+              </motion.div>
+            ) : (
+              <motion.div
+                key={plan.id}
+                initial={reduced ? false : { opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={reduced ? { opacity: 0 } : { opacity: 0, y: -8 }}
+                transition={{ duration: reduced ? 0 : duration.base, ease: ease.out }}
+              >
+                <PlanView plan={plan} animate={!reduced} where={where} />
+
+                {plan.interestedCount > 0 ? (
+                  <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2">
+                    <AvatarStack people={plan.people} size="xs" onDark />
+                    <p className="text-[0.8125rem] text-white/55">
+                      <span className="tnum font-medium text-white">
+                        {plan.interestedCount} students
+                      </span>{" "}
+                      interested ·{" "}
+                      <span className="tnum font-medium text-white">{plan.sameUniversity}</span> from
+                      your university
+                    </p>
+                    <SampleTag onDark label="Sample counts" />
+                  </div>
+                ) : null}
+
+                {/* Three real destinations. Nothing here claims to have saved
+                    anything for a visitor with no account. */}
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <ButtonLink
+                    href="/get-started?intent=plan"
+                    size="sm"
+                    variant="onDark"
+                    onClick={() => track("cta_clicked", { location: "hero-save-plan" })}
+                  >
+                    <Bookmark className="size-4" aria-hidden />
+                    Save plan
+                  </ButtonLink>
+                  <ButtonLink
+                    href="/get-started?intent=anyone-down"
+                    size="sm"
+                    variant="onDarkGhost"
+                    onClick={() => track("cta_clicked", { location: "hero-anyone-down" })}
+                  >
+                    <UsersRound className="size-4" aria-hidden />
+                    {brand.surfaces.anyoneDown}
+                  </ButtonLink>
+                  <ButtonLink
+                    href="/get-started?intent=share"
+                    size="sm"
+                    variant="onDarkGhost"
+                    onClick={() => track("cta_clicked", { location: "hero-share" })}
+                  >
+                    <Share2 className="size-4" aria-hidden />
+                    Share
+                  </ButtonLink>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        {/* ---- other questions ---------------------------------------------- */}
+        <div className="border-t border-white/8 px-4 py-3 sm:px-5">
+          <p className="mb-2 font-mono text-micro uppercase tracking-[0.12em] text-white/35">
+            Try another question
+          </p>
+          <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 no-scrollbar edge-fade-x">
+            {demoIntents.map((option) => {
+              const active = option.key === intent && phase === "result";
+              return (
+                <button
+                  key={option.key}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => {
+                    rerun(citySlug, option.key);
+                    track("demo_intent_changed", { intent: option.key });
+                  }}
+                  className={cn(
+                    "shrink-0 rounded-full border px-3 py-1.5 text-[0.8125rem] transition-colors",
+                    active
+                      ? "border-signal/40 bg-signal/15 text-signal"
+                      : "border-white/12 bg-white/4 text-white/60 hover:border-white/25 hover:text-white",
+                  )}
+                >
+                  {option.label(city)}
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </AppSurface>
 
-      {/* ---- the mascot --------------------------------------------------
-          In normal flow directly under the console, not floated over its
-          corner.
-
-          The floated version looked better in a screenshot and was wrong: at
-          every width below `xl` the speech bubble landed on top of the "try
-          another question" chips, which are real buttons. A mascot that covers
-          a tap target is a bug, so he gets his own row. It also means he
-          survives on mobile, where the floated version had to be hidden
-          entirely — and mobile is where most people will meet him. */}
+      {/* The mascot sits in normal flow under the console rather than floated
+          over its corner: floated, his bubble lands on the question chips at
+          every width below xl, and a mascot that covers a tap target is a bug. */}
       <div className="mt-4 flex items-center gap-3">
         <Mascot state={mascotState} size="md" />
         <AnimatePresence mode="wait" initial={false}>
@@ -449,7 +341,6 @@ export function HeroConsole() {
             transition={reduced ? { duration: 0 } : spring.snappy}
             className="relative rounded-2xl bg-white px-3.5 py-2 text-[0.8125rem] font-medium text-ink-800 shadow-[var(--shadow-float)] ring-1 ring-ink-950/6"
           >
-            {/* The tail, as a rotated square so it inherits the bubble fill. */}
             <span
               aria-hidden
               className="absolute top-1/2 -left-1 size-2.5 -translate-y-1/2 rotate-45 bg-white"
@@ -459,98 +350,5 @@ export function HeroConsole() {
         </AnimatePresence>
       </div>
     </div>
-  );
-}
-
-/* -------------------------------------------------------------------------- */
-/* Anyone Down? — the plan becomes a temporary group                           */
-/* -------------------------------------------------------------------------- */
-
-function GroupView({
-  plan,
-  joined,
-  onBack,
-}: {
-  plan: Plan;
-  joined: boolean;
-  onBack: () => void;
-}) {
-  const reduced = useReducedMotion();
-  const people = nearbyInterested;
-
-  return (
-    <motion.div
-      initial={reduced ? false : { opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={reduced ? { opacity: 0 } : { opacity: 0, y: -8 }}
-      transition={{ duration: reduced ? 0 : duration.base, ease: ease.out }}
-    >
-      <button
-        type="button"
-        onClick={onBack}
-        className="mb-3 inline-flex items-center gap-1.5 text-[0.8125rem] text-white/50 transition-colors hover:text-white"
-      >
-        <ArrowLeft className="size-3.5" aria-hidden />
-        Back to the plan
-      </button>
-
-      <div className="rounded-lg border border-white/10 bg-white/4 p-4">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="font-mono text-micro uppercase tracking-[0.12em] text-signal">
-              Temporary group
-            </p>
-            <h3 className="mt-1.5 text-lg font-semibold text-white">{plan.title}</h3>
-            <p className="mt-0.5 text-sm text-white/50">
-              Closes after tonight. Nobody has to add anyone as a friend.
-            </p>
-          </div>
-          <span className="tnum shrink-0 rounded-full bg-mint/15 px-2.5 py-1 text-xs font-medium text-mint">
-            {money(planTotal(plan))} each
-          </span>
-        </div>
-
-        <ul className="mt-4 flex flex-col gap-2">
-          {joined ? (
-            <motion.li
-              initial={reduced ? false : { opacity: 0, x: -8 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={reduced ? { duration: 0 } : spring.snappy}
-              className="flex items-center gap-3 rounded-md bg-signal/12 px-3 py-2"
-            >
-              <Avatar initials="YOU" size="xs" className="bg-signal text-ink-950" />
-              <span className="text-sm font-medium text-white">You</span>
-              <span className="ml-auto text-xs font-medium text-signal">Host</span>
-            </motion.li>
-          ) : null}
-
-          {people.map((person, index) => (
-            <motion.li
-              key={person.handle}
-              initial={reduced ? false : { opacity: 0, x: -8 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={
-                reduced ? { duration: 0 } : { ...spring.snappy, delay: 0.12 * (index + 1) }
-              }
-              className="flex items-center gap-3 rounded-md bg-white/4 px-3 py-2"
-            >
-              <Avatar initials={person.initials} size="xs" />
-              <div className="min-w-0">
-                <p className="truncate text-sm text-white">{person.handle}</p>
-                <p className="truncate text-xs text-white/40">{person.campus}</p>
-              </div>
-              <span className="ml-auto shrink-0 text-xs text-white/40">invited</span>
-            </motion.li>
-          ))}
-        </ul>
-
-        <div className="mt-4 flex items-center gap-2 rounded-md bg-ink-900 px-3 py-2.5">
-          <CornerDownLeft className="size-3.5 shrink-0 text-white/30" aria-hidden />
-          <p className="text-[0.8125rem] text-white/55">
-            Group chat opens the moment two people are in.
-          </p>
-        </div>
-      </div>
-    </motion.div>
   );
 }

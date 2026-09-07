@@ -1,4 +1,5 @@
-import { setAiQuota, setCityStatus, setFlag } from "@/server/actions/admin";
+import { type AiSettingKey, aiSettingMeta } from "@/config/ai";
+import { setAiQuota, setAiSetting, setCityStatus, setFlag } from "@/server/actions/admin";
 import { tierOrder } from "@/config/entitlements";
 import { quotas } from "@/config/entitlements";
 import { cityStatusLabel } from "@/data/cities";
@@ -94,6 +95,109 @@ export function FlagControls({ states }: { states: Record<FlagName, "on" | "off"
           </li>
         );
       })}
+    </ul>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* AI configuration                                                            */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Provider, models, ceilings and spend caps. The API key is not here and never
+ * will be: a secret settable from a web form is a secret in a database backup.
+ */
+export function AiControls({
+  values,
+  live,
+  degradedReason,
+  spentTodayMicros,
+  dailyCapMicros,
+}: {
+  values: Partial<Record<AiSettingKey, string>>;
+  live: boolean;
+  degradedReason: string | null;
+  spentTodayMicros: number;
+  dailyCapMicros: number;
+}) {
+  const capFraction = dailyCapMicros > 0 ? Math.min(1, spentTodayMicros / dailyCapMicros) : 0;
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-ink-200 bg-white">
+      <div className="flex flex-wrap items-center gap-3 border-b border-ink-100 bg-paper-2/60 px-4 py-3">
+        <span className={cn("size-2 shrink-0 rounded-full", live ? "bg-mint" : "bg-amber")} aria-hidden />
+        <span className="min-w-0 flex-1">
+          <span className="block text-[0.9375rem] font-medium text-ink-900">
+            {live ? "Calling a model" : "Deterministic answers only"}
+          </span>
+          <span className="block text-[0.75rem] text-ink-500">
+            {degradedReason ?? "A key is set and no cap has been reached."}
+          </span>
+        </span>
+        <span className="tnum shrink-0 text-right font-mono text-[0.75rem] text-ink-500">
+          {Math.round(capFraction * 100)}% of today&rsquo;s cap
+        </span>
+      </div>
+
+      <ul>
+        {(Object.keys(aiSettingMeta) as AiSettingKey[]).map((key) => {
+          const meta = aiSettingMeta[key];
+          return (
+            <li key={key} className="flex flex-wrap items-center gap-3 border-b border-ink-100 px-4 py-2.5 last:border-0">
+              <span className="min-w-0 flex-1">
+                <span className="block text-[0.9375rem] font-medium text-ink-900">{meta.label}</span>
+                <span className="block text-[0.75rem] text-ink-500">{meta.detail}</span>
+              </span>
+              <form action={setAiSetting} className="flex items-center gap-2">
+                <input type="hidden" name="key" value={key} />
+                {meta.kind === "toggle" ? (
+                  <select
+                    name="value"
+                    defaultValue={values[key] ?? ""}
+                    aria-label={meta.label}
+                    className="h-9 rounded-lg bg-paper-2 px-2.5 text-[0.8125rem] text-ink-900"
+                  >
+                    <option value="">Default (on)</option>
+                    <option value="on">On</option>
+                    <option value="off">Off</option>
+                  </select>
+                ) : (
+                  <input
+                    name="value"
+                    defaultValue={values[key] ?? ""}
+                    placeholder="default"
+                    inputMode={meta.kind === "number" ? "decimal" : "text"}
+                    aria-label={meta.label}
+                    className="tnum h-9 w-44 rounded-lg bg-paper-2 px-2.5 font-mono text-[0.8125rem] text-ink-900 placeholder:font-sans"
+                  />
+                )}
+                <button type="submit" className="rounded-full bg-ink-950 px-3 py-1.5 text-[0.8125rem] font-medium text-paper">
+                  Save
+                </button>
+              </form>
+            </li>
+          );
+        })}
+      </ul>
+
+      <p className="border-t border-ink-100 px-4 py-3 text-[0.75rem] leading-relaxed text-ink-500">
+        The API key is read from <span className="font-mono">AI_API_KEY</span> only. There is no field for it here on
+        purpose. Blank restores the code or environment default. Cost caps are micro-euros: 12000000 is €12.
+      </p>
+    </div>
+  );
+}
+
+/** The tools the AI layer can call. Printed so the claim is checkable. */
+export function AiToolList({ tools }: { tools: readonly { label: string; detail: string }[] }) {
+  return (
+    <ul className="overflow-hidden rounded-xl border border-ink-200 bg-white">
+      {tools.map((tool) => (
+        <li key={tool.label} className="border-b border-ink-100 px-4 py-2.5 last:border-0">
+          <span className="block font-mono text-[0.8125rem] text-ink-900">{tool.label}</span>
+          <span className="block text-[0.75rem] text-ink-500">{tool.detail}</span>
+        </li>
+      ))}
     </ul>
   );
 }

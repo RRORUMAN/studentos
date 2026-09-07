@@ -1,6 +1,6 @@
 import {
   Bell,
-  Bookmark,
+  BookOpen,
   CalendarClock,
   ChevronRight,
   CreditCard,
@@ -13,13 +13,12 @@ import {
   Shield,
   ShieldCheck,
   Sparkles,
-  Store,
   Users,
-  Wallet,
 } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { MORE_DESTINATIONS } from "@/config/destinations";
 import { MascotArt } from "@/components/mascot/mascot-art";
 import { planByKey } from "@/config/pricing";
 import { signOutAction } from "@/server/actions/auth";
@@ -59,22 +58,35 @@ export default async function YouPage() {
 
   const sections: { title: string; items: { href: string; label: string; detail?: string; icon: typeof Bell; badge?: number }[] }[] = [
     {
+      title: "Everything else",
+      items: MORE_DESTINATIONS.map((entry) => ({ href: entry.href, label: entry.label, detail: entry.detail, icon: entry.icon })),
+    },
+    {
       title: "Your city",
       items: [
         { href: "/you/friends", label: "Friends", detail: `${friendIds.size} ${friendIds.size === 1 ? "friend" : "friends"}`, icon: Users, badge: pendingRequests.length },
         { href: "/pulse/chat", label: "Groups and chats", detail: `${groups.length} ${groups.length === 1 ? "group" : "groups"} you are in`, icon: MessagesSquare },
         { href: "/you/city", label: "My city", detail: `${viewer.city.name}${viewer.profile.homeArea ? ` · ${viewer.profile.homeArea}` : ""}`, icon: MapPin },
-        { href: "/arrival", label: "Arrival Mode", detail: viewer.stage.stage === "established" ? "Settled. Still here if you need it." : "Your move, in order", icon: CalendarClock },
-        { href: "/saved", label: "Saved", icon: Bookmark },
-        { href: "/marketplace", label: "Marketplace", detail: "Buy and sell with students here", icon: Store },
+        {
+          href: "/arrival",
+          label: viewer.stage.stage === "leaving" ? "Leaving Mode" : "Arrival Mode",
+          detail: viewer.stage.stage === "established" ? "Settled. Still here if you need it." : "Your move, in order",
+          icon: CalendarClock,
+        },
+        { href: "/starter-pack", label: "Starter pack", detail: `The first things worth knowing in ${viewer.city.name}`, icon: Sparkles },
+        { href: "/guides", label: "Guides and official info", detail: "Sourced answers with the date each was checked", icon: BookOpen },
       ],
     },
     {
       title: "You",
       items: [
         { href: "/you/profile", label: "Profile and interests", detail: `${viewer.profile.interests.length} interests`, icon: Heart },
-        { href: "/you/profile", label: "University", detail: viewer.profile.universityName ?? viewer.campusName ?? "Not set", icon: GraduationCap },
-        { href: "/budget", label: "Budget", icon: Wallet },
+        {
+          href: "/you/profile",
+          label: "University and dates",
+          detail: viewer.profile.universityName ?? viewer.campusName ?? "Not set — it changes what you see",
+          icon: GraduationCap,
+        },
         { href: "/you/notifications", label: "Notifications", icon: Bell },
         { href: "/you/privacy", label: "Privacy and visibility", icon: Shield },
         { href: "/you/data", label: "Your data", detail: "Export, reset what it learned, delete", icon: Download },

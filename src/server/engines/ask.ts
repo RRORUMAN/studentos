@@ -19,6 +19,16 @@ import type { Scored } from "@/server/engines/recommend";
  * The model's only job, later and optionally, is writing one sentence of
  * explanation over the plan this file already produced. If the model is
  * unavailable, the answer is unchanged — it just reads slightly plainer.
+ *
+ * ---------------------------------------------------------------------------
+ * ONE RULE ABOUT KEYWORDS, learned the hard way
+ *
+ * Leftover words are used to *rank* community posts and exchange listings.
+ * They are never used as a hard filter on places or events. An earlier version
+ * passed `keywords[0]` into a substring match over place names, so the shipped
+ * suggestion "Where should I buy groceries?" filtered every supermarket out on
+ * the word "buy" and returned nothing. A word the student typed is a hint, not
+ * a constraint.
  * ============================================================================
  */
 
@@ -36,9 +46,34 @@ export type AskIntent =
   | "find-free"
   | "find-social"
   | "find-place"
+  | "find-deals"
+  | "find-exchange"
   | "budget-question"
-  | "arrival-question"
-  | "unknown";
+  | "afford-question"
+  | "lifeops-question"
+  | "pulse-question"
+  | "mission-question"
+  | "arrival-question";
+
+export const intentMeta: Record<AskIntent, { label: string; detail: string }> = {
+  "plan-night": { label: "Plan tonight", detail: "An evening assembled inside your number." },
+  "plan-day": { label: "Plan a day", detail: "A day assembled inside your number." },
+  "plan-weekend": { label: "Plan the weekend", detail: "Friday to Sunday, priced." },
+  "find-food": { label: "Somewhere to eat", detail: "Cheap places students actually go." },
+  "find-groceries": { label: "Where to shop", detail: "The cheap supermarket, not the close one." },
+  "find-study": { label: "Somewhere to work", detail: "Quiet, cheap, has plugs." },
+  "find-free": { label: "Free things", detail: "Everything that costs nothing." },
+  "find-social": { label: "People", detail: "Open plans and students with shared interests." },
+  "find-place": { label: "Places", detail: "Scored for your budget, interests and distance." },
+  "find-deals": { label: "Student deals", detail: "Discounts with a confidence reading from student reports." },
+  "find-exchange": { label: "Student Exchange", detail: "Buy, borrow, help and shared rides." },
+  "budget-question": { label: "Money", detail: "What is safe, what is committed, what is drifting." },
+  "afford-question": { label: "Can I afford this?", detail: "A verdict, and what it leaves." },
+  "lifeops-question": { label: "What am I forgetting?", detail: "Your timeline: deadlines, payments, plans." },
+  "pulse-question": { label: "What students say", detail: "Posts and the top answer on each." },
+  "mission-question": { label: "Missions", detail: "A short plan with steps and a budget." },
+  "arrival-question": { label: "Official information", detail: "From verified sources, never generated." },
+};
 
 export type ParsedAsk = {
   intent: AskIntent;
@@ -47,7 +82,13 @@ export type ParsedAsk = {
   when: "now" | "tonight" | "tomorrow" | "weekend" | "week" | "any";
   /** True when the question is explicitly about free things. */
   freeOnly: boolean;
-  /** Words left after the structured bits, used for text matching. */
+  /** True when the student asked for something cheaper than a previous answer. */
+  cheaper: boolean;
+  /** True when the student asked for something more social. */
+  social: boolean;
+  /** True when the student asked for something closer. */
+  nearby: boolean;
+  /** Words left after the structured bits. Used for ranking, never filtering. */
   keywords: string[];
 };
 
@@ -88,7 +129,9 @@ const STOP_WORDS = new Set([
   "a", "an", "the", "for", "to", "in", "on", "at", "me", "my", "i", "is", "it",
   "what", "where", "can", "do", "should", "with", "and", "or", "of", "some",
   "find", "get", "go", "want", "need", "good", "best", "under", "near", "this",
-  "that", "tonight", "today", "tomorrow", "weekend", "cheap", "free",
+  "that", "tonight", "today", "tomorrow", "weekend", "cheap", "free", "but",
+  "buy", "somewhere", "something", "anyone", "there", "here", "about", "help",
+  "which", "who", "how", "when", "am", "are", "have", "has", "was", "would",
 ]);
 
 export function parseAsk(query: string): ParsedAsk {
@@ -108,30 +151,56 @@ export function parseAsk(query: string): ParsedAsk {
             ? "now"
             : "any";
 
-  const freeOnly = /\bfree\b|\bno money\b|\b0\b|\bnothing\b|\bskint\b|\bbroke\b/.test(text);
+  const freeOnly = /\bfree\b|\bno money\b|\bskint\b|\bbroke\b|\bnothing\b|\bzero\b|€0|\b0\s?(?:euro|eur)\b/.test(text);
+  const cheaper = /\bcheaper\b|\bless\b.*\bmoney\b|\bcheapest\b/.test(text);
+  const social = /\bmeet\b|\bpeople\b|\bfriends\b|\bsocial\b|\bjoin\b|\balone\b|\bwith others\b|\bgroup\b/.test(text);
+  const nearby = /\bnear\b|\bclose\b|\bwalk\b|\bnearby\b|\baround here\b/.test(text);
 
   const intent: AskIntent = (() => {
-    if (/\bplan\b.*\b(weekend|saturday|sunday)\b|\bweekend\b.*\bplan\b/.test(text))
-      return "plan-weekend";
+    /* Official first: getting a visa answer from the wrong branch is the one
+       failure this product must never have.
+
+       `regist` rather than `registr`: "register" has no "registr" in it
+       (r-e-g-i-s-t-e-r), so the tighter stem silently sent "how do I register
+       my address" — the single most-asked question a new arrival has — down
+       the generic places branch. The stems here are deliberately short. */
+    if (
+      /\bvisa\b|\bresiden|\bimmigration\b|\bregist|\bempadron|\banmeldung\b|\bpermit\b|\bpaperwork\b|\btax\b|\bhealthcare\b|\bhealth cover|\binsurance\b|\bemergency number\b|\bnie\b|\btie\b|\bbiometric|\bwork rules\b|\blegally\b/.test(
+        text,
+      )
+    ) {
+      return "arrival-question";
+    }
+    if (/\bafford\b|\bcan i spend\b|\bis it ok to spend\b/.test(text)) return "afford-question";
+    if (/\bforget|\bforgot|\bdue\b|\bdeadline\b|\bmy week\b|\bmy day\b|\bwhat.s on my\b|\bschedule\b|\btimeline\b|\bremind/.test(text)) {
+      return "lifeops-question";
+    }
+    if (/\bmission\b|\bchallenge\b|\bgive me a plan for\b/.test(text)) return "mission-question";
+    if (/\bdiscount|\bdeal\b|\bdeals\b|\bstudent price|\bstudent card\b|\boffer\b/.test(text)) return "find-deals";
+    if (/\bsell\b|\bselling\b|\bsecond hand\b|\bsecond-hand\b|\bborrow\b|\blend\b|\bgive away\b|\bmarketplace\b|\bexchange\b|\bshare a (?:taxi|ride|car)\b|\bsplit a (?:taxi|ride|fare)\b|\bairport (?:taxi|transfer|run)\b/.test(text)) {
+      return "find-exchange";
+    }
+    if (/\bwhat are (?:students|people) (?:saying|talking)\b|\bstudents say\b|\bpulse\b|\banyone know\b/.test(text)) {
+      return "pulse-question";
+    }
+    if (/\bplan\b.*\b(weekend|saturday|sunday)\b|\bweekend\b.*\bplan\b/.test(text)) return "plan-weekend";
     /* "what can I do", "what should I do" and "things to do" all mean: build me
        something. Matching only "plan" left the most natural phrasing of the
        question falling through to a bare list. */
-    if (
-      /\bplan\b|\bitinerary\b|\bwhat (should|can) i do\b|\bthings to do\b|\bwhat to do\b/.test(text)
-    ) {
-      return when === "tonight" ? "plan-night" : "plan-day";
+    if (/\bplan\b|\bitinerary\b|\bwhat (?:should|can) i do\b|\bthings to do\b|\bwhat to do\b/.test(text)) {
+      return when === "tonight" || when === "now" ? "plan-night" : "plan-day";
     }
-    if (/\blast until\b|\bmake .* last\b|\bstretch\b|\bsurvive\b/.test(text)) return "budget-question";
-    if (/\bafford\b|\bbudget\b|\bhow much\b|\bspend\b/.test(text)) return "budget-question";
-    if (/\bgrocer|\bsupermarket|\bfood shop|\bshop for food\b/.test(text)) return "find-groceries";
-    if (/\bstudy\b|\blibrary\b|\bquiet\b|\bwork from\b/.test(text)) return "find-study";
-    if (/\beat\b|\bfood\b|\blunch\b|\bdinner\b|\brestaurant\b|\bpizza\b|\bbreakfast\b/.test(text))
+    if (/\blast until\b|\bmake .* last\b|\bstretch\b|\bsurvive\b|\bbudget\b|\bhow much can i\b|\bmy money\b|\bspending\b/.test(text)) {
+      return "budget-question";
+    }
+    if (/\bgrocer|\bsupermarket|\bfood shop|\bshop for food\b|\bweekly shop\b/.test(text)) return "find-groceries";
+    if (/\bstudy\b|\blibrary\b|\bquiet\b|\bwork from\b|\brevise\b|\bexam\b/.test(text)) return "find-study";
+    if (/\beat\b|\bfood\b|\blunch\b|\bdinner\b|\brestaurant\b|\bpizza\b|\bbreakfast\b|\bcoffee\b|\bhungry\b/.test(text)) {
       return "find-food";
-    if (/\bmeet\b|\bpeople\b|\bfriends\b|\bsocial\b|\bjoin\b/.test(text)) return "find-social";
-    if (/\barriv|\bregister|\bvisa\b|\bresidency\b|\bpaperwork\b|\bsort out\b/.test(text))
-      return "arrival-question";
+    }
+    if (social) return "find-social";
     if (freeOnly) return "find-free";
-    if (/\bwhat.s on\b|\bevent\b|\bhappening\b|\bgig\b|\bconcert\b/.test(text)) return "plan-night";
+    if (/\bwhat.s on\b|\bevent\b|\bhappening\b|\bgig\b|\bconcert\b|\bnight out\b|\bclub\b/.test(text)) return "plan-night";
     return "find-place";
   })();
 
@@ -141,7 +210,18 @@ export function parseAsk(query: string): ParsedAsk {
     .split(/\s+/)
     .filter((word) => word.length > 2 && !STOP_WORDS.has(word));
 
-  return { intent, budgetCents, when, freeOnly, keywords };
+  return { intent, budgetCents, when, freeOnly, cheaper, social, nearby, keywords };
+}
+
+/** A one-line, human restatement of what was understood, so it can be corrected. */
+export function describeParse(parsed: ParsedAsk, formatMoney: (cents: Cents) => string): string {
+  const parts: string[] = [intentMeta[parsed.intent].label];
+  if (parsed.budgetCents !== null) parts.push(`under ${formatMoney(parsed.budgetCents)}`);
+  if (parsed.freeOnly) parts.push("free only");
+  if (parsed.when !== "any") parts.push(parsed.when === "now" ? "right now" : parsed.when);
+  if (parsed.nearby) parts.push("close by");
+  if (parsed.social) parts.push("with people");
+  return parts.join(" · ");
 }
 
 /* -------------------------------------------------------------------------- */
@@ -161,7 +241,7 @@ export type AskLine = {
 };
 
 export type AskAnswer = {
-  kind: "plan" | "list" | "official" | "empty";
+  kind: "plan" | "list" | "official" | "figures" | "empty";
   /** Headline. Always states the money when there is money involved. */
   title: string;
   /** One paragraph. Model-written where available, deterministic otherwise. */
@@ -199,6 +279,8 @@ export function assemblePlan(input: {
   /** Single-journey fare, so transport can be costed honestly or omitted. */
   fareCents: number;
   wantsFood: boolean;
+  /** Prefer the cheapest fill at every step. */
+  cheaper?: boolean;
 }): { lines: AskLine[]; totalCents: Cents } {
   const budget = input.budgetCents ?? Number.POSITIVE_INFINITY;
   const lines: AskLine[] = [];
@@ -207,19 +289,14 @@ export function assemblePlan(input: {
   const fits = (cents: number) => total + cents <= budget;
 
   /* 1. An event. Free ones first, then the cheapest that still fits. */
-  const events = [...input.events].sort(
-    (a, b) => a.item.priceCents - b.item.priceCents || b.match - a.match,
-  );
+  const events = [...input.events].sort((a, b) => a.item.priceCents - b.item.priceCents || b.match - a.match);
   const event = events.find((entry) => fits(entry.item.priceCents));
 
   if (event) {
     lines.push({
       kind: event.item.priceCents === 0 ? "culture" : "event",
       title: event.item.title,
-      detail: `${event.item.venue} · ${new Date(event.item.startsAt).toLocaleTimeString("en-GB", {
-        hour: "2-digit",
-        minute: "2-digit",
-      })}`,
+      detail: `${event.item.venue} · ${new Date(event.item.startsAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`,
       priceCents: event.item.priceCents,
       walkMinutes: null,
       refKind: "event",
@@ -253,9 +330,10 @@ export function assemblePlan(input: {
   }
 
   /* 3. One more thing, only if there is genuine room. Anything under a fifth
-        of the budget left is change, not an activity. */
+        of the budget left is change, not an activity. Skipped when the student
+        explicitly asked for cheaper. */
   const headroom = budget - total;
-  if (Number.isFinite(headroom) && headroom > budget * 0.2) {
+  if (!input.cheaper && Number.isFinite(headroom) && headroom > budget * 0.2) {
     const extra = input.places
       .filter((entry) => !lines.some((line) => line.refId === entry.item.id))
       .find((entry) => fits(Math.round((entry.item.price ?? 0) * 100)));
@@ -283,7 +361,7 @@ export function assemblePlan(input: {
     lines.push({
       kind: "transport",
       title: "Transport",
-      detail: "One journey each way is already covered by a monthly pass.",
+      detail: "One journey each way. Covered already if you hold a monthly pass.",
       priceCents: input.fareCents,
       walkMinutes: null,
       refKind: null,
@@ -369,4 +447,74 @@ export function describeList(input: {
   return freeCount > 0
     ? `${lines.length} options: ${freeCount} free, the rest ${range}.`
     : `${lines.length} options, ${range}.`;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Follow-ups                                                                  */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * What to offer next.
+ *
+ * These are *new questions*, not the original with words glued on the end. An
+ * earlier version appended " but cheaper" to the student's sentence and
+ * re-asked it, which kept the original budget, changed nothing, and added a
+ * stray keyword. A follow-up has to be a question the parser reads correctly
+ * on its own.
+ */
+export function followUps(input: {
+  parsed: ParsedAsk;
+  hasLines: boolean;
+  currencySymbol: string;
+  safeTodayCents: Cents | null;
+  cityName: string;
+  social: boolean;
+}): { label: string; query: string }[] {
+  const { parsed } = input;
+  const out: { label: string; query: string }[] = [];
+  const budget = parsed.budgetCents ?? input.safeTodayCents;
+  const roundDown = (cents: Cents) => Math.max(5, Math.floor(cents / 100 / 5) * 5);
+
+  if (input.hasLines && !parsed.freeOnly) {
+    out.push({ label: "Free only", query: `What is free ${parsed.when === "any" ? "this week" : parsed.when}?` });
+  }
+  if (input.hasLines && budget !== null && budget > 1000 && !parsed.cheaper) {
+    out.push({ label: "Cheaper", query: `What can I do ${parsed.when === "any" ? "" : parsed.when} for ${input.currencySymbol}${roundDown(budget / 2)}?`.replace("  ", " ") });
+  }
+  if (input.hasLines && !parsed.nearby) {
+    out.push({ label: "Closer", query: `Somewhere near me to ${parsed.intent === "find-food" ? "eat" : parsed.intent === "find-study" ? "study" : "go"}` });
+  }
+  if (input.social && !parsed.social) {
+    out.push({ label: "With people", query: "Find people doing something this week" });
+  }
+
+  /* Intent-specific next questions, which is where most of the value is. */
+  switch (parsed.intent) {
+    case "find-food":
+      out.push({ label: "Where to shop", query: "Where should I buy groceries?" });
+      break;
+    case "find-groceries":
+      out.push({ label: "Cheap lunch", query: "Somewhere cheap to eat near campus" });
+      break;
+    case "afford-question":
+      out.push({ label: "What is free", query: "What is free this week?" });
+      break;
+    case "budget-question":
+      out.push({ label: "Can I afford this?", query: `Can I afford ${input.currencySymbol}30 tonight?` });
+      break;
+    case "lifeops-question":
+      out.push({ label: "Plan my week", query: "Plan my week" });
+      break;
+    case "find-social":
+      out.push({ label: "What is on", query: "What is on this week?" });
+      break;
+    case "find-exchange":
+      out.push({ label: "Free stuff", query: "What are students giving away?" });
+      break;
+    default:
+      out.push({ label: "What am I forgetting?", query: "What am I forgetting this week?" });
+  }
+
+  const seen = new Set<string>();
+  return out.filter((entry) => (seen.has(entry.label) ? false : (seen.add(entry.label), true))).slice(0, 4);
 }

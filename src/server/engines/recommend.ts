@@ -1,6 +1,6 @@
 import type { Place } from "@/data/types";
 import type { Memory } from "@/domain/social";
-import type { Cents, CityEvent, Profile } from "@/domain/types";
+import type { Cents, CityEvent, Invite, Profile } from "@/domain/types";
 
 /**
  * ============================================================================
@@ -90,6 +90,12 @@ export type Scored<T> = {
   components: Record<ScoreComponent, number>;
   /** Ordered, human, and only ever facts we actually hold. */
   reasons: string[];
+  /**
+   * Walking minutes from the student's home point, for events. Null when no
+   * home point is set — never a default, because a made-up "15 min" is the
+   * kind of confident wrongness that costs trust the first time it is checked.
+   */
+  walkMinutes?: number | null;
 };
 
 /* -------------------------------------------------------------------------- */
@@ -304,6 +310,7 @@ export function recommendPlaces(
         match: toMatch(components),
         components,
         reasons: placeReasons(place, components, context),
+        walkMinutes: place.walkMinutes,
       };
     })
     .sort((a, b) => b.match - a.match);
@@ -358,7 +365,7 @@ function placeReasons(
 
 export function recommendEvents(
   events: readonly CityEvent[],
-  context: RecommendContext & { walkMinutesFor: (event: CityEvent) => number },
+  context: RecommendContext & { walkMinutesFor: (event: CityEvent) => number | null },
 ): Scored<CityEvent>[] {
   const { profile, memory, budgetCents, now } = context;
 
@@ -376,7 +383,9 @@ export function recommendEvents(
       const components: Record<ScoreComponent, number> = {
         budgetFit: scoreBudgetFit(event.priceCents, budgetCents, profile.priceSensitivity),
         interestFit: scoreInterestFit([event.kind, ...event.tags], profile.interests, memory),
-        distanceFit: scoreDistanceFit(walkMinutes, profile.maxTravelMinutes * 1.6),
+        /* No home point: the distance is unknown, so it neither helps nor hurts. */
+        distanceFit:
+          walkMinutes === null ? 0.6 : scoreDistanceFit(walkMinutes, profile.maxTravelMinutes * 1.6),
         studentValue: event.priceCents === 0 ? 1 : scoreStudentValue(70),
         communityFit: scoreCommunityFit({
           id: event.id,
@@ -399,6 +408,7 @@ export function recommendEvents(
         match: toMatch(components),
         components,
         reasons: eventReasons(event, walkMinutes, context),
+        walkMinutes,
       };
     })
     .sort((a, b) => b.match - a.match);
@@ -406,13 +416,13 @@ export function recommendEvents(
 
 function eventReasons(
   event: CityEvent,
-  walkMinutes: number,
+  walkMinutes: number | null,
   context: RecommendContext,
 ): string[] {
   const reasons: string[] = [];
 
   if (event.priceCents === 0) reasons.push("Free");
-  if (walkMinutes <= 20) reasons.push(`${walkMinutes} min away`);
+  if (walkMinutes !== null && walkMinutes <= 20) reasons.push(`${walkMinutes} min walk`);
 
   const matched = [event.kind, ...event.tags].filter((tag) =>
     context.profile.interests.includes(tag),
@@ -468,4 +478,179 @@ export function diversify<T>(
   /* Overflow is appended rather than dropped, so a caller asking for forty
      results still gets forty — just with the variety at the top. */
   return [...picked, ...overflow];
+}
+
+/* -------------------------------------------------------------------------- */
+/* Event views                                                                 */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The radar's views. Pure, so the tab logic is unit-testable: `arrangeEvents`
+ * takes already-scored rows plus the social context and returns the order the
+ * screen prints. Horizon filtering (tonight / week / weekend) happens upstream
+ * in the query because it needs the request clock; price and social filters
+ * are re-applied here so a view is self-describing regardless of the caller.
+ */
+export type EventTab =
+  | "for-you"
+  | "tonight"
+  | "free"
+  | "under-10"
+  | "week"
+  | "weekend"
+  | "campus"
+  | "trending"
+  | "social"
+  | "new";
+
+export const eventTabs: readonly { value: EventTab; label: string }[] = [
+  { value: "for-you", label: "For you" },
+  { value: "tonight", label: "Tonight" },
+  { value: "free", label: "Free" },
+  { value: "under-10", label: "Under 10" },
+  { value: "week", label: "This week" },
+  { value: "weekend", label: "Weekend" },
+  { value: "campus", label: "Campus" },
+  { value: "trending", label: "Trending" },
+  { value: "social", label: "Social" },
+  { value: "new", label: "New" },
+];
+
+/** The "Under 10" ceiling, in cents. One number, so the tab and the query agree. */
+export const UNDER_TEN_CENTS: Cents = 1000;
+
+export const eventKindFilters: readonly { value: string; label: string }[] = [
+  { value: "music", label: "Music" },
+  { value: "nightlife", label: "Nightlife" },
+  { value: "sports", label: "Sports" },
+  { value: "networking", label: "Networking" },
+  { value: "university", label: "University" },
+  { value: "food", label: "Food" },
+  { value: "culture", label: "Culture" },
+  { value: "outdoor", label: "Outdoor" },
+  { value: "tech", label: "Technology" },
+  { value: "travel", label: "Travel" },
+];
+
+/**
+ * Every social fact the rows support about one event, and nothing else: how
+ * many are interested, how many from your campus, which friends, and how many
+ * are looking for company via Anyone Down?. Never where anyone is.
+ */
+export type EventEnergy = {
+  interested: number;
+  going: number;
+  fromCampus: number;
+  friends: { userId: string; displayName: string; avatarEmoji: string; status: "interested" | "going" }[];
+  lookingForCompany: number;
+  mine: "interested" | "going" | null;
+  /** Responses in the last three days. The velocity behind "Trending". */
+  recent: number;
+};
+
+/** Total interest including live responses, for the card's social line. */
+export function totalInterest(event: CityEvent, energy: EventEnergy | undefined): number {
+  return event.interested + (energy ? energy.interested + energy.going : 0);
+}
+
+/**
+ * Interest per day since the row was last checked, plus a strong bump for
+ * responses in the last three days and for people looking for company. A row
+ * with 40 interested that was confirmed yesterday is trending; the same 40 on
+ * a row nobody has touched in a month is not.
+ */
+export function interestVelocity(
+  event: CityEvent,
+  energy: EventEnergy | undefined,
+  now: Date,
+): number {
+  const days = (now.getTime() - Date.parse(event.observedAt)) / 86_400_000;
+  const age = Math.min(30, Math.max(1, Number.isFinite(days) ? days : 30));
+  return (
+    totalInterest(event, energy) / age +
+    (energy?.recent ?? 0) * 5 +
+    (energy?.lookingForCompany ?? 0) * 3
+  );
+}
+
+const SOCIAL_KINDS = new Set(["social", "networking", "nightlife", "food"]);
+const SOCIAL_TAGS = new Set(["social", "language-exchange", "meet-friends", "networking"]);
+
+/**
+ * "Social" means there is a reason to go with people: a social kind or tag, an
+ * open Anyone Down? group attached to it, a friend interested, or someone who
+ * said they are going.
+ */
+export function isSocialEvent(
+  event: CityEvent,
+  energy: EventEnergy | undefined,
+  anchored: ReadonlySet<string>,
+): boolean {
+  return (
+    SOCIAL_KINDS.has(event.kind) ||
+    event.tags.some((tag) => SOCIAL_TAGS.has(tag)) ||
+    anchored.has(event.id) ||
+    (energy?.friends.length ?? 0) > 0 ||
+    (energy?.lookingForCompany ?? 0) > 0 ||
+    (energy?.going ?? 0) > 0
+  );
+}
+
+/** Re-order (and, where the view is a filter, narrow) scored events for a tab. */
+export function arrangeEvents(
+  events: readonly Scored<CityEvent>[],
+  tab: EventTab,
+  energy: ReadonlyMap<string, EventEnergy>,
+  invites: readonly Pick<Invite, "anchorId">[],
+  now: Date,
+): Scored<CityEvent>[] {
+  const list = [...events];
+
+  if (tab === "free") {
+    return list.filter((entry) => entry.item.priceCents === 0);
+  }
+
+  if (tab === "under-10") {
+    return list
+      .filter((entry) => entry.item.priceCents <= UNDER_TEN_CENTS)
+      .sort((a, b) => a.item.priceCents - b.item.priceCents || b.match - a.match);
+  }
+
+  if (tab === "trending") {
+    return list.sort(
+      (a, b) =>
+        interestVelocity(b.item, energy.get(b.item.id), now) -
+        interestVelocity(a.item, energy.get(a.item.id), now),
+    );
+  }
+
+  if (tab === "new") {
+    const week = now.getTime() - 7 * 86_400_000;
+    return list
+      .filter((entry) => Date.parse(entry.item.observedAt) >= week)
+      .sort((a, b) => b.item.observedAt.localeCompare(a.item.observedAt));
+  }
+
+  if (tab === "social") {
+    const anchored = new Set(
+      invites.map((invite) => invite.anchorId).filter((id): id is string => id !== null),
+    );
+    return list
+      .filter((entry) => isSocialEvent(entry.item, energy.get(entry.item.id), anchored))
+      .sort((a, b) => {
+        const ea = energy.get(a.item.id);
+        const eb = energy.get(b.item.id);
+        return (
+          (eb?.friends.length ?? 0) - (ea?.friends.length ?? 0) ||
+          (eb?.lookingForCompany ?? 0) - (ea?.lookingForCompany ?? 0) ||
+          b.match - a.match
+        );
+      });
+  }
+
+  if (tab === "tonight" || tab === "week" || tab === "weekend") {
+    return list.sort((a, b) => a.item.startsAt.localeCompare(b.item.startsAt));
+  }
+
+  return list;
 }

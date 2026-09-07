@@ -34,13 +34,18 @@ function reading(overrides: Partial<BudgetReading> = {}): BudgetReading {
     spentCents: 30_000,
     remainingCents: 50_000,
     committedCents: 8_000,
+    /* Nothing set aside for a trip in the daily fixtures. */
+    reservedCents: 0,
     availableCents: 42_000,
     safeTodayCents: 2_000,
     safeThisWeekCents: 8_000,
     daysLeft: 21,
     categories: [],
+    trips: [],
     overPace: false,
     paceDeltaCents: -1_500,
+    /* spent (30,000) − paceDelta (−1,500): the even-pace line for the month. */
+    pacedCents: 31_500,
     ...overrides,
   };
 }

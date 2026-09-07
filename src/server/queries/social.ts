@@ -2,8 +2,11 @@ import "server-only";
 
 import { cache } from "react";
 
-import type { Profile } from "@/domain/types";
+import { placesForCity } from "@/data/places";
+import type { Invite, Profile } from "@/domain/types";
 import { findMany, findOne } from "@/server/db";
+import { fmtWhen } from "@/lib/dates";
+import { money } from "@/lib/utils";
 
 /**
  * ============================================================================
@@ -25,7 +28,7 @@ import { findMany, findOne } from "@/server/db";
  */
 
 /* -------------------------------------------------------------------------- */
-/* Friends                                                                     */
+/* Friends, follows, blocks                                                    */
 /* -------------------------------------------------------------------------- */
 
 /** Accepted friendships, in both directions, as a set of user ids. */
@@ -39,6 +42,32 @@ export const loadFriendIds = cache(async (userId: string): Promise<Set<string>> 
   return new Set(
     rows.map((row) => (row.requesterId === userId ? row.addresseeId : row.requesterId)),
   );
+});
+
+/** People this student follows. One-directional; nothing is implied back. */
+export const loadFollowingIds = cache(async (userId: string): Promise<Set<string>> => {
+  const rows = await findMany("follows", (row) => row.followerId === userId);
+  return new Set(rows.map((row) => row.followeeId));
+});
+
+/** People following this student. */
+export const loadFollowerIds = cache(async (userId: string): Promise<Set<string>> => {
+  const rows = await findMany("follows", (row) => row.followeeId === userId);
+  return new Set(rows.map((row) => row.followerId));
+});
+
+/**
+ * Everyone this student is blocked from, in either direction. A block is
+ * symmetric everywhere it is read: neither side sees the other's posts, plans
+ * or profile.
+ */
+export const loadBlockedIds = cache(async (userId: string): Promise<Set<string>> => {
+  const rows = await findMany(
+    "friendships",
+    (row) =>
+      row.status === "blocked" && (row.requesterId === userId || row.addresseeId === userId),
+  );
+  return new Set(rows.map((row) => (row.requesterId === userId ? row.addresseeId : row.requesterId)));
 });
 
 /** True when the two users have blocked each other in either direction. */
@@ -74,6 +103,45 @@ export async function friendshipWith(
 }
 
 /* -------------------------------------------------------------------------- */
+/* Direct messages                                                             */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Whether two students may message each other directly.
+ *
+ * Friends always can, wherever they are. Otherwise the rule is "same city and
+ * not blocked": the product is about the people around you, and a DM from a
+ * stranger three countries away is exactly the message nobody asked for. A
+ * private profile can only be messaged by its friends.
+ *
+ * Used by the DM channel access check and by `startDirectMessage`, so the hub,
+ * the send action and the button all agree.
+ */
+export async function canMessage(
+  viewerId: string,
+  otherId: string,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  if (viewerId === otherId) return { ok: false, message: "That is you." };
+  if (await isBlocked(viewerId, otherId)) return { ok: false, message: "You cannot message this student." };
+
+  const friends = await loadFriendIds(viewerId);
+  if (friends.has(otherId)) return { ok: true };
+
+  const [me, other] = await Promise.all([
+    findOne("profiles", (row) => row.userId === viewerId),
+    findOne("profiles", (row) => row.userId === otherId),
+  ]);
+  if (!me || !other || other.onboardedAt === null) return { ok: false, message: "No such student." };
+  if (other.privacy.profileVisibility === "private" || other.privacy.profileVisibility === "friends") {
+    return { ok: false, message: "This student only takes messages from friends." };
+  }
+  if (me.citySlug !== other.citySlug) {
+    return { ok: false, message: "Direct messages are for students in your city, or friends anywhere." };
+  }
+  return { ok: true };
+}
+
+/* -------------------------------------------------------------------------- */
 /* Invite visibility                                                           */
 /* -------------------------------------------------------------------------- */
 
@@ -104,6 +172,76 @@ export async function canSeeInvite(
   }
 
   return (await loadFriendIds(userId)).has(invite.hostId);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Invite anchors                                                              */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The thing an invite is attached to, rendered from the live row — never a
+ * copy. A price change on the event shows on a three-day-old invite too.
+ */
+export type InviteAnchorCard = {
+  kind: "place" | "event" | "plan";
+  id: string;
+  title: string;
+  meta: string;
+  /** The public venue label, for the "where" line. Never a home address. */
+  venue: string | null;
+  href: string;
+};
+
+export async function resolveInviteAnchor(
+  invite: Pick<Invite, "anchorKind" | "anchorId" | "citySlug">,
+  where: { currency?: string; locale?: string; timeZone: string },
+  now: Date = new Date(),
+): Promise<InviteAnchorCard | null> {
+  if (!invite.anchorKind || !invite.anchorId) return null;
+  const id = invite.anchorId;
+
+  switch (invite.anchorKind) {
+    case "event": {
+      const event = await findOne("events", (row) => row.id === id);
+      if (!event) return null;
+      const when = fmtWhen(event.startsAt, where.timeZone, now);
+      return {
+        kind: "event",
+        id,
+        title: event.title,
+        meta: `${when} · ${event.priceCents === 0 ? "Free" : money(event.priceCents / 100, where)}`,
+        venue: event.venue,
+        href: `/events/${id}`,
+      };
+    }
+    case "place": {
+      const place = placesForCity(invite.citySlug).find((row) => row.id === id);
+      if (!place) return null;
+      return {
+        kind: "place",
+        id,
+        title: place.name,
+        meta: `${place.category} · ${place.priceLabel} · ${place.walkMinutes} min walk`,
+        venue: place.name,
+        href: `/discover/${id}`,
+      };
+    }
+    case "plan": {
+      const plan = await findOne("plans", (row) => row.id === id);
+      if (!plan) return null;
+      const first = plan.items[0];
+      return {
+        kind: "plan",
+        id,
+        title: plan.title,
+        meta: `${plan.items.length} ${plan.items.length === 1 ? "stop" : "stops"}${
+          plan.budgetCents !== null ? ` · ${money(plan.budgetCents / 100, where)} budget` : ""
+        }`,
+        venue: first ? `${first.time} ${first.title}` : null,
+        href: `/plans/${id}`,
+      };
+    }
+  }
 }
 
 /* -------------------------------------------------------------------------- */

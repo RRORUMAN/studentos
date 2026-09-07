@@ -5,6 +5,7 @@ import { createHash } from "node:crypto";
 import { campuses, cities } from "@/data/cities";
 import { places } from "@/data/places";
 import { defaultPrivacy } from "@/domain/types";
+import { seedDemoAccount } from "@/server/db/seed-demo";
 import type { Database } from "@/server/db/store";
 import {
   loopChannels,
@@ -60,6 +61,45 @@ const daysFromNow = (days: number, hour = 12) => {
   return date;
 };
 const daysAgo = (days: number) => daysFromNow(-days, 12);
+
+/**
+ * The offset, in hours, between a city's local time and UTC right now.
+ *
+ * Seeded events carry a *local* hour — a 22:00 open-air screening is at 22:00
+ * in Madrid, not 22:00 UTC. Writing the local hour straight into
+ * `setUTCHours` shifted every evening event forward by the city's offset, and
+ * the 22:00 screening rendered as 00:00 the following day. The bug was
+ * invisible while the product formatted times in the browser's zone and
+ * appeared the moment it started formatting them in the city's.
+ *
+ * Derived from `Intl` rather than a table, so it is right across daylight
+ * saving without anybody maintaining it.
+ */
+function utcOffsetHours(timeZone: string, at: Date): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hour12: false,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).formatToParts(at);
+  const get = (type: string) => Number(parts.find((part) => part.type === type)?.value ?? "0");
+  const asUtc = Date.UTC(get("year"), get("month") - 1, get("day"), get("hour") % 24, get("minute"), get("second"));
+  return Math.round((asUtc - at.getTime()) / 3_600_000);
+}
+
+/** A local hour in a city, as an absolute instant. */
+function cityTime(citySlug: string, days: number, localHour: number): Date {
+  const city = cities.find((entry) => entry.slug === citySlug);
+  const base = daysFromNow(days, 12);
+  const offset = city ? utcOffsetHours(city.timezone, base) : 0;
+  const date = new Date(base);
+  date.setUTCHours(localHour - offset, 0, 0, 0);
+  return date;
+}
 
 /* -------------------------------------------------------------------------- */
 /* Seeded authors                                                              */
@@ -141,7 +181,8 @@ function seedAuthors(db: Database, now: Date): void {
 
 function seedEventRows(db: Database, now: Date): void {
   for (const event of seedEvents) {
-    const starts = daysFromNow(event.inDays, event.hour);
+    /* `hour` on a seed row is the city's local hour, not UTC. */
+    const starts = cityTime(event.citySlug, event.inDays, event.hour);
     const ends = new Date(starts.getTime() + event.durationHours * 3_600_000);
 
     db.events.push({
@@ -336,11 +377,32 @@ function seedChat(db: Database): void {
 /* -------------------------------------------------------------------------- */
 
 const SEED_LISTINGS = [
-  { slug: "l1", city: "madrid", seller: "mireia", title: "IKEA desk, collect from Moncloa", detail: "Two years old, one scratch on the top. Comes apart for transport.", category: "furniture" as const, cents: 2500, condition: "good" as const, meet: "Moncloa metro, main exit" },
-  { slug: "l2", city: "madrid", seller: "tobias", title: "Bike, works fine, needs a new lock", detail: "Commuted on it all year. Selling because I am leaving in June.", category: "bikes" as const, cents: 6000, condition: "used" as const, meet: "UAM Cantoblanco entrance" },
-  { slug: "l3", city: "madrid", seller: "aiko", title: "Kitchen starter box — free", detail: "Pans, plates, cutlery for two. Taking none of it home.", category: "free" as const, cents: 0, condition: "used" as const, meet: "Lavapiés, Plaza de Cabestreros" },
-  { slug: "l4", city: "madrid", seller: "samir", title: "Econometrics textbook, current edition", detail: "Barely opened, which tells you how the module went.", category: "books" as const, cents: 1500, condition: "good" as const, meet: "UCM library entrance" },
-  { slug: "l5", city: "berlin", seller: "lukas", title: "Desk lamp and shelf", detail: "Leaving at the end of the semester, both must go.", category: "furniture" as const, cents: 1200, condition: "good" as const, meet: "Hermannplatz U-Bahn" },
+  /* ---- buy and sell ---------------------------------------------------- */
+  { slug: "l1", city: "madrid", seller: "mireia", kind: "sell" as const, mode: "offer" as const, title: "IKEA desk, collect from Moncloa", detail: "Two years old, one scratch on the top. Comes apart for transport.", category: "furniture" as const, cents: 2500, condition: "good" as const, meet: "Moncloa metro, main exit", leaving: true },
+  { slug: "l2", city: "madrid", seller: "tobias", kind: "sell" as const, mode: "offer" as const, title: "Bike, works fine, needs a new lock", detail: "Commuted on it all year. Selling because I am leaving in June.", category: "bikes" as const, cents: 6000, condition: "used" as const, meet: "UAM Cantoblanco entrance", leaving: true },
+  { slug: "l4", city: "madrid", seller: "samir", kind: "sell" as const, mode: "offer" as const, title: "Econometrics textbook, current edition", detail: "Barely opened, which tells you how the module went.", category: "books" as const, cents: 1500, condition: "good" as const, meet: "UCM library entrance", leaving: false },
+  { slug: "l5", city: "berlin", seller: "lukas", kind: "sell" as const, mode: "offer" as const, title: "Desk lamp and shelf", detail: "Leaving at the end of the semester, both must go.", category: "furniture" as const, cents: 1200, condition: "good" as const, meet: "Hermannplatz U-Bahn", leaving: true },
+
+  /* ---- requests: the half that makes it a network ----------------------- */
+  { slug: "l6", city: "madrid", seller: "aiko", kind: "sell" as const, mode: "request" as const, title: "Looking for a desk under €30", detail: "Anything that fits a small room. I can collect with a friend and a car.", category: "furniture" as const, cents: 3000, condition: "used" as const, meet: "Lavapiés or anywhere on line 3", leaving: false },
+  { slug: "l7", city: "madrid", seller: "samir", kind: "sell" as const, mode: "request" as const, title: "Need a second-hand bike, up to €50", detail: "For the campus commute. Happy to fix brakes myself.", category: "bikes" as const, cents: 5000, condition: "used" as const, meet: "UCM main gate", leaving: false },
+
+  /* ---- free stuff -------------------------------------------------------- */
+  { slug: "l3", city: "madrid", seller: "aiko", kind: "free" as const, mode: "offer" as const, title: "Kitchen starter box — free", detail: "Pans, plates, cutlery for two. Taking none of it home.", category: "kitchen" as const, cents: 0, condition: "used" as const, meet: "Lavapiés, Plaza de Cabestreros", leaving: true },
+  { slug: "l8", city: "barcelona", seller: "elena", kind: "free" as const, mode: "offer" as const, title: "Four kitchen chairs, free to whoever carries them", detail: "Solid wood, one wobbly leg. They are yours if you can move them.", category: "furniture" as const, cents: 0, condition: "worn" as const, meet: "Gràcia, Plaça del Sol", leaving: true },
+
+  /* ---- borrow ------------------------------------------------------------ */
+  { slug: "l9", city: "madrid", seller: "tobias", kind: "borrow" as const, mode: "offer" as const, title: "Cordless drill, free to borrow for a day", detail: "Bring it back charged. Good for shelves and flat-pack.", category: "tools" as const, cents: 0, condition: "good" as const, meet: "UAM Cantoblanco entrance", leaving: false },
+  { slug: "l10", city: "madrid", seller: "mireia", kind: "borrow" as const, mode: "request" as const, title: "Anyone have a suitcase I can borrow for a weekend?", detail: "Flying with hand luggage only and need a big one for one trip.", category: "household" as const, cents: 0, condition: "good" as const, meet: "Malasaña, any metro", leaving: false },
+
+  /* ---- help -------------------------------------------------------------- */
+  { slug: "l11", city: "madrid", seller: "samir", kind: "help" as const, mode: "request" as const, title: "Need one person to help move a sofa on Saturday", detail: "Third floor, no lift, twenty minutes of work. I will buy lunch.", category: "moving" as const, cents: 0, condition: "good" as const, meet: "Argüelles, meet at the metro", leaving: false, inDays: 3 },
+  { slug: "l12", city: "madrid", seller: "mireia", kind: "help" as const, mode: "offer" as const, title: "Can help with Spanish paperwork and translation", detail: "Fourth term here. I have done the empadronamiento twice and can read a contract.", category: "translate" as const, cents: 0, condition: "good" as const, meet: "UCM library, or a call", leaving: false },
+  { slug: "l13", city: "berlin", seller: "lukas", kind: "help" as const, mode: "request" as const, title: "Someone who has done the Anmeldung recently?", detail: "Twenty minutes of your time to check my forms before the appointment.", category: "advice" as const, cents: 0, condition: "good" as const, meet: "Neukölln, any café", leaving: false },
+
+  /* ---- rides and travel --------------------------------------------------- */
+  { slug: "l14", city: "madrid", seller: "aiko", kind: "ride" as const, mode: "offer" as const, title: "Splitting a taxi to Barajas, Friday 06:00", detail: "Two seats. Roughly €30 the whole car from Lavapiés, so €10 each with three.", category: "airport" as const, cents: 1000, condition: "good" as const, meet: "Lavapiés metro, Calle Argumosa exit", leaving: false, inDays: 2 },
+  { slug: "l15", city: "madrid", seller: "tobias", kind: "ride" as const, mode: "request" as const, title: "Anyone driving towards Valencia this weekend?", detail: "Happy to split fuel and tolls. Flexible on the day.", category: "road-trip" as const, cents: 2000, condition: "good" as const, meet: "Anywhere on the A-3 side of the city", leaving: false, inDays: 4 },
 ];
 
 function seedListings(db: Database): void {
@@ -350,6 +412,8 @@ function seedListings(db: Database): void {
       citySlug: listing.city,
       campusSlug: AUTHORS.find((a) => a.handle === listing.seller)?.campus ?? null,
       sellerId: seedId("user", listing.seller),
+      kind: listing.kind,
+      mode: listing.mode,
       title: listing.title,
       detail: listing.detail,
       category: listing.category,
@@ -357,7 +421,10 @@ function seedListings(db: Database): void {
       condition: listing.condition,
       meetArea: listing.meet,
       status: "active",
-      fromLeaving: true,
+      /* Flagged when listed from Leaving Mode, so arriving students see the
+         departing stock first — which is the whole loop. */
+      fromLeaving: listing.leaving,
+      whenAt: "inDays" in listing && typeof listing.inDays === "number" ? iso(daysFromNow(listing.inDays, 9)) : null,
       createdAt: iso(daysAgo(3)),
       soldAt: null,
     });
@@ -430,7 +497,7 @@ function seedChallengeRows(db: Database, now: Date): void {
 /* Entry point                                                                 */
 /* -------------------------------------------------------------------------- */
 
-export function seedDatabase(db: Database): void {
+export async function seedDatabase(db: Database): Promise<void> {
   const now = new Date();
 
   seedAuthors(db, now);
@@ -444,6 +511,9 @@ export function seedDatabase(db: Database): void {
   seedListings(db);
   seedPrices(db);
   seedChallengeRows(db, now);
+
+  /* Only when an operator set STUDENTOS_DEMO_PASSWORD. See seed-demo.ts. */
+  await seedDemoAccount(db);
 }
 
 /* -------------------------------------------------------------------------- */

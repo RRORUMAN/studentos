@@ -1,4 +1,4 @@
-import type { Place } from "@/data/types";
+import type { Place, PlaceLayer } from "@/data/types";
 import type { Cents } from "@/domain/types";
 
 /**
@@ -90,4 +90,61 @@ export function betterOption(input: {
   if (best.place.verifiedBy >= 10) reasons.push(`confirmed by ${best.place.verifiedBy} students`);
 
   return { ...best, why: reasons.join(", ") };
+}
+
+/**
+ * The better option for a spend that is not yet a place — "€35 on eating out".
+ *
+ * The spend is expressed as a stand-in place in the given layers, priced at
+ * the amount, and run through the same three conditions as a real one. Two
+ * choices make the stand-in fair rather than a loophole:
+ *
+ *   walk     set to the student's own limit, so the "not much further" rule
+ *            cannot fire — there is no origin to be further from
+ *   value    the median student value of the candidates, so "about as good"
+ *            still means "at least as good as a typical place here", not
+ *            "anything at all"
+ *
+ * `layers` is passed in rather than looked up from a budget category on
+ * purpose: this engine knows about places, not about envelopes, and the
+ * category vocabulary lives in `engines/budget.ts` (`layersForCategory`).
+ * Keeping the dependency pointing that way is also what lets this file be
+ * imported by the unit tests, which resolve paths literally.
+ */
+export function betterOptionForSpend(input: {
+  amountCents: Cents;
+  layers: readonly string[];
+  citySlug: string;
+  candidates: readonly Place[];
+  maxWalkMinutes: number;
+}): BetterOption | null {
+  const layers = input.layers as readonly PlaceLayer[];
+  if (layers.length === 0 || input.amountCents <= 0) return null;
+
+  const pool = input.candidates.filter(
+    (place) => place.citySlug === input.citySlug && place.layers.some((layer) => layers.includes(layer)),
+  );
+  if (pool.length === 0) return null;
+
+  const values = pool.map((place) => place.studentValue).sort((a, b) => a - b);
+  const medianValue = values[Math.floor(values.length / 2)];
+
+  const current: Place = {
+    id: "this-spend",
+    citySlug: input.citySlug,
+    name: "This spend",
+    category: "spend",
+    layers,
+    price: input.amountCents / 100,
+    priceLabel: "",
+    walkMinutes: input.maxWalkMinutes,
+    studentValue: medianValue,
+    verifiedBy: 0,
+    why: "",
+    source: "students",
+    x: 0,
+    y: 0,
+  };
+
+  return betterOption({ current, candidates: pool, maxWalkMinutes: input.maxWalkMinutes });
 }

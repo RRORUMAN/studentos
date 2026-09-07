@@ -2,14 +2,22 @@ import { MessagesSquare } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import { Empty } from "@/components/app/cards";
 import { CatchUpCard } from "@/components/app/catch-up";
-import { Composer, PostCard } from "@/components/app/loop-ui";
+import { PulseCard } from "@/components/app/pulse-card";
+import { Composer, ComposerSheet } from "@/components/app/pulse-composer";
 import { MascotArt } from "@/components/mascot/mascot-art";
 import { BASE_SYSTEM, runAi } from "@/server/ai/gateway";
 import { catchUp } from "@/server/engines/catch-up";
 import { loopChannels } from "@/server/db/seed-content";
-import { feedViews, loadFeed, pulseCategories, type FeedView } from "@/server/queries/loop";
+import {
+  categoryFor,
+  feedViews,
+  loadAttachables,
+  loadFeed,
+  pulseCategories,
+  whereFor,
+  type FeedView,
+} from "@/server/queries/loop";
 import { findMany } from "@/server/db";
 import { requestNow } from "@/server/now";
 import { isFlagOn } from "@/server/queries/settings";
@@ -28,9 +36,14 @@ export const metadata: Metadata = {
  * ----------------------------------------------------------------------------
  * The community. Free at every tier, permanently and unmetered.
  *
- * Five views, a category rail, and "Catch me up" at the top when the student
- * has been away. The catch-up is chosen by arithmetic and links to its
- * sources; the paid tier gets one model-written sentence over the same five.
+ * Five views, one category model, and "Catch me up" at the top when the
+ * student has been away. The catch-up is chosen by arithmetic and links to its
+ * sources; the paid tier gets one model-written sentence over the same lines,
+ * rendered above them and marked as a summary.
+ *
+ * Every city channel is two things — a feed of posts and a chat room — and
+ * they now link to each other in both directions. Before this they were two
+ * products that happened to share a name.
  * ============================================================================
  */
 export default async function PulsePage(props: PageProps<"/pulse">) {
@@ -46,23 +59,23 @@ export default async function PulsePage(props: PageProps<"/pulse">) {
   const rawView = one("view");
   const view: FeedView = feedViews.some((entry) => entry.value === rawView) ? (rawView as FeedView) : "for-you";
   const channel = loopChannels.some((entry) => entry.slug === one("channel")) ? one("channel")! : null;
-  const category = pulseCategories.some((entry) => entry.value === one("category")) ? one("category")! : null;
+  const category = categoryFor(one("category"));
 
-  const [feed, myVotes, allPosts, chat] = await Promise.all([
+  const where = whereFor(viewer.profile.citySlug, viewer.profile);
+
+  const [feed, allPosts, chat, attachables] = await Promise.all([
     loadFeed({
       citySlug: viewer.profile.citySlug,
       campusSlug: viewer.profile.campusSlug,
       view,
       channel,
-      category,
+      category: category?.value ?? null,
       userId: viewer.user.id,
     }),
-    findMany("votes", (row) => row.userId === viewer.user.id && row.targetKind === "post"),
     findMany("posts", (row) => row.citySlug === viewer.profile.citySlug),
     findMany("chat", (row) => row.citySlug === viewer.profile.citySlug),
+    loadAttachables(viewer.profile.citySlug, where),
   ]);
-
-  const voted = new Set(myVotes.map((vote) => vote.targetId));
 
   /* ---- catch me up ------------------------------------------------------
      "Since" is the student's last visit to the product, approximated by their
@@ -74,7 +87,13 @@ export default async function PulsePage(props: PageProps<"/pulse">) {
   const catchUpOn = await isFlagOn("catchUp");
   const missed =
     catchUpOn && away > 20 * 3_600_000 && view === "for-you" && !channel && !category
-      ? catchUp({ posts: allPosts, chat, since, campusSlug: viewer.profile.campusSlug })
+      ? catchUp({
+          posts: allPosts,
+          chat,
+          since,
+          campusSlug: viewer.profile.campusSlug,
+          channelLabels: Object.fromEntries(loopChannels.map((entry) => [entry.slug, entry.label])),
+        })
       : null;
 
   let sentence: string | null = null;
@@ -87,7 +106,7 @@ export default async function PulsePage(props: PageProps<"/pulse">) {
         payload: missed.lines.map((line) => ({ title: line.title, channel: line.channel })),
         system: BASE_SYSTEM,
         prompt: [
-          "These are the five community posts a student missed. Write ONE sentence, under 30 words,",
+          "These are the community posts and rooms a student missed. Write ONE sentence, under 30 words,",
           "saying what students in the city are mostly talking about. Refer only to these titles.",
           JSON.stringify(missed.lines.map((line) => line.title)),
           "<<render>>",
@@ -104,11 +123,22 @@ export default async function PulsePage(props: PageProps<"/pulse">) {
 
   const urlWith = (patch: Record<string, string | null>) => {
     const next = new URLSearchParams();
-    const current = { view: view === "for-you" ? null : view, channel, category, ...patch };
+    const current = {
+      view: view === "for-you" ? null : view,
+      channel,
+      category: category?.value ?? null,
+      ...patch,
+    };
     for (const [key, value] of Object.entries(current)) if (value) next.set(key, value);
     const qs = next.toString();
     return qs ? `/pulse?${qs}` : "/pulse";
   };
+
+  const activeView = feedViews.find((entry) => entry.value === view)!;
+  /* The chat room this filter pairs with, for the cross-link. */
+  const pairedChat = channel ?? category?.chat ?? null;
+  const pairedLabel = pairedChat ? (loopChannels.find((entry) => entry.slug === pairedChat)?.label ?? pairedChat) : null;
+  const composerChannel = channel ?? category?.postChannel ?? "general";
 
   return (
     <div className="page py-6 sm:py-8">
@@ -168,10 +198,10 @@ export default async function PulsePage(props: PageProps<"/pulse">) {
         {pulseCategories.map((entry) => (
           <Link
             key={entry.value}
-            href={urlWith({ category: category === entry.value ? null : entry.value, channel: null })}
+            href={urlWith({ category: category?.value === entry.value ? null : entry.value, channel: null })}
             className={cn(
               "inline-flex h-8 shrink-0 items-center rounded-full px-3 text-[0.8125rem] font-medium transition-colors",
-              category === entry.value ? "bg-paper-3 text-ink-900" : "bg-paper-2 text-ink-600 hover:bg-ink-100",
+              category?.value === entry.value ? "bg-paper-3 text-ink-900" : "bg-paper-2 text-ink-600 hover:bg-ink-100",
             )}
           >
             {entry.label}
@@ -179,48 +209,59 @@ export default async function PulsePage(props: PageProps<"/pulse">) {
         ))}
       </nav>
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-[1.7fr_1fr] lg:items-start">
+      <p className="mt-2.5 flex flex-wrap items-center gap-x-2 text-[0.8125rem] text-ink-500">
+        <span>{activeView.hint}</span>
+        {pairedChat ? (
+          <Link
+            href={`/pulse/chat/${pairedChat}`}
+            className="inline-flex items-center gap-1.5 font-medium text-ink-700 underline underline-offset-4 hover:text-ink-950"
+          >
+            <MessagesSquare className="size-3.5" />
+            Chat in #{pairedLabel}
+          </Link>
+        ) : null}
+      </p>
+
+      <div className="mt-5 grid gap-6 lg:grid-cols-[1.7fr_1fr] lg:items-start">
         {/* ---- feed ------------------------------------------------------- */}
         <div className="space-y-4">
           {missed && missed.lines.length > 0 ? <CatchUpCard catchUp={missed} sentence={sentence} /> : null}
 
-          {feed.length === 0 ? (
+          {view === "campus" && !viewer.profile.campusSlug ? (
+            <div className="rounded-2xl bg-white p-5 ring-1 ring-ink-950/6">
+              <p className="text-[0.9375rem] text-ink-700">
+                Campus is the feed for your own university. Add where you study and it fills in — until then this
+                view would just be the whole city again.
+              </p>
+              <Link
+                href="/you/profile"
+                className="mt-3 inline-flex rounded-full bg-ink-950 px-4 py-2 text-[0.875rem] font-medium text-paper"
+              >
+                Add your university
+              </Link>
+            </div>
+          ) : feed.length === 0 ? (
             <div className="flex flex-col items-center rounded-2xl bg-white px-5 py-10 text-center ring-1 ring-ink-950/6">
               <MascotArt state="empty" className="size-16" />
               <p className="mt-4 text-[0.9375rem] text-ink-700">
                 {view === "following"
-                  ? "You are not following anyone yet. Add a few people and their posts land here."
-                  : view === "campus" && !viewer.profile.campusSlug
-                    ? "Add your university to see the campus feed."
-                    : view === "trending"
-                      ? "Nothing has taken off in the last three days. Post something worth talking about."
-                      : "This corner is quiet. Start the conversation."}
+                  ? "You are not following anyone yet. Follow a few people and their posts land here."
+                  : view === "trending"
+                    ? "Nothing has taken off in the last three days. Post something worth talking about."
+                    : "This corner is quiet. Start the conversation."}
               </p>
               <Link
-                href={view === "following" ? "/you/friends" : view === "campus" && !viewer.profile.campusSlug ? "/you/profile" : "/pulse"}
+                href={view === "following" ? "/you/friends" : "/pulse"}
                 className="mt-4 rounded-full bg-ink-950 px-4 py-2 text-[0.875rem] font-medium text-paper"
               >
-                {view === "following" ? "Find people" : view === "campus" && !viewer.profile.campusSlug ? "Add your university" : "See everything"}
+                {view === "following" ? "Find people" : "See everything"}
               </Link>
             </div>
           ) : (
             <ul className="space-y-3">
               {feed.map((entry) => (
                 <li key={entry.post.id}>
-                  <PostCard
-                    id={entry.post.id}
-                    title={entry.post.title}
-                    body={entry.post.body}
-                    kind={entry.post.kind}
-                    channel={entry.post.channel}
-                    upvotes={entry.post.upvotes}
-                    commentCount={entry.post.commentCount}
-                    minutesAgo={entry.minutesAgo}
-                    author={entry.author}
-                    voted={voted.has(entry.post.id)}
-                    sameCampus={entry.sameCampus}
-                    topComment={entry.topComment}
-                  />
+                  <PulseCard entry={entry} />
                 </li>
               ))}
             </ul>
@@ -229,7 +270,9 @@ export default async function PulsePage(props: PageProps<"/pulse">) {
 
         {/* ---- side ------------------------------------------------------- */}
         <div className="space-y-4 lg:sticky lg:top-24">
-          <Composer defaultChannel={channel ?? "general"} />
+          <div className="hidden lg:block">
+            <Composer channels={loopChannels} attachables={attachables} defaultChannel={composerChannel} />
+          </div>
 
           <section className="rounded-2xl bg-white p-4 ring-1 ring-ink-950/6">
             <h2 className="font-mono text-micro uppercase tracking-[0.1em] text-ink-400">Channels</h2>
@@ -249,15 +292,18 @@ export default async function PulsePage(props: PageProps<"/pulse">) {
                 </li>
               ))}
             </ul>
+            <p className="mt-3 text-[0.8125rem] text-ink-500">
+              Every channel is a feed and a room.{" "}
+              <Link href="/pulse/chat" className="font-medium text-ink-700 underline underline-offset-4 hover:text-ink-950">
+                Open the rooms
+              </Link>
+            </p>
           </section>
-
-          {feed.length > 0 ? (
-            <Empty
-              line={`Posting and reading here is free at every plan. ${viewer.city.name} only works if everyone can say yes.`}
-            />
-          ) : null}
         </div>
       </div>
+
+      {/* ---- mobile composer ---------------------------------------------- */}
+      <ComposerSheet channels={loopChannels} attachables={attachables} defaultChannel={composerChannel} />
     </div>
   );
 }

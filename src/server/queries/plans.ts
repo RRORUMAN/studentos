@@ -27,6 +27,7 @@ export type PlanCard = {
   title: string;
   /** ISO. Null for an undated saved plan. */
   when: string | null;
+  /** People in: the owner plus every member who said yes. */
   people: number;
   /** Estimated total for the plan, in cents. */
   totalCents: number | null;
@@ -52,17 +53,31 @@ export const loadMyPlans = cache(async (input: {
   citySlug: string;
   now: Date;
 }): Promise<MyPlans> => {
-  const [plans, members, votes, invites, responses, profiles] = await Promise.all([
-    findMany("plans", () => true),
-    findMany("planMembers", (row) => row.userId === input.userId),
-    findMany("planVotes", () => true),
+  /* Membership first, so the plan scan is scoped to rows this student can
+     actually see rather than every plan in the store. */
+  const myMemberships = await findMany("planMembers", (row) => row.userId === input.userId);
+  const memberPlanIds = new Set(myMemberships.map((row) => row.planId));
+
+  const [plans, invites, responses, profiles] = await Promise.all([
+    findMany(
+      "plans",
+      (row) =>
+        row.citySlug === input.citySlug &&
+        (row.userId === input.userId || memberPlanIds.has(row.id)),
+    ),
     findMany("invites", (row) => row.citySlug === input.citySlug),
     findMany("inviteResponses", () => true),
     findMany("profiles", () => true),
   ]);
 
+  const planIds = new Set(plans.map((plan) => plan.id));
+  const [allMembers, votes] = await Promise.all([
+    findMany("planMembers", (row) => planIds.has(row.planId)),
+    findMany("planVotes", (row) => planIds.has(row.planId)),
+  ]);
+
   const byUser = new Map(profiles.map((profile) => [profile.userId, profile]));
-  const memberByPlan = new Map(members.map((row) => [row.planId, row]));
+  const memberByPlan = new Map(myMemberships.map((row) => [row.planId, row]));
   const now = input.now.getTime();
 
   const cards: PlanCard[] = [];
@@ -74,7 +89,8 @@ export const loadMyPlans = cache(async (input: {
     if (!mine && !member) continue;
     if (member?.status === "out") continue;
 
-    cards.push(planCard(plan, member ?? null, mine, votes, byUser, now));
+    const inCount = allMembers.filter((row) => row.planId === plan.id && row.status === "in").length;
+    cards.push(planCard(plan, member ?? null, mine, votes, byUser, now, 1 + inCount));
   }
 
   /* ---- Anyone Down? groups I am in -------------------------------------- */
@@ -122,6 +138,7 @@ function planCard(
   votes: readonly PlanVote[],
   byUser: Map<string, { displayName: string }>,
   now: number,
+  people: number,
 ): PlanCard {
   const past = plan.forDate ? Date.parse(plan.forDate) + 86_400_000 < now : false;
   return {
@@ -130,7 +147,7 @@ function planCard(
     href: `/plans/${plan.id}`,
     title: plan.title,
     when: plan.forDate,
-    people: 1 + (member ? 0 : 0),
+    people,
     totalCents: plan.items.reduce((sum, item) => sum + item.priceCents, 0),
     perPersonCents: null,
     stops: plan.items.length,
@@ -174,7 +191,49 @@ export async function loadPlan(planId: string, viewerId: string | null) {
     })),
     votes,
     myVotes: viewerId ? votes.filter((vote) => vote.userId === viewerId) : [],
+    /** The owner plus everyone who said they are in. */
+    people: 1 + members.filter((row) => row.status === "in").length,
   };
+}
+
+/** A plan the student can add a line to, as the "Add to plan" chooser lists it. */
+export type PlanChoice = {
+  id: string;
+  title: string;
+  /** ISO, or null for an undated plan. */
+  forDate: string | null;
+  stops: number;
+};
+
+/**
+ * The student's own upcoming plans, newest first, for the chooser. Plans whose
+ * date has passed are left out — adding tonight's event to last Saturday is a
+ * mistake the product should not offer.
+ */
+export async function loadPlanChoices(input: {
+  userId: string;
+  citySlug: string;
+  now: Date;
+  limit?: number;
+}): Promise<PlanChoice[]> {
+  const cutoff = input.now.getTime() - 86_400_000;
+  const plans = await findMany(
+    "plans",
+    (row) =>
+      row.userId === input.userId &&
+      row.citySlug === input.citySlug &&
+      (!row.forDate || Date.parse(row.forDate) >= cutoff),
+  );
+
+  return plans
+    .sort((a, b) => {
+      if (a.forDate && b.forDate) return a.forDate.localeCompare(b.forDate);
+      if (a.forDate) return -1;
+      if (b.forDate) return 1;
+      return b.createdAt.localeCompare(a.createdAt);
+    })
+    .slice(0, input.limit ?? 8)
+    .map((plan) => ({ id: plan.id, title: plan.title, forDate: plan.forDate, stops: plan.items.length }));
 }
 
 /** Anyone Down? plans open in the city and visible to the viewer, with counts. */

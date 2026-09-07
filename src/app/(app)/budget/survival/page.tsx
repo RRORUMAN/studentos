@@ -1,14 +1,16 @@
-import { ArrowLeft, Lock } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
 import { Locked } from "@/components/app/locked";
 import { MascotArt } from "@/components/mascot/mascot-art";
-import { SurvivalForm } from "@/components/app/survival-form";
-import { buildSurvivalPlan } from "@/server/engines/survival";
+import { SurvivalForm, type ViewPlan } from "@/components/app/survival-form";
+import { parseAmountCents } from "@/server/engines/budget";
+import { buildSurvivalPlan, previewSurvivalPlan } from "@/server/engines/survival";
 import { loadMoney } from "@/server/queries/money";
+import { requestDate } from "@/server/now";
 import { requireViewer } from "@/server/viewer";
-import { cn, currencySymbol, money } from "@/lib/utils";
+import { currencySymbol } from "@/lib/utils";
 
 export const metadata: Metadata = {
   title: "Survival Mode",
@@ -28,10 +30,14 @@ export const metadata: Metadata = {
  * reasoning, the honest verdict, and every free line at its true €0. What is
  * withheld is the money allocated to the paid lines.
  *
- * That withholding happens **on the server, in `redact()` below**. An earlier
- * version rendered the true amounts and blurred them with CSS, which is not a
- * paywall at all — the numbers were in the HTML and one view-source away. If a
- * value has not been paid for, it must not reach the browser.
+ * That withholding happens **on the server**, in `previewSurvivalPlan` — the
+ * engine's own preview, rather than a redaction function this page invented.
+ * An earlier version rendered the true amounts and blurred them with CSS,
+ * which is not a paywall at all: the numbers were in the HTML and one
+ * view-source away. If a value has not been paid for, it must not reach the
+ * browser — and that holds for the live recompute too, which is why a locked
+ * student's updates come back from a server action rather than being computed
+ * in their own browser.
  *
  * The trade is deliberate: this is the screen a student reaches on their worst
  * money day of the month, and turning them away with nothing would be both
@@ -39,58 +45,65 @@ export const metadata: Metadata = {
  * of it is free things — is the honest version of a paywall.
  * ============================================================================
  */
-
-/** A line as the client receives it. `amountCents: null` means withheld. */
-type ViewLine = {
-  key: string;
-  label: string;
-  basis: string;
-  amountCents: number | null;
-  free: boolean;
-};
-
 export default async function SurvivalPage(props: PageProps<"/budget/survival">) {
   const viewer = await requireViewer();
   const params = await props.searchParams;
+  const now = requestDate();
 
   const where = viewer.currency;
   const symbol = currencySymbol(where.currency, where.locale);
 
-  const raw = Array.isArray(params.amount) ? params.amount[0] : params.amount;
-  const daysRaw = Array.isArray(params.days) ? params.days[0] : params.days;
+  const one = (key: string) => {
+    const value = params[key];
+    return Array.isArray(value) ? value[0] : value;
+  };
 
-  const amount = raw ? Number(raw) : null;
-  const days = daysRaw ? Number(daysRaw) : 4;
+  const rawAmount = one("amount") ?? "";
+  const daysRaw = one("days");
+  const days = Number.isFinite(Number(daysRaw)) && Number(daysRaw) > 0 ? Math.min(60, Number(daysRaw)) : 4;
 
-  const money$ = await loadMoney(viewer.user.id);
+  const money$ = await loadMoney(viewer.user.id, now);
   const unlocked = viewer.entitlements.can.survivalMode;
 
-  const plan =
-    amount !== null && Number.isFinite(amount) && amount > 0
-      ? buildSurvivalPlan({
-          amountCents: Math.round(amount * 100),
-          days: Number.isFinite(days) ? days : 4,
-          city: viewer.city,
-        })
-      : null;
+  /* Comma-safe, and the same parser the field and the action use. */
+  const amountCents =
+    parseAmountCents(rawAmount) ??
+    (money$.reading.availableCents > 0 ? Math.round(money$.reading.availableCents / 100) * 100 : null);
 
-  /**
-   * Strip the paid numbers before they leave the server.
-   *
-   * Free lines keep their €0 — "this part costs nothing" is the most useful
-   * thing on the screen and withholding it would be mean as well as pointless.
-   */
-  type PlanLine = ReturnType<typeof buildSurvivalPlan>["lines"][number];
+  const defaultAmount = amountCents === null ? "" : String(Math.round(amountCents / 100));
 
-  const redact = (line: PlanLine): ViewLine => ({
-    key: line.key,
-    label: line.label,
-    basis: line.basis,
-    amountCents: unlocked || line.free ? line.amountCents : null,
-    free: line.free,
-  });
-
-  const lines: ViewLine[] = plan ? plan.lines.map(redact) : [];
+  /* The first paint is a complete plan, so the screen is useful before any
+     JavaScript runs and a linked-to plan renders as one. */
+  let initial: ViewPlan | null = null;
+  if (amountCents !== null) {
+    if (unlocked) {
+      const plan = buildSurvivalPlan({ amountCents, days, city: viewer.city });
+      initial = {
+        lines: plan.lines.map((line) => ({
+          key: line.key,
+          label: line.label,
+          basis: line.basis,
+          amountCents: line.amountCents,
+          free: line.free,
+        })),
+        verdict: plan.verdict,
+        moves: [...plan.moves],
+      };
+    } else {
+      const preview = previewSurvivalPlan({ amountCents, days, city: viewer.city });
+      initial = {
+        lines: preview.lines.map((line, index) => ({
+          key: `${line.label}-${index}`,
+          label: line.label,
+          basis: line.basis,
+          amountCents: line.free ? 0 : null,
+          free: line.free,
+        })),
+        verdict: preview.verdict,
+        moves: [],
+      };
+    }
+  }
 
   return (
     <div className="page max-w-2xl py-6 sm:py-8">
@@ -107,8 +120,8 @@ export default async function SurvivalPage(props: PageProps<"/budget/survival">)
         <div>
           <h1 className="text-display-xs text-ink-950 sm:text-display-sm">Survival Mode</h1>
           <p className="mt-2 text-[0.9375rem] leading-relaxed text-ink-600">
-            Tell it what you actually have and how long it has to last. It works out the food
-            first, keeps a buffer, and fills the rest with things that cost nothing.
+            Tell it what you actually have and how long it has to last. It works out the food first,
+            keeps a buffer, and fills the rest with things that cost nothing.
           </p>
         </div>
       </div>
@@ -116,100 +129,20 @@ export default async function SurvivalPage(props: PageProps<"/budget/survival">)
       <div className="mt-8">
         <SurvivalForm
           symbol={symbol}
-          defaultAmount={
-            amount !== null
-              ? String(amount)
-              : money$.reading.availableCents > 0
-                ? String(Math.round(money$.reading.availableCents / 100))
-                : ""
-          }
+          defaultAmount={defaultAmount}
           defaultDays={String(days)}
+          unlocked={unlocked}
+          city={unlocked ? viewer.city : null}
+          initial={initial}
+          where={where}
         />
       </div>
 
-      {plan ? (
-        <div className="mt-8">
-          <PlanView
-            lines={lines}
-            verdict={plan.verdict}
-            moves={unlocked ? plan.moves : plan.moves.slice(0, 1)}
-            where={where}
-          />
-
-          {!unlocked ? (
-            <div className="mt-5">
-              <Locked feature="survivalMode" />
-            </div>
-          ) : null}
+      {!unlocked ? (
+        <div className="mt-5">
+          <Locked feature="survivalMode" />
         </div>
       ) : null}
     </div>
-  );
-}
-
-/* -------------------------------------------------------------------------- */
-/* Plan                                                                        */
-/* -------------------------------------------------------------------------- */
-
-function PlanView({
-  lines,
-  verdict,
-  moves,
-  where,
-}: {
-  lines: readonly ViewLine[];
-  verdict: string;
-  moves: readonly string[];
-  where: { currency: string; locale: string };
-}) {
-  return (
-    <section className="overflow-hidden rounded-xl border border-ink-200 bg-white">
-      <div className="border-b border-ink-200 bg-paper-2/60 p-5">
-        <p className="text-[0.9375rem] leading-relaxed text-ink-800">{verdict}</p>
-      </div>
-
-      <ul className="divide-y divide-ink-100">
-        {lines.map((line) => (
-          <li key={line.key} className="flex items-start gap-4 px-5 py-3.5">
-            <div className="min-w-0 flex-1">
-              <p className="text-[0.9375rem] font-medium text-ink-900">{line.label}</p>
-              <p className="mt-0.5 text-[0.8125rem] leading-snug text-ink-500">{line.basis}</p>
-            </div>
-
-            {line.amountCents === null ? (
-              /* Withheld on the server. Nothing to un-blur, nothing to read in
-                 the page source. */
-              <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-ink-100 px-2.5 py-1 text-[0.75rem] font-semibold text-ink-500">
-                <Lock className="size-3" aria-hidden />
-                Locked
-              </span>
-            ) : (
-              <span
-                className={cn(
-                  "tnum shrink-0 font-mono text-[0.9375rem] font-medium",
-                  line.amountCents === 0 ? "text-mint-deep" : "text-ink-900",
-                )}
-              >
-                {line.amountCents === 0 ? "Free" : money(line.amountCents / 100, where)}
-              </span>
-            )}
-          </li>
-        ))}
-      </ul>
-
-      <div className="border-t border-ink-200 px-5 py-4">
-        <h2 className="mb-2 font-mono text-micro uppercase tracking-[0.1em] text-ink-400">
-          What actually makes this work
-        </h2>
-        <ul className="space-y-1.5">
-          {moves.map((move) => (
-            <li key={move} className="flex gap-2.5 text-[0.875rem] leading-snug text-ink-700">
-              <span aria-hidden className="mt-1.5 size-1.5 shrink-0 rounded-full bg-signal" />
-              {move}
-            </li>
-          ))}
-        </ul>
-      </div>
-    </section>
   );
 }

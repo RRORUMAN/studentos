@@ -1,76 +1,83 @@
 import { AnyoneDown } from "@/components/marketing/anyone-down";
 import { ArrivalSection } from "@/components/marketing/arrival-section";
-import { AskYourCity } from "@/components/marketing/ask-your-city";
+import { AskSection } from "@/components/marketing/ask-section";
 import { BudgetSection } from "@/components/marketing/budget-section";
-import { CityBrain } from "@/components/marketing/city-brain";
-import { DiscoverSection } from "@/components/marketing/discover-section";
+import { EventRadar } from "@/components/marketing/event-radar";
+import { ExchangeSection } from "@/components/marketing/exchange-section";
 import { FaqSection } from "@/components/marketing/faq-section";
 import { FinalCta } from "@/components/marketing/final-cta";
+import { GlobalCities } from "@/components/marketing/global-cities";
 import { Hero } from "@/components/marketing/hero";
-import { LiveDemo } from "@/components/marketing/live-demo";
-import { MovingAbroad } from "@/components/marketing/moving-abroad";
+import { LifeOpsSection } from "@/components/marketing/lifeops-section";
+import { MissionsSection } from "@/components/marketing/missions-section";
 import { OneApp } from "@/components/marketing/one-app";
 import { PricingTable } from "@/components/marketing/pricing-table";
-import { LoopSection } from "@/components/marketing/loop-section";
-import { ShareablePlans } from "@/components/marketing/shareable-plans";
-import { Standards } from "@/components/marketing/standards";
+import { PulseSection } from "@/components/marketing/pulse-section";
+import { RightNow } from "@/components/marketing/right-now";
+import { ShareSection } from "@/components/marketing/share-section";
 import { SurvivalMode } from "@/components/marketing/survival-mode";
 import { Testimonials } from "@/components/marketing/testimonials";
-import { Worldwide } from "@/components/marketing/worldwide";
+import { TodaySection } from "@/components/marketing/today-section";
+import { TrustStrip } from "@/components/marketing/trust-strip";
+import { WhyStudentOS } from "@/components/marketing/why-studentos";
 
 /**
  * ============================================================================
  * LANDING PAGE
  * ----------------------------------------------------------------------------
- * Section order is an argument, read top to bottom:
+ * The order is an argument, read top to bottom:
  *
- *   name the feeling, hand over the working product, show how a question turns
- *   into an answer, show the machine that builds it, show the community it is
- *   built from, who you go with, what you can afford, what happens when you
- *   can afford almost nothing, where things are, how to arrive, why it
- *   replaces ten apps, what we refuse to do, who has used it, that it works
- *   wherever you are going, how it spreads, what it costs, the awkward
- *   questions — and only then, the ask.
+ *   hand over the working product, name the problem it solves, show the screen
+ *   you would open every day, show how a question becomes an answer, show the
+ *   people it is built from, how you end up going with them, what is on, what
+ *   you can afford, what happens when you can barely afford anything, what you
+ *   have to remember, what to actually do with your week, how to arrive, how
+ *   students supply each other, what is on right now, where it works, why it
+ *   replaces eight apps, how a plan travels, what we will not do with your
+ *   data — and only then price, questions, and the ask.
  *
- * Two deliberate choices in that list.
+ * Two deliberate choices.
  *
- * The problem section is first and the demo is second: a visitor is shown
- * themselves, then handed the product to drive, before being asked to take a
- * single claim on trust.
+ * The demo is *in* the hero rather than below the fold: a visitor drives the
+ * product before being asked to take a single claim on trust.
  *
- * Pricing sits near the end and the FAQ sits *after* it, because the questions
- * a student has are mostly created by the price, and answering them on the
- * page is cheaper than answering them in support.
+ * Pricing sits near the end and the FAQ after it, because most of the
+ * questions a student has are created by the price.
  *
  * ---------------------------------------------------------------------------
- * Ground rhythm. No two adjacent sections share a tone, and none of them is
- * dark: the rule the whole site follows is that dark is the product and light
- * is the page, so the only dark rectangles a visitor meets are `AppSurface`
- * consoles. The one loud field on the page is the closing CTA.
+ * Ground rhythm. No two adjacent sections share a tone, and exactly two are
+ * full-bleed dark: Ask, in the middle, where the product is at its most
+ * impressive, and the closing CTA. Every other dark rectangle on the page is a
+ * ProductPanel or an AppSurface inside a light section, which keeps "dark means
+ * the product" a rule the eye can learn.
  *
- *   warm · paper · tint · paper · pulse · paper · flow · warm · paper · warm ·
- *   paper · warm · tint · flow · warm · paper · warm · signal
+ *   paper · warm · paper · DARK · pulse · paper · warm · flow · paper · warm ·
+ *   tint · paper · warm · paper · flow · warm · pulse · warm · [testimonials:
+ *   renders nothing until a real quote exists] · paper · warm · DARK
  * ============================================================================
  */
 export default function HomePage() {
   return (
     <>
       <Hero />
-      <MovingAbroad />
-      <LiveDemo />
-      <AskYourCity />
-      <CityBrain />
-      <LoopSection />
+      <WhyStudentOS />
+      <TodaySection />
+      <AskSection />
+      <PulseSection />
       <AnyoneDown />
+      <EventRadar />
       <BudgetSection />
       <SurvivalMode />
-      <DiscoverSection />
+      <LifeOpsSection />
+      <MissionsSection />
       <ArrivalSection />
+      <ExchangeSection />
+      <RightNow />
+      <GlobalCities />
       <OneApp />
-      <Standards />
+      <ShareSection />
+      <TrustStrip />
       <Testimonials />
-      <Worldwide />
-      <ShareablePlans />
       <PricingTable tone="paper" />
       <FaqSection />
       <FinalCta />

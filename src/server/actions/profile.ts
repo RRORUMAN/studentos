@@ -40,10 +40,13 @@ const profileSchema = z.object({
   bio: z.string().trim().max(200).optional(),
   avatarEmoji: z.string().trim().min(1).max(8),
   interests: z.array(z.string()).max(40),
+  /** Free text, because 100+ cities in the directory carry no neighbourhood list. */
   homeArea: z.string().trim().max(120).optional(),
   maxTravelMinutes: z.coerce.number().int().min(5).max(180),
   priceSensitivity: z.enum(["cheapest", "value", "balanced", "occasional-splurge"]),
   diets: z.array(z.string()).max(20),
+  transport: z.array(z.enum(["walk", "transit", "bike", "scooter", "car", "taxi"])).max(6).optional(),
+  socialGoals: z.array(z.string()).max(12).optional(),
 });
 
 export async function updateProfile(input: z.input<typeof profileSchema>): Promise<ProfileResult> {
@@ -59,14 +62,140 @@ export async function updateProfile(input: z.input<typeof profileSchema>): Promi
     bio: parsed.data.bio ?? null,
     avatarEmoji: parsed.data.avatarEmoji,
     interests: parsed.data.interests,
-    homeArea: parsed.data.homeArea ?? null,
+    homeArea: parsed.data.homeArea && parsed.data.homeArea.length > 0 ? parsed.data.homeArea : null,
     maxTravelMinutes: parsed.data.maxTravelMinutes,
     priceSensitivity: parsed.data.priceSensitivity,
     diets: parsed.data.diets,
+    ...(parsed.data.transport && parsed.data.transport.length > 0 ? { transport: parsed.data.transport } : {}),
+    ...(parsed.data.socialGoals ? { socialGoals: parsed.data.socialGoals as never } : {}),
   });
 
   revalidatePath("/you");
+  revalidatePath("/you/profile");
   revalidatePath("/home");
+  revalidatePath("/discover");
+  return { ok: true };
+}
+
+/* -------------------------------------------------------------------------- */
+/* University                                                                  */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Set or change the university.
+ *
+ * This had no surface at all until now, which was a real hole: the campus
+ * drives event ranking, the campus feed, the community auto-join and half the
+ * social matching, and a student who skipped it at onboarding — or whose
+ * campus changed — had no way to fix it short of a new account.
+ *
+ * Changing campus moves community membership with it, or the student keeps
+ * getting posts from a campus they left.
+ */
+const universitySchema = z.object({
+  campusSlug: z.string().trim().max(60).nullable(),
+  universityName: z.string().trim().max(120).nullable(),
+});
+
+export async function setUniversity(input: z.input<typeof universitySchema>): Promise<ProfileResult> {
+  const userId = await requireUserId();
+  const parsed = universitySchema.safeParse(input);
+  if (!parsed.success) return { ok: false, message: "Check the university." };
+
+  const { getCampus } = await import("@/data/cities");
+  const campus = parsed.data.campusSlug ? getCampus(parsed.data.campusSlug) : undefined;
+  if (parsed.data.campusSlug && !campus) return { ok: false, message: "That campus is not on the list yet." };
+
+  const now = nowIso();
+  await transaction((db) => {
+    const profile = db.profiles.find((row) => row.userId === userId);
+    if (!profile) return;
+    if (campus && campus.citySlug !== profile.citySlug) return;
+
+    const previous = profile.campusSlug;
+    profile.campusSlug = campus?.slug ?? null;
+    profile.universityName = campus?.name ?? (parsed.data.universityName || null);
+
+    const move = db.moves.find((row) => row.userId === userId);
+    if (move) {
+      move.campusSlug = profile.campusSlug;
+      move.updatedAt = now;
+    }
+
+    /* Community membership follows the campus. */
+    if (previous !== profile.campusSlug) {
+      const leaving = db.communities.filter((community) => community.campusSlug === previous);
+      for (const community of leaving) {
+        const index = db.communityMembers.findIndex((member) => member.communityId === community.id && member.userId === userId);
+        if (index !== -1) {
+          db.communityMembers.splice(index, 1);
+          community.memberCount = Math.max(0, community.memberCount - 1);
+        }
+      }
+      const joining = db.communities.filter((community) => profile.campusSlug !== null && community.campusSlug === profile.campusSlug);
+      for (const community of joining) {
+        if (db.communityMembers.some((member) => member.communityId === community.id && member.userId === userId)) continue;
+        db.communityMembers.push({ communityId: community.id, userId, role: "member", joinedAt: now });
+        community.memberCount += 1;
+      }
+    }
+  });
+
+  revalidatePath("/you");
+  revalidatePath("/you/profile");
+  revalidatePath("/you/city");
+  revalidatePath("/home");
+  revalidatePath("/pulse");
+  return { ok: true };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Move dates                                                                  */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Arrival and departure dates. These decide the lifecycle stage, which decides
+ * what Home leads with, which arrival tasks apply, and when Leaving Mode takes
+ * over — so they need to be changeable when a flight moves.
+ */
+const datesSchema = z.object({
+  arrivingOn: z.string().date().nullable().optional(),
+  leavingOn: z.string().date().nullable().optional(),
+  housing: z.enum(["sorted", "temporary", "searching", "university-halls", "with-family", "unknown"]).optional(),
+});
+
+export async function setMoveDates(input: z.input<typeof datesSchema>): Promise<ProfileResult> {
+  const userId = await requireUserId();
+  const parsed = datesSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, message: "Those dates did not parse." };
+
+  const arrivingOn = parsed.data.arrivingOn ? new Date(`${parsed.data.arrivingOn}T12:00:00.000Z`).toISOString() : null;
+  const leavingOn = parsed.data.leavingOn ? new Date(`${parsed.data.leavingOn}T12:00:00.000Z`).toISOString() : null;
+
+  if (arrivingOn && leavingOn && Date.parse(leavingOn) <= Date.parse(arrivingOn)) {
+    return { ok: false, message: "The leaving date needs to be after the arrival date." };
+  }
+
+  const now = nowIso();
+  await transaction((db) => {
+    const profile = db.profiles.find((row) => row.userId === userId);
+    if (profile) {
+      profile.arrivingOn = arrivingOn;
+      profile.leavingOn = leavingOn;
+    }
+    const move = db.moves.find((row) => row.userId === userId);
+    if (move) {
+      move.arrivingOn = arrivingOn;
+      move.leavingOn = leavingOn;
+      if (parsed.data.housing) move.housing = parsed.data.housing;
+      move.updatedAt = now;
+    }
+  });
+
+  revalidatePath("/home");
+  revalidatePath("/lifeops");
+  revalidatePath("/arrival");
+  revalidatePath("/you");
   return { ok: true };
 }
 
@@ -85,24 +214,36 @@ export async function updateProfile(input: z.input<typeof profileSchema>): Promi
  * The move resets the coarse home area, because a Malasaña address means
  * nothing in Berlin, and never touches saved rows: they keep their city and
  * simply stop being shown until the student is back.
+ *
+ * The campus is cleared only when the old one belongs to the old city. A
+ * student correcting a mistyped city should not silently lose the university
+ * they set — an earlier version cleared it unconditionally, and there was no
+ * screen to set it again.
  */
 export async function setHomeCity(citySlug: string): Promise<ProfileResult> {
   const userId = await requireUserId();
 
-  const { getCity } = await import("@/data/cities");
-  const city = getCity(citySlug);
+  const { getCampus, getCity, resolveCity } = await import("@/data/cities");
+  const city = resolveCity(citySlug) ?? getCity(citySlug);
   if (!city) return { ok: false, message: "That city is not on the list yet." };
 
   await transaction((db) => {
     const profile = db.profiles.find((row) => row.userId === userId);
     if (!profile) return;
     if (profile.citySlug === city.slug) return;
+
+    const campus = profile.campusSlug ? getCampus(profile.campusSlug) : undefined;
+    const campusMoves = campus?.citySlug === city.slug;
+
     profile.citySlug = city.slug;
     profile.countryCode = city.countryCode;
     profile.currency = city.currency.code;
     profile.locale = formatLocaleFor(profile.language, city);
-    profile.campusSlug = null;
-    profile.universityName = null;
+    if (!campusMoves) {
+      profile.campusSlug = null;
+      /* The free-text name is kept: a student at "Sciences Po" who moves from
+         Paris to Berlin for an exchange is still at Sciences Po. */
+    }
     profile.homeArea = null;
     profile.homePoint = null;
     profile.termsInCity = 1;
@@ -111,7 +252,7 @@ export async function setHomeCity(citySlug: string): Promise<ProfileResult> {
     if (move) {
       move.citySlug = city.slug;
       move.toCountryCode = city.countryCode;
-      move.campusSlug = null;
+      move.campusSlug = campusMoves ? move.campusSlug : null;
       move.updatedAt = nowIso();
     }
   });

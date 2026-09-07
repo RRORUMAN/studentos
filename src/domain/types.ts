@@ -311,6 +311,8 @@ export type CityEvent = {
   tags: readonly string[];
   /** When the row was last confirmed accurate. Stale events are demoted. */
   observedAt: Iso;
+  /** An image the source published for this event. Never a stock photo; null renders the kind field. */
+  imageUrl?: string | null;
   /** Set on ingested rows: the feed it came from and its id inside that feed. */
   sourceId?: Id | null;
   externalId?: string | null;
@@ -351,7 +353,7 @@ export type EventResponse = {
 /* Saved                                                                       */
 /* -------------------------------------------------------------------------- */
 
-export type SavedKind = "place" | "event" | "deal" | "plan";
+export type SavedKind = "place" | "event" | "deal" | "plan" | "listing" | "post";
 
 export type SavedItem = {
   id: Id;
@@ -391,6 +393,18 @@ export type CommunityPost = {
   commentCount: number;
   /** Soft moderation. Hidden rows stay for audit; they are never selected. */
   hiddenAt: Iso | null;
+  /** Poll options, for kind "poll". Votes live in `pollVotes`. */
+  poll?: readonly string[] | null;
+  /** Something the post points at. Rendered from the live row, never copied. */
+  attachment?: ChatAttachment | null;
+  createdAt: Iso;
+};
+
+/** One student, one poll, one option. Changing your vote updates the row. */
+export type PollVote = {
+  postId: Id;
+  userId: Id;
+  optionIndex: number;
   createdAt: Iso;
 };
 
@@ -419,8 +433,26 @@ export type Vote = {
  * shows up in a three-day-old message too.
  */
 export type ChatAttachment = {
-  kind: "event" | "place" | "plan" | "deal" | "invite";
+  kind: "event" | "place" | "plan" | "deal" | "invite" | "listing" | "poll" | "mission";
   id: Id;
+};
+
+/** A poll posted into a chat channel. Options are fixed at creation. */
+export type ChatPoll = {
+  id: Id;
+  channel: string;
+  authorId: Id;
+  question: string;
+  options: readonly string[];
+  closesAt: Iso | null;
+  createdAt: Iso;
+};
+
+export type ChatPollVote = {
+  pollId: Id;
+  userId: Id;
+  optionIndex: number;
+  createdAt: Iso;
 };
 
 export type ChatMessageRow = {
@@ -634,7 +666,40 @@ export type AiOperation =
   | "recommend"
   | "plan"
   | "budget"
+  | "mission"
   | "moderate";
+
+/* -------------------------------------------------------------------------- */
+/* Ask history                                                                 */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * One question a student asked, with the intent it resolved to. Kept so Ask
+ * can show "recent" and offer follow-ups. The raw query is the student's own
+ * and stays on their row; it is never aggregated — that is what `searchMisses`
+ * and its classified intent are for.
+ */
+export type AskHistoryRow = {
+  id: Id;
+  userId: Id;
+  query: string;
+  intent: string;
+  /** One line the console can show without re-running the ask. */
+  summary: string;
+  tier: 0 | 1 | 2 | 3;
+  createdAt: Iso;
+};
+
+/* -------------------------------------------------------------------------- */
+/* Follows                                                                     */
+/* -------------------------------------------------------------------------- */
+
+/** One-directional. Following is public reading; friendship is mutual. */
+export type Follow = {
+  followerId: Id;
+  followeeId: Id;
+  createdAt: Iso;
+};
 
 /**
  * One row per model call. This table is the reason the business can answer
@@ -776,7 +841,17 @@ export type SourceCheck = {
   reviewedAt: Iso | null;
 };
 
-export type ReportTargetKind = "place" | "event" | "deal" | "official-fact" | "guide" | "source";
+export type ReportTargetKind =
+  | "place"
+  | "event"
+  | "deal"
+  | "official-fact"
+  | "guide"
+  | "source"
+  | "listing"
+  | "post"
+  | "comment"
+  | "user";
 export type ReportReason =
   | "wrong-price"
   | "closed"
@@ -784,6 +859,10 @@ export type ReportReason =
   | "wrong-info"
   | "expired"
   | "source-changed"
+  | "scam"
+  | "spam"
+  | "harassment"
+  | "unsafe"
   | "other";
 
 /** "Wrong info", from a student or from the verification job. */

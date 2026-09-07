@@ -1,11 +1,14 @@
 import type { LucideIcon } from "lucide-react";
 import {
+  ArrowLeftRight,
   Banknote,
-  CalendarHeart,
-  Compass,
+  CalendarClock,
   Luggage,
   MessagesSquare,
+  Radar,
   Sparkles,
+  Target,
+  UsersRound,
 } from "lucide-react";
 
 import { brand } from "@/brand/brand.config";
@@ -21,58 +24,82 @@ export type ProductSurface = {
 };
 
 /**
- * The six product surfaces. This list drives the nav mega-panel, the footer,
- * the "one app instead of ten" section and the city page sub-navigation, so a
- * new surface is added in exactly one place.
+ * The product surfaces a visitor can read about. This list drives the nav
+ * panel and the footer, so a new surface is added in exactly one place. Each
+ * link lands on the section of the landing page that shows it working.
  */
 export const productSurfaces: readonly ProductSurface[] = [
   {
-    key: "loop",
-    label: brand.surfaces.loop,
-    blurb: "What students in your city are posting, asking and organising right now.",
-    href: "/#loop",
-    icon: MessagesSquare,
-    accent: "pulse",
-  },
-  {
-    key: "brain",
-    label: brand.surfaces.brain,
-    blurb: "Answers built from student knowledge and local data, with sources attached.",
-    href: "/#city-brain",
+    key: "ask",
+    label: `Ask ${brand.name}`,
+    blurb: "One question, one answer built from real rows: places, events, deals, your budget.",
+    href: "/#ask",
     icon: Sparkles,
     accent: "signal",
   },
   {
-    key: "discover",
-    label: brand.surfaces.discover,
-    blurb: "A map that knows the price, the walk and whether students actually go.",
-    href: "/#discover",
-    icon: Compass,
-    accent: "mint",
+    key: "pulse",
+    label: brand.surfaces.pulse,
+    blurb: "What students in your city are posting, asking and organising right now.",
+    href: "/#pulse",
+    icon: MessagesSquare,
+    accent: "pulse",
+  },
+  {
+    key: "anyone-down",
+    label: brand.surfaces.anyoneDown,
+    blurb: "Turn any event, place or plan into a group. Then a chat. Then a shared plan.",
+    href: "/#anyone-down",
+    icon: UsersRound,
+    accent: "pulse",
+  },
+  {
+    key: "events",
+    label: "Event radar",
+    blurb: "Tonight, free, under €10, campus, trending. Before it happened, not after.",
+    href: "/#events",
+    icon: Radar,
+    accent: "amber",
   },
   {
     key: "budget",
     label: brand.surfaces.budget,
-    blurb: "Not a spreadsheet. A number that tells you what tonight can cost.",
+    blurb: "Safe today, safe this week, and whether tonight's plan actually fits.",
     href: "/#budget",
     icon: Banknote,
     accent: "flow",
   },
   {
-    key: "anyone-down",
-    label: brand.surfaces.anyoneDown,
-    blurb: "Turn a plan into a group before you know anyone properly.",
-    href: "/#anyone-down",
-    icon: CalendarHeart,
-    accent: "pulse",
+    key: "lifeops",
+    label: "LifeOps",
+    blurb: "Deadlines, classes, tasks, plans and payments on one timeline.",
+    href: "/#lifeops",
+    icon: CalendarClock,
+    accent: "flow",
+  },
+  {
+    key: "missions",
+    label: "Smart Missions",
+    blurb: "Weekend under €30, first 7 days, make €50 last. Priced steps, not tips.",
+    href: "/#missions",
+    icon: Target,
+    accent: "signal",
   },
   {
     key: "arrival",
     label: brand.surfaces.arrival,
-    blurb: "Transport card, SIM, bank, gym. The first-two-weeks list, per city.",
+    blurb: "Before arrival, first day, first week, first month. Official items link to sources.",
     href: "/#arrival",
     icon: Luggage,
     accent: "amber",
+  },
+  {
+    key: "exchange",
+    label: "Student Exchange",
+    blurb: "Students leaving have what new students need. A desk, a bike, a lift to the airport.",
+    href: "/#exchange",
+    icon: ArrowLeftRight,
+    accent: "mint",
   },
 ] as const;
 
@@ -84,30 +111,22 @@ export type NavItem = {
 };
 
 export const primaryNav: readonly NavItem[] = [
-  { label: "Product", href: "/#product", panel: "product" },
-  { label: "Pulse", href: "/#loop" },
-  { label: "Discover", href: "/#discover" },
+  { label: "Product", href: "/#ask", panel: "product" },
+  { label: "Pulse", href: "/#pulse" },
   { label: "Budget", href: "/#budget" },
-  { label: "Students", href: "/students" },
+  { label: "Cities", href: "/#cities" },
   { label: "Pricing", href: "/pricing" },
 ] as const;
 
 export const authNav = {
-  signIn: { label: "Sign in", href: "/login" },
-  primary: { label: "Get started free", href: "/signup" },
+  signIn: { label: "Sign in", href: "/signin" },
+  primary: { label: "Get started", href: "/get-started" },
 } as const;
 
 export const footerNav: readonly { title: string; links: readonly NavItem[] }[] = [
   {
     title: "Product",
-    links: [
-      { label: brand.surfaces.loop, href: "/#loop" },
-      { label: brand.surfaces.brain, href: "/#city-brain" },
-      { label: brand.surfaces.discover, href: "/#discover" },
-      { label: brand.surfaces.budget, href: "/#budget" },
-      { label: brand.surfaces.anyoneDown, href: "/#anyone-down" },
-      { label: brand.surfaces.arrival, href: "/#arrival" },
-    ],
+    links: productSurfaces.map((surface) => ({ label: surface.label, href: surface.href })),
   },
   {
     title: "Cities",
@@ -135,7 +154,8 @@ export const footerNav: readonly { title: string; links: readonly NavItem[] }[] 
     title: "Company",
     links: [
       { label: "Pricing", href: "/pricing" },
-      { label: "How recommendations work", href: "/#city-brain" },
+      { label: "How answers are built", href: "/#ask" },
+      { label: "Privacy and trust", href: "/#trust" },
       { label: "Contact", href: `mailto:${brand.contact.support}` },
     ],
   },

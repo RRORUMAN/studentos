@@ -1,11 +1,12 @@
 "use client";
 
-import { Loader2, Plus, X } from "lucide-react";
+import { Loader2, Plus, Trash2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
 import { Button } from "@/components/ui/button";
-import { createCollection, moveToCollection } from "@/server/actions/collections";
+import { useToast } from "@/components/ui/toast";
+import { createCollection, deleteCollection, moveToCollection } from "@/server/actions/collections";
 import { cn } from "@/lib/utils";
 
 const EMOJI = ["📌", "🍜", "🎟️", "📚", "🌃", "🏋️", "☕", "🎨", "🚆", "🎁"];
@@ -69,6 +70,7 @@ export function NewCollectionForm({ canCollaborate }: { canCollaborate: boolean 
             if (result.ok) {
               setOpen(false);
               setName("");
+              router.push(`/saved?c=${result.id}`);
               router.refresh();
             } else setError(result.message);
           });
@@ -118,5 +120,37 @@ export function CollectionPicker({
         </option>
       ))}
     </select>
+  );
+}
+
+/**
+ * Delete a named collection. The items in it go back to the flat list; nothing
+ * a student saved is ever removed by deleting the folder it sat in.
+ */
+export function DeleteCollectionButton({ collectionId, name }: { collectionId: string; name: string }) {
+  const router = useRouter();
+  const toast = useToast();
+  const [pending, startTransition] = useTransition();
+
+  return (
+    <button
+      type="button"
+      disabled={pending}
+      onClick={() => {
+        if (!window.confirm(`Delete “${name}”? What is in it stays saved.`)) return;
+        startTransition(async () => {
+          const result = await deleteCollection(collectionId);
+          if (result.ok) {
+            toast({ title: `Deleted “${name}”`, description: "Its items are back in All." });
+            router.push("/saved");
+            router.refresh();
+          } else toast({ tone: "warning", title: result.message });
+        });
+      }}
+      className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[0.8125rem] font-medium text-ink-500 hover:bg-pulse-soft hover:text-pulse-deep"
+    >
+      {pending ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
+      Delete collection
+    </button>
   );
 }

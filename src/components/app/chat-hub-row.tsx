@@ -1,15 +1,22 @@
 "use client";
 
-import { Archive, BellOff, MoreHorizontal, Pin } from "lucide-react";
+import { Archive, BellOff, Check, MoreHorizontal, Pin } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 
-import { setChatPref } from "@/server/actions/chat";
+import { markChannelRead, setChatPref } from "@/server/actions/chat";
 import type { ChatRow } from "@/server/queries/chat";
 import { ago, cn } from "@/lib/utils";
 
-/** One conversation in the hub, with pin / mute / archive behind a menu. */
+/**
+ * One conversation in the hub.
+ *
+ * The row opens the *chat*, always. It used to open the event or the plan for
+ * those two groups, which meant the read cursor was never written and their
+ * unread badges could only ever grow. What the chat is about is a second,
+ * smaller link beside it.
+ */
 export function ChatHubRow({ row, minutesAgo }: { row: ChatRow; minutesAgo: number | null }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -33,6 +40,14 @@ export function ChatHubRow({ row, minutesAgo }: { row: ChatRow; minutesAgo: numb
     });
   };
 
+  const markRead = () => {
+    setOpen(false);
+    startTransition(async () => {
+      await markChannelRead(row.channel);
+      router.refresh();
+    });
+  };
+
   return (
     <li ref={ref} className="relative">
       <Link
@@ -52,7 +67,7 @@ export function ChatHubRow({ row, minutesAgo }: { row: ChatRow; minutesAgo: numb
             {row.muted ? <BellOff className="size-3 shrink-0 text-ink-400" /> : null}
           </span>
           <span className="mt-0.5 block truncate text-[0.8125rem] text-ink-500">
-            {row.lastLine ?? "No messages yet"}
+            {row.matchLine ?? row.lastLine ?? "No messages yet"}
           </span>
         </span>
         <span className="flex shrink-0 flex-col items-end gap-1 pr-7">
@@ -67,12 +82,21 @@ export function ChatHubRow({ row, minutesAgo }: { row: ChatRow; minutesAgo: numb
         </span>
       </Link>
 
+      {row.about ? (
+        <Link
+          href={row.about.href}
+          className="relative z-10 -mt-1 ml-[3.875rem] mb-1.5 inline-block text-[0.75rem] font-medium text-ink-500 underline underline-offset-4 hover:text-ink-900"
+        >
+          {row.about.label}
+        </Link>
+      ) : null}
+
       <button
         type="button"
         aria-label={`Options for ${row.title}`}
         aria-expanded={open}
         onClick={() => setOpen((current) => !current)}
-        className="absolute top-1/2 right-2 grid size-8 -translate-y-1/2 place-items-center rounded-full text-ink-400 hover:bg-ink-100 hover:text-ink-800"
+        className="absolute top-6 right-2 grid size-8 -translate-y-1/2 place-items-center rounded-full text-ink-400 hover:bg-ink-100 hover:text-ink-800"
       >
         <MoreHorizontal className="size-4" />
       </button>
@@ -80,8 +104,15 @@ export function ChatHubRow({ row, minutesAgo }: { row: ChatRow; minutesAgo: numb
       {open ? (
         <ul
           role="menu"
-          className="absolute top-full right-2 z-30 mt-1 w-44 overflow-hidden rounded-xl bg-white p-1.5 shadow-[var(--shadow-lift)] ring-1 ring-ink-950/8"
+          className="absolute top-12 right-2 z-30 mt-1 w-44 overflow-hidden rounded-xl bg-white p-1.5 shadow-[var(--shadow-lift)] ring-1 ring-ink-950/8"
         >
+          {row.unread > 0 ? (
+            <li role="none">
+              <button type="button" role="menuitem" onClick={markRead} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[0.875rem] text-ink-800 hover:bg-paper-2">
+                <Check className="size-4 text-ink-400" /> Mark read
+              </button>
+            </li>
+          ) : null}
           <li role="none">
             <button type="button" role="menuitem" onClick={() => set({ pinned: !row.pinned })} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[0.875rem] text-ink-800 hover:bg-paper-2">
               <Pin className="size-4 text-ink-400" /> {row.pinned ? "Unpin" : "Pin"}

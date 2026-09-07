@@ -1,26 +1,29 @@
-import { Clock, ExternalLink, MapPin, ShieldCheck, Users } from "lucide-react";
+import { Clock, ExternalLink, Footprints, MapPin, ShieldCheck, Users } from "lucide-react";
 import Link from "next/link";
 
+import { InterestedToggle } from "@/components/app/event-actions";
 import { FeedbackMenu } from "@/components/app/feedback-menu";
+import { SaveButton } from "@/components/app/save-button";
 import { Badge } from "@/components/ui/primitives";
 import type { CityEvent } from "@/domain/types";
 import type { EventEnergy } from "@/server/queries/events";
 import type { Scored } from "@/server/engines/recommend";
+import { fmtDay, fmtWhen } from "@/lib/dates";
 import { cn, money } from "@/lib/utils";
-import { whenLabel } from "@/components/app/feed-card";
 
 /**
  * ============================================================================
  * EVENT CARD — the radar card
  * ----------------------------------------------------------------------------
- * Title, price, time, venue, who is going, where the row came from, and why it
- * is being shown. The social line is the point of the redesign: "42 interested
- * · 11 from your university · 2 friends" is what turns a listing into
- * something a student acts on.
+ * Title, price, time, venue, walk, who is going, where the row came from, why
+ * it is being shown, a bookmark and a one-tap Interested. The social line is
+ * the point: "42 interested · 11 from your university · 2 friends" is what
+ * turns a listing into something a student acts on.
  *
- * Every number is a count of rows. The image slot is a coloured field keyed on
- * kind, because the rows carry no photos and a stock image would be a lie
- * about the venue.
+ * Every number is a count of rows. The image slot renders the source's own
+ * image when the row carries one; otherwise a coloured field keyed on kind,
+ * because a stock photo would be a lie about the venue. The walk time appears
+ * only when the profile has a home point — never a default number.
  * ============================================================================
  */
 
@@ -37,7 +40,7 @@ const KIND_FIELD: Record<CityEvent["kind"], string> = {
   outdoor: "from-mint/60 to-flow/50",
 };
 
-const KIND_LABEL: Record<CityEvent["kind"], string> = {
+export const eventKindLabel: Record<CityEvent["kind"], string> = {
   music: "Music",
   nightlife: "Nightlife",
   networking: "Networking",
@@ -55,27 +58,40 @@ export function RadarCard({
   energy,
   where,
   now,
+  timeZone,
   campusName,
+  saved = false,
 }: {
   scored: Scored<CityEvent>;
   energy: EventEnergy | undefined;
   where: { currency: string; locale: string };
   now: Date;
+  /** The city's IANA zone. Times are the city's, never the browser's. */
+  timeZone: string;
   campusName: string | null;
+  /** Whether the viewer has bookmarked it. */
+  saved?: boolean;
 }) {
   const event = scored.item;
   const interested = event.interested + (energy?.interested ?? 0);
   const going = energy?.going ?? 0;
   const friends = energy?.friends ?? [];
-  const fresh = now.getTime() - Date.parse(event.observedAt) < 7 * 86_400_000;
+  const walk = scored.walkMinutes ?? null;
+  const checkedAgoDays = (now.getTime() - Date.parse(event.observedAt)) / 86_400_000;
+  const freshness = checkedAgoDays <= 7 ? "Checked this week" : `Checked ${fmtDay(event.observedAt, timeZone, now)}`;
+  const hasSocial = interested > 0 || going > 0 || friends.length > 0 || (energy?.fromCampus ?? 0) > 0 || (energy?.lookingForCompany ?? 0) > 0;
 
   return (
-    <article className="group relative flex flex-col overflow-hidden rounded-2xl bg-white shadow-[var(--shadow-flat)] ring-1 ring-ink-950/6 transition-shadow hover:shadow-[var(--shadow-raise)]">
+    <article className="group relative flex h-full flex-col overflow-hidden rounded-2xl bg-white shadow-[var(--shadow-flat)] ring-1 ring-ink-950/6 transition-shadow hover:shadow-[var(--shadow-raise)]">
       {/* ---- field ------------------------------------------------------- */}
-      <div className={cn("relative h-24 bg-linear-to-br", KIND_FIELD[event.kind])}>
-        <div className="absolute inset-x-3 top-3 flex items-start justify-between">
+      <div className={cn("relative h-28 bg-linear-to-br", KIND_FIELD[event.kind])}>
+        {event.imageUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element -- the source publishes the image on its own host; remote hosts are not known ahead of time for next/image.
+          <img src={event.imageUrl} alt="" loading="lazy" className="absolute inset-0 size-full object-cover" />
+        ) : null}
+        <div className="absolute inset-x-3 top-3 flex items-start justify-between gap-2">
           <span className="rounded-full bg-ink-950/70 px-2.5 py-1 font-mono text-micro uppercase tracking-[0.1em] text-paper backdrop-blur-sm">
-            {KIND_LABEL[event.kind]}
+            {eventKindLabel[event.kind]}
           </span>
           {event.priceCents === 0 ? (
             <Badge accent="mint" tone="solid">Free</Badge>
@@ -85,11 +101,16 @@ export function RadarCard({
             </span>
           )}
         </div>
-        {energy?.mine ? (
-          <span className="absolute bottom-3 left-3 rounded-full bg-paper px-2.5 py-1 text-[0.75rem] font-semibold text-ink-950">
-            {energy.mine === "going" ? "You're going" : "You're interested"}
-          </span>
-        ) : null}
+        <div className="absolute inset-x-3 bottom-3 flex items-end justify-between gap-2">
+          {energy?.mine ? (
+            <span className="rounded-full bg-paper px-2.5 py-1 text-[0.75rem] font-semibold text-ink-950">
+              {energy.mine === "going" ? "You're going" : "You're interested"}
+            </span>
+          ) : (
+            <span />
+          )}
+          <SaveButton kind="event" targetId={event.id} saved={saved} compact className="relative z-10" />
+        </div>
       </div>
 
       <div className="flex flex-1 flex-col p-4">
@@ -105,23 +126,32 @@ export function RadarCard({
         <dl className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[0.8125rem] text-ink-600">
           <div className="flex items-center gap-1.5">
             <Clock className="size-3.5 text-ink-400" aria-hidden />
-            <dd>{whenLabel(event.startsAt, now)}</dd>
+            <dt className="sr-only">When</dt>
+            <dd>{fmtWhen(event.startsAt, timeZone, now)}</dd>
           </div>
           <div className="flex min-w-0 items-center gap-1.5">
             <MapPin className="size-3.5 text-ink-400" aria-hidden />
+            <dt className="sr-only">Where</dt>
             <dd className="truncate">{event.venue}</dd>
           </div>
+          {walk !== null ? (
+            <div className="flex items-center gap-1.5">
+              <Footprints className="size-3.5 text-ink-400" aria-hidden />
+              <dt className="sr-only">Walk</dt>
+              <dd className="tnum">{walk} min walk</dd>
+            </div>
+          ) : null}
         </dl>
 
         {/* ---- energy ----------------------------------------------------- */}
-        {interested > 0 || going > 0 || friends.length > 0 || (energy?.fromCampus ?? 0) > 0 ? (
+        {hasSocial ? (
           <p className="mt-2.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.8125rem] font-medium text-ink-800">
             <Users className="size-3.5 text-ink-400" aria-hidden />
             {going > 0 ? <span className="tnum">{going} going</span> : null}
-            {interested > 0 ? <span className="tnum">{interested} interested</span> : null}
+            {interested > 0 ? <span className="tnum">{interested} students interested</span> : null}
             {energy && energy.fromCampus > 0 ? (
               <span className="tnum text-flow-deep">
-                {energy.fromCampus} from {campusName ?? "your campus"}
+                {energy.fromCampus} from {campusName ?? "your university"}
               </span>
             ) : null}
             {friends.length > 0 ? (
@@ -131,7 +161,11 @@ export function RadarCard({
                     {friend.avatarEmoji}
                   </span>
                 ))}
-                {friends.length === 1 ? friends[0].displayName : `${friends.length} friends`}
+                {friends.length === 1
+                  ? `${friends[0].displayName} is ${friends[0].status}`
+                  : friends.length === 2
+                    ? `${friends[0].displayName} and ${friends[1].displayName}`
+                    : `${friends[0].displayName} and ${friends.length - 1} more friends`}
               </span>
             ) : null}
             {energy && energy.lookingForCompany > 0 ? (
@@ -149,18 +183,22 @@ export function RadarCard({
           </p>
         ) : null}
 
-        <div className="mt-auto flex items-center gap-2 pt-3 text-[0.75rem] text-ink-400">
-          {event.confirmations >= 10 ? (
-            <span className="inline-flex items-center gap-1 text-mint-deep">
-              <ShieldCheck className="size-3.5" />
-              Verified
+        <div className="mt-auto flex items-center justify-between gap-2 pt-3">
+          <p className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[0.75rem] text-ink-400">
+            {event.confirmations >= 10 ? (
+              <span className="inline-flex items-center gap-1 text-mint-deep">
+                <ShieldCheck className="size-3.5" />
+                Verified
+              </span>
+            ) : null}
+            <span>
+              {event.source === "official" ? "Official" : event.source === "venue" ? "Venue" : "Students"}
             </span>
-          ) : null}
-          <span>
-            {event.source === "official" ? "Official" : event.source === "venue" ? "Venue" : "Students"}
-          </span>
-          {event.sourceUrl ? <ExternalLink className="size-3" aria-hidden /> : null}
-          {fresh ? <span>· Updated this week</span> : null}
+            {event.sourceUrl ? <ExternalLink className="size-3" aria-hidden /> : null}
+            <span aria-hidden>·</span>
+            <span>{freshness}</span>
+          </p>
+          <InterestedToggle eventId={event.id} status={energy?.mine ?? null} />
         </div>
       </div>
     </article>

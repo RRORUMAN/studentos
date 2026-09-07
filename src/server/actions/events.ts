@@ -1,9 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 
-import { findOne, insert, newId, nowIso, remove, transaction } from "@/server/db";
+import { findOne, insert, newId, nowIso, transaction } from "@/server/db";
 import { recordOutcome } from "@/server/actions/insight";
+import { limits, rateLimit } from "@/server/rate-limit";
 import { loadFriendIds } from "@/server/queries/social";
 import { requireUserId } from "@/server/viewer";
 
@@ -17,6 +19,10 @@ import { requireUserId } from "@/server/viewer";
  * tells friends. Both are deliberate — a student who says they are going has
  * made a small public commitment, and the product should make it easy for the
  * people who might join them to see it.
+ *
+ * Clearing the response (status null) is the only way out of the chat; there
+ * is no separate "leave" action, because one path in and one path out is one
+ * fewer place for the two to disagree.
  * ============================================================================
  */
 
@@ -24,41 +30,50 @@ export type EventResponseResult =
   | { ok: true; status: "interested" | "going" | null }
   | { ok: false; message: string };
 
+const responseSchema = z.object({
+  eventId: z.string().trim().min(1).max(120),
+  status: z.enum(["interested", "going"]).nullable(),
+});
+
 export async function respondToEvent(
   eventId: string,
   status: "interested" | "going" | null,
 ): Promise<EventResponseResult> {
   const userId = await requireUserId();
 
-  const event = await findOne("events", (row) => row.id === eventId);
+  const parsed = responseSchema.safeParse({ eventId, status });
+  if (!parsed.success) return { ok: false, message: "That response did not make sense." };
+
+  const gate = rateLimit(`events:respond:${userId}`, limits.chat.limit, limits.chat.windowSeconds);
+  if (!gate.ok) return { ok: false, message: "Slow down a moment and try again." };
+
+  const event = await findOne("events", (row) => row.id === parsed.data.eventId);
   if (!event) return { ok: false, message: "That event is not listed any more." };
 
   const previous = await findOne(
     "eventResponses",
-    (row) => row.eventId === eventId && row.userId === userId,
+    (row) => row.eventId === event.id && row.userId === userId,
   );
 
   await transaction((db) => {
     const index = db.eventResponses.findIndex(
-      (row) => row.eventId === eventId && row.userId === userId,
+      (row) => row.eventId === event.id && row.userId === userId,
     );
-    if (status === null) {
+    if (parsed.data.status === null) {
       if (index !== -1) db.eventResponses.splice(index, 1);
       return;
     }
-    const row = { eventId, userId, status, respondedAt: nowIso() };
+    const row = { eventId: event.id, userId, status: parsed.data.status, respondedAt: nowIso() };
     if (index === -1) db.eventResponses.push(row);
     else db.eventResponses[index] = row;
   });
 
   /* Going, for the first time, tells friends who have that topic on. */
-  if (status === "going" && previous?.status !== "going") {
-    const [friends, me, prefs] = await Promise.all([
+  if (parsed.data.status === "going" && previous?.status !== "going") {
+    const [friends, me] = await Promise.all([
       loadFriendIds(userId),
       findOne("profiles", (row) => row.userId === userId),
-      Promise.resolve(null),
     ]);
-    void prefs;
 
     for (const friendId of friends) {
       const friendPrefs = await findOne("notificationPrefs", (row) => row.userId === friendId);
@@ -73,26 +88,19 @@ export async function respondToEvent(
           hour: "2-digit",
           minute: "2-digit",
         })} · ${event.venue}`,
-        href: `/events/${eventId}`,
+        href: `/events/${event.id}`,
         readAt: null,
         createdAt: nowIso(),
       });
     }
 
-    await recordOutcome("event-saved", eventId);
+    await recordOutcome("event-saved", event.id);
   }
 
-  revalidatePath(`/events/${eventId}`);
+  revalidatePath(`/events/${event.id}`);
   revalidatePath("/events");
+  revalidatePath("/discover");
   revalidatePath("/home");
   revalidatePath("/plans");
-  return { ok: true, status };
-}
-
-/** Leave an event entirely: response gone, chat access gone. */
-export async function leaveEvent(eventId: string): Promise<EventResponseResult> {
-  const userId = await requireUserId();
-  await remove("eventResponses", (row) => row.eventId === eventId && row.userId === userId);
-  revalidatePath(`/events/${eventId}`);
-  return { ok: true, status: null };
+  return { ok: true, status: parsed.data.status };
 }

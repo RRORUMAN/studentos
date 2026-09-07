@@ -1,17 +1,21 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 
 import { findOne, insert, newId, nowIso, remove, transaction, update } from "@/server/db";
 import { limits, rateLimit } from "@/server/rate-limit";
 import { recordOutcome } from "@/server/actions/insight";
+import { isBlocked } from "@/server/queries/social";
 import { requireUserId } from "@/server/viewer";
 
 /**
  * ============================================================================
- * FRIENDS
+ * FRIENDS AND FOLLOWS
  * ----------------------------------------------------------------------------
- * Requests, acceptance, removal and blocking.
+ * Requests, acceptance, removal, blocking — and following, which is the
+ * lighter, one-way relationship: "show me what this person posts" without
+ * asking them anything.
  *
  * Nothing "friends-aware" in the product worked before this existed: the
  * recommendation scorer has a friends signal, invites have a friends audience,
@@ -26,6 +30,8 @@ import { requireUserId } from "@/server/viewer";
  */
 
 export type FriendResult = { ok: true } | { ok: false; message: string };
+
+const idSchema = z.string().min(1).max(80);
 
 /* -------------------------------------------------------------------------- */
 /* Request                                                                     */
@@ -128,6 +134,7 @@ export async function acceptFriendRequest(requesterId: string): Promise<FriendRe
   await recordOutcome("friend-connected", requesterId);
 
   revalidatePath("/you/friends");
+  revalidatePath("/pulse/chat");
   revalidatePath("/home");
   return { ok: true };
 }
@@ -158,6 +165,49 @@ export async function removeFriend(otherId: string): Promise<FriendResult> {
   );
 
   revalidatePath("/you/friends");
+  revalidatePath("/pulse/chat");
+  return { ok: true };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Follow                                                                      */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Follow someone. One-directional and silent: no request, no notification,
+ * nothing implied back. The Following feed and the "For you" boost read it.
+ */
+export async function followStudent(targetId: string): Promise<FriendResult> {
+  const userId = await requireUserId();
+
+  const parsed = idSchema.safeParse(targetId);
+  if (!parsed.success || targetId === userId) return { ok: false, message: "You cannot follow yourself." };
+
+  const gate = rateLimit(`follow:${userId}`, limits.post.limit, limits.post.windowSeconds);
+  if (!gate.ok) return { ok: false, message: "Slow down a moment." };
+
+  const target = await findOne("profiles", (row) => row.userId === targetId && row.onboardedAt !== null);
+  if (!target) return { ok: false, message: "No such student." };
+  if (target.privacy.profileVisibility === "private") return { ok: false, message: "That student is not accepting followers." };
+  if (await isBlocked(userId, targetId)) return { ok: false, message: "That student is not accepting followers." };
+
+  await transaction((db) => {
+    if (db.follows.some((row) => row.followerId === userId && row.followeeId === targetId)) return;
+    db.follows.push({ followerId: userId, followeeId: targetId, createdAt: nowIso() });
+  });
+
+  revalidatePath("/you/friends");
+  revalidatePath("/pulse");
+  return { ok: true };
+}
+
+export async function unfollowStudent(targetId: string): Promise<FriendResult> {
+  const userId = await requireUserId();
+
+  await remove("follows", (row) => row.followerId === userId && row.followeeId === targetId);
+
+  revalidatePath("/you/friends");
+  revalidatePath("/pulse");
   return { ok: true };
 }
 
@@ -169,8 +219,9 @@ export async function removeFriend(otherId: string): Promise<FriendResult> {
  * Block someone.
  *
  * Replaces whatever relationship existed, in one transaction, with the blocker
- * recorded as the requester so the direction is unambiguous. Everything else in
- * the product reads `isBlocked`, which is symmetric.
+ * recorded as the requester so the direction is unambiguous. Follows in both
+ * directions go too. Everything else in the product reads `isBlocked`, which
+ * is symmetric.
  */
 export async function blockStudent(targetId: string): Promise<FriendResult> {
   const userId = await requireUserId();
@@ -192,10 +243,21 @@ export async function blockStudent(targetId: string): Promise<FriendResult> {
       status: "blocked",
       createdAt: nowIso(),
     });
+
+    const follows = db.follows.filter(
+      (row) =>
+        !(
+          (row.followerId === userId && row.followeeId === targetId) ||
+          (row.followerId === targetId && row.followeeId === userId)
+        ),
+    );
+    db.follows.length = 0;
+    db.follows.push(...follows);
   });
 
   revalidatePath("/you/friends");
   revalidatePath("/pulse");
+  revalidatePath("/pulse/chat");
   return { ok: true };
 }
 
@@ -209,5 +271,7 @@ export async function unblockStudent(targetId: string): Promise<FriendResult> {
   );
 
   revalidatePath("/you/friends");
+  revalidatePath("/pulse");
+  revalidatePath("/pulse/chat");
   return { ok: true };
 }

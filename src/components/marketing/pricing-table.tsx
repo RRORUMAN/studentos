@@ -1,343 +1,267 @@
 "use client";
 
-import { motion, useReducedMotion } from "motion/react";
-import { Check, Globe2, Minus, Sparkle } from "lucide-react";
+import { Check, Minus } from "lucide-react";
 import { useState } from "react";
 
 import { ButtonLink } from "@/components/ui/button";
-import { Atmosphere, Eyebrow, Section } from "@/components/ui/primitives";
+import { Badge, SampleTag, Section, SectionHeader } from "@/components/ui/primitives";
 import { Reveal } from "@/components/ui/reveal";
-import { brand } from "@/brand/brand.config";
+import type { SectionTone } from "@/components/ui/primitives";
 import {
-  annualSaving,
+  featureCopy,
+  featureTier,
+  planHasFeature,
+  quotas,
+  tierOrder,
+  type Feature,
+} from "@/config/entitlements";
+import {
   annualSavingLabel,
   billedTotal,
-  defaultCurrency,
-  fairUseNote,
-  featureMatrix,
-  localeFor,
   plans,
-  priceCurrencies,
   pricingAssurances,
   pricingFaq,
   priceFor,
   type BillingPeriod,
-  type MatrixValue,
   type PlanKey,
-  type PriceCurrency,
 } from "@/config/pricing";
-import { ease } from "@/lib/motion";
 import { cn, money } from "@/lib/utils";
 import { track } from "@/services/analytics";
+
+const TIER_HEADING: Record<PlanKey, string> = {
+  free: "Free on every tier",
+  plus: "Added by Plus",
+  pro: "Added by Pro",
+  max: "Added by Max",
+};
+
+/** Never gated, at any price. Stated as capabilities, not as a feature list. */
+const ALWAYS_FREE = [
+  "Student Pulse, city and campus feeds",
+  "Chat, replies, reactions and polls",
+  "Events, deals and the core map",
+  "Anyone Down? — join and host",
+  "Arrival Mode, LifeOps and Smart Missions",
+  "The basic budget with Safe today",
+];
 
 /**
  * ============================================================================
  * PRICING
  * ----------------------------------------------------------------------------
- * The free tier is the product strategy, so it is a full column rather than a
- * footnote — a network with a paywall in front of it has no network.
+ * Four cards and one table. The table is generated from `featureTier` — the
+ * same map the server enforces entitlements with — so it is structurally
+ * impossible for the marketing page to promise a feature at a tier the product
+ * does not grant it at. Quota rows come from `quotas` for the same reason.
  *
- * Three things this section does that a card grid alone cannot:
- *
- *   · prices in the student's own currency, from list prices chosen per market
- *     rather than an FX conversion that lands on $8.63;
- *   · a comparison table, because the real question at this point is "what do I
- *     lose by staying free" and four bullet lists make you diff them by eye;
- *   · quantities instead of ticks wherever a feature is rate limited. A tick on
- *     a capped feature is the oldest lie on a pricing page.
- *
- * Every number comes from `priceFor` — the same function the checkout quote
- * calls — so the table cannot drift from what is actually charged.
+ * Prices, the annual discount and every label come from `config/pricing.ts`.
+ * Nothing on this page knows what a tier costs.
  * ============================================================================
  */
 export function PricingTable({
-  showFaq = false,
+  tone = "paper",
   showHeader = true,
-  tone = "warm",
+  showFaq = false,
 }: {
-  showFaq?: boolean;
+  tone?: SectionTone;
   showHeader?: boolean;
-  tone?: "warm" | "paper";
+  showFaq?: boolean;
 }) {
-  const reduced = useReducedMotion();
-  const [period, setPeriod] = useState<BillingPeriod>("annual");
-  const [currency, setCurrency] = useState<PriceCurrency>(defaultCurrency);
-
-  const where = { currency, locale: localeFor(currency) };
+  const [period, setPeriod] = useState<BillingPeriod>("monthly");
 
   return (
-    <Section id="pricing" tone={tone} className="overflow-hidden">
-      <Atmosphere
-        grid={false}
-        blobs={[{ className: "-top-64 left-1/2 size-[46rem] -translate-x-1/2 bg-signal/16", drift: "b" }]}
-      />
-
-      <div className="page relative">
+    <Section id="pricing" tone={tone}>
+      <div className="page">
         {showHeader ? (
-          <Reveal>
-            <div className="max-w-3xl">
-              <Eyebrow index="16">Pricing</Eyebrow>
-              <h2 className="mt-4 text-display-md text-ink-950">
-                The community is free. The depth is what you pay for.
-              </h2>
-              <p className="mt-5 max-w-2xl text-lg leading-relaxed text-ink-600">
-                A network is worthless with a paywall in front of it, so {brand.surfaces.loop},
-                city chat, events, deals and joining other people&rsquo;s plans stay free
-                permanently and unmetered. Paying unlocks the rest of the product — unlimited AI,
-                every map layer and filter, the budget coach, forecasting, group planning and
-                Survival Mode.
-              </p>
-            </div>
-          </Reveal>
+          <SectionHeader
+            align="center"
+            eyebrow="Pricing"
+            eyebrowIndex="17"
+            title="Free is genuinely free. Paying buys depth."
+            lead="The community, discovery, events, Anyone Down?, Arrival Mode, LifeOps, missions and a real budget cost nothing, permanently. Paid tiers add intelligence over the same data — never access to other students."
+          />
         ) : null}
 
-        {/* ---- controls ------------------------------------------------------ */}
-        <Reveal delay={0.05}>
-          <div className={cn("flex flex-wrap items-center gap-3", showHeader && "mt-9")}>
-            <div
-              role="radiogroup"
-              aria-label="Billing period"
-              className="inline-flex rounded-full border border-ink-200 bg-white p-1"
-            >
-              {(["monthly", "annual"] as const).map((key) => (
-                <button
-                  key={key}
-                  type="button"
-                  role="radio"
-                  aria-checked={period === key}
-                  onClick={() => {
-                    setPeriod(key);
-                    track("pricing_period_changed", { period: key });
-                  }}
-                  className={cn(
-                    "relative rounded-full px-4 py-2 text-sm font-medium capitalize transition-colors",
-                    period === key ? "text-ink-950" : "text-ink-500 hover:text-ink-800",
-                  )}
-                >
-                  {period === key ? (
-                    <motion.span
-                      layoutId="pricing-switch"
-                      className="absolute inset-0 rounded-full bg-ink-100"
-                      transition={reduced ? { duration: 0 } : { duration: 0.24, ease: ease.out }}
-                    />
-                  ) : null}
-                  <span className="relative">{key}</span>
-                </button>
-              ))}
-            </div>
-
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-signal px-3 py-1.5 text-[0.8125rem] font-medium text-ink-950">
-              <Sparkle className="size-3.5" aria-hidden />
-              Annual is {annualSavingLabel}
-            </span>
-
-            {/* Currency. Sits with the billing switch because it is the same
-                decision: what will actually leave my account, and in what. */}
-            <div className="ml-auto flex items-center gap-2">
-              <Globe2 className="size-4 text-ink-400" aria-hidden />
-              <label htmlFor="pricing-currency" className="sr-only">
-                Display currency
-              </label>
-              <select
-                id="pricing-currency"
-                value={currency}
-                onChange={(event) => setCurrency(event.target.value as PriceCurrency)}
+        {/* ---- billing toggle ---------------------------------------------- */}
+        <div className="mt-8 flex flex-col items-center gap-2">
+          <div
+            className="inline-flex rounded-full border border-ink-200 bg-white p-1"
+            role="group"
+            aria-label="Billing period"
+          >
+            {(["monthly", "annual"] as const).map((option) => (
+              <button
+                key={option}
+                type="button"
+                aria-pressed={period === option}
+                onClick={() => {
+                  setPeriod(option);
+                  track("pricing_period_changed", { period: option });
+                }}
                 className={cn(
-                  "cursor-pointer rounded-full border border-ink-200 bg-white py-2 pr-8 pl-3.5 text-sm font-medium text-ink-800",
-                  "transition-colors hover:border-ink-300",
+                  "rounded-full px-4 py-1.5 text-sm font-medium transition-colors",
+                  period === option
+                    ? "bg-ink-950 text-paper"
+                    : "text-ink-600 hover:text-ink-950",
                 )}
               >
-                {priceCurrencies.map((entry) => (
-                  <option key={entry.code} value={entry.code}>
-                    {entry.code} · {entry.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+                {option === "monthly" ? "Monthly" : "Annual"}
+              </button>
+            ))}
           </div>
-        </Reveal>
+          <p className="text-[0.8125rem] text-ink-400">
+            Annual billing is {annualSavingLabel}. Cancel any time.
+          </p>
+        </div>
 
-        {/* ---- plans --------------------------------------------------------- */}
-        <div className="mt-8 grid items-start gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {plans.map((plan, index) => {
-            const perMonth = priceFor(plan, period, currency);
-            const annualTotal = billedTotal(plan, period, currency);
-            const saved = annualSaving(plan, currency);
-            const featured = Boolean(plan.recommended);
+        {/* ---- cards -------------------------------------------------------- */}
+        <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {plans.map((plan) => {
+            const price = priceFor(plan, period);
+            const billed = billedTotal(plan, period);
+            const recommended = Boolean(plan.recommended);
 
             return (
-              <Reveal
+              <div
                 key={plan.key}
-                delay={reduced ? 0 : index * 0.05}
-                className={cn("h-full", featured && "xl:-mt-4")}
+                className={cn(
+                  "relative flex flex-col rounded-2xl p-5 sm:p-6",
+                  recommended
+                    ? "bg-ink-950 text-paper shadow-[var(--shadow-lift)] ring-2 ring-signal"
+                    : "bg-white text-ink-900 shadow-[var(--shadow-raise)] ring-1 ring-ink-950/6",
+                )}
               >
-                <div
-                  data-surface={featured ? "dark" : "light"}
-                  className={cn(
-                    "relative flex h-full flex-col rounded-2xl border p-5",
-                    featured
-                      ? "border-transparent bg-linear-to-b from-console-2 to-console text-white shadow-[var(--shadow-console)] ring-1 ring-white/8 xl:p-6 xl:pt-8"
-                      : "border-ink-200 bg-paper",
-                  )}
-                >
-                  {featured ? (
-                    <span className="absolute -top-3 left-5 rounded-full bg-signal px-2.5 py-1 font-mono text-micro font-semibold tracking-[0.08em] text-ink-950 uppercase">
-                      Recommended
-                    </span>
-                  ) : null}
+                {recommended ? (
+                  <Badge accent="signal" tone="solid" className="absolute -top-3 left-5">
+                    Best value
+                  </Badge>
+                ) : null}
 
-                  <div>
-                    <h3
-                      className={cn(
-                        "font-display text-xl font-semibold tracking-[-0.02em]",
-                        featured ? "text-white" : "text-ink-950",
-                      )}
-                    >
-                      {plan.name}
-                    </h3>
-                    <p
-                      className={cn(
-                        "mt-1.5 text-[0.8125rem] leading-snug",
-                        featured ? "text-white/55" : "text-ink-500",
-                      )}
-                    >
-                      {plan.tagline}
-                    </p>
-                  </div>
-
-                  <div className="mt-5">
-                    <p className="flex items-baseline gap-1.5">
-                      <span
-                        className={cn(
-                          "tnum font-mono text-[2.25rem] leading-none font-semibold",
-                          featured ? "text-signal" : "text-ink-950",
-                        )}
-                      >
-                        {money(perMonth, where)}
-                      </span>
-                      {plan.monthly > 0 ? (
-                        <span className={cn("text-sm", featured ? "text-white/45" : "text-ink-400")}>
-                          /month
-                        </span>
-                      ) : null}
-                    </p>
-
-                    {/* Two lines, always in the same slots, so the four cards
-                        stay aligned whichever billing period is selected. */}
-                    <p className={cn("mt-2 text-xs", featured ? "text-white/45" : "text-ink-400")}>
-                      {annualTotal
-                        ? `${money(annualTotal, where)} billed once a year`
-                        : plan.monthly === 0
-                          ? plan.meta
-                          : "Billed monthly, cancel any time"}
-                    </p>
-                    <p
-                      className={cn(
-                        "mt-1 text-xs font-medium",
-                        saved > 0 && period === "annual"
-                          ? featured
-                            ? "text-mint"
-                            : "text-mint-deep"
-                          : "text-transparent select-none",
-                      )}
-                    >
-                      {saved > 0 && period === "annual"
-                        ? `Saves ${money(saved, where)} a year`
-                        : " "}
-                    </p>
-                  </div>
-
-                  <ButtonLink
-                    href={`/get-started?plan=${plan.key}&billing=${period}&currency=${currency}`}
-                    variant={featured ? "signal" : plan.monthly === 0 ? "primary" : "outline"}
-                    size="md"
-                    block
-                    className="mt-5"
-                    onClick={() => track("pricing_plan_selected", { plan: plan.key, period })}
-                  >
-                    {plan.cta}
-                  </ButtonLink>
-
-                  {/* The one line that actually differentiates this tier from
-                      the one below it. Four bullet lists that each open with
-                      "Everything in X" are impossible to diff by eye, so the
-                      difference is stated once, loudly, above the list. */}
-                  <p
+                <div className="flex items-baseline justify-between gap-2">
+                  <h3
                     className={cn(
-                      "mt-6 rounded-lg px-3 py-2.5 text-[0.8125rem] leading-snug font-medium",
-                      featured
-                        ? "bg-signal/12 text-signal"
-                        : plan.monthly === 0
-                          ? "bg-ink-100 text-ink-700"
-                          : "bg-signal-soft text-signal-deep",
+                      "text-display-xs",
+                      recommended ? "text-white" : "text-ink-950",
                     )}
                   >
-                    {plan.unlocks}
-                  </p>
-
-                  <ul className="mt-4 flex flex-col gap-2.5">
-                    {plan.features.map((feature) => (
-                      <li key={feature} className="flex gap-2.5">
-                        <Check
-                          className={cn(
-                            "mt-0.5 size-4 shrink-0",
-                            featured ? "text-signal" : "text-mint-deep",
-                          )}
-                          aria-hidden
-                        />
-                        <span
-                          className={cn(
-                            "text-[0.875rem] leading-snug",
-                            featured ? "text-white/75" : "text-ink-700",
-                          )}
-                        >
-                          {feature}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
+                    {plan.name}
+                  </h3>
+                  <span
+                    className={cn(
+                      "font-mono text-micro uppercase tracking-[0.1em]",
+                      recommended ? "text-white/45" : "text-ink-400",
+                    )}
+                  >
+                    {plan.headline}
+                  </span>
                 </div>
-              </Reveal>
+
+                <p
+                  className={cn(
+                    "mt-2 text-[0.875rem] leading-snug",
+                    recommended ? "text-white/65" : "text-ink-600",
+                  )}
+                >
+                  {plan.tagline}
+                </p>
+
+                <div className="mt-5 flex items-end gap-1.5">
+                  <span
+                    className={cn(
+                      "tnum font-mono text-[2.25rem] leading-none font-semibold",
+                      recommended ? "text-signal" : "text-ink-950",
+                    )}
+                  >
+                    {money(price)}
+                  </span>
+                  <span
+                    className={cn(
+                      "pb-1 text-xs",
+                      recommended ? "text-white/45" : "text-ink-400",
+                    )}
+                  >
+                    / month
+                  </span>
+                </div>
+                <p
+                  className={cn(
+                    "mt-1.5 min-h-8 text-xs leading-snug",
+                    recommended ? "text-white/45" : "text-ink-400",
+                  )}
+                >
+                  {billed !== null
+                    ? `${money(billed)} billed yearly · ${annualSavingLabel}`
+                    : plan.meta}
+                </p>
+
+                <ButtonLink
+                  href={plan.key === "free" ? "/get-started" : `/get-started?plan=${plan.key}`}
+                  variant={recommended ? "signal" : plan.key === "free" ? "primary" : "outline"}
+                  block
+                  className="mt-4"
+                  onClick={() => track("pricing_plan_selected", { plan: plan.key, period })}
+                >
+                  {plan.cta}
+                </ButtonLink>
+
+                <p
+                  className={cn(
+                    "mt-4 font-mono text-micro uppercase tracking-[0.1em]",
+                    recommended ? "text-white/40" : "text-ink-400",
+                  )}
+                >
+                  {plan.key === "free" ? "Includes" : plan.unlocks}
+                </p>
+                <ul className="mt-2.5 flex flex-col gap-2">
+                  {plan.features.map((feature) => (
+                    <li key={feature} className="flex gap-2.5">
+                      <Check
+                        className={cn(
+                          "mt-0.5 size-4 shrink-0",
+                          recommended ? "text-signal" : "text-mint-deep",
+                        )}
+                        aria-hidden
+                      />
+                      <span
+                        className={cn(
+                          "text-[0.8125rem] leading-snug",
+                          recommended ? "text-white/75" : "text-ink-600",
+                        )}
+                      >
+                        {feature}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             );
           })}
         </div>
 
-        {/* ---- assurances ----------------------------------------------------- */}
-        <Reveal delay={0.1}>
-          <dl className="mt-6 grid gap-px overflow-hidden rounded-xl bg-ink-200/70 sm:grid-cols-2 lg:grid-cols-4">
-            {pricingAssurances.map((item) => (
-              <div key={item.label} className="bg-paper px-4 py-4">
-                <dt className="text-[0.8125rem] font-semibold text-ink-950">{item.label}</dt>
-                <dd className="mt-0.5 text-xs leading-snug text-ink-500">{item.detail}</dd>
-              </div>
-            ))}
-          </dl>
+        {/* ---- assurances --------------------------------------------------- */}
+        <ul className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {pricingAssurances.map((item) => (
+            <li key={item.label} className="rounded-xl bg-white px-4 py-3 shadow-[var(--shadow-flat)]">
+              <p className="text-[0.875rem] font-medium text-ink-950">{item.label}</p>
+              <p className="mt-0.5 text-xs text-ink-500">{item.detail}</p>
+            </li>
+          ))}
+        </ul>
+
+        {/* ---- comparison --------------------------------------------------- */}
+        <Reveal className="mt-10">
+          <ComparisonTable />
         </Reveal>
 
-        <Reveal>
-          <p className="mt-5 max-w-3xl text-[0.8125rem] leading-relaxed text-ink-400">
-            Prices are list prices per currency, not conversions. Anywhere outside these three,
-            billing is in euro and your bank&rsquo;s exact charge is shown before you confirm.
-            Partner benefits are listed on Max only where a real agreement exists — until one does,
-            that line stays empty rather than being filled with logos.
-          </p>
-        </Reveal>
-
-        {/* ---- comparison ------------------------------------------------------ */}
-        <ComparisonTable />
-
-        {/* ---- FAQ ------------------------------------------------------------- */}
         {showFaq ? (
-          <div className="mt-16">
-            <Reveal>
-              <h3 className="text-display-sm text-ink-950">Before you pay for anything</h3>
-            </Reveal>
-            <dl className="mt-6 grid gap-x-8 gap-y-6 md:grid-cols-2">
+          <div className="mt-12">
+            <h3 className="text-display-xs text-ink-950">Before you pay</h3>
+            <dl className="mt-5 grid gap-5 sm:grid-cols-2">
               {pricingFaq.map((item) => (
-                <Reveal key={item.q}>
+                <div key={item.q}>
                   <dt className="text-[0.9375rem] font-semibold text-ink-950">{item.q}</dt>
-                  <dd className="mt-2 text-sm leading-relaxed text-ink-600">{item.a}</dd>
-                </Reveal>
+                  <dd className="mt-1.5 text-[0.875rem] leading-relaxed text-ink-600">{item.a}</dd>
+                </div>
               ))}
             </dl>
           </div>
@@ -348,113 +272,168 @@ export function PricingTable({
 }
 
 /* -------------------------------------------------------------------------- */
-/* Comparison                                                                  */
+/* Comparison, generated from the entitlement map                              */
 /* -------------------------------------------------------------------------- */
 
-const PLAN_KEYS: readonly PlanKey[] = ["free", "plus", "pro", "max"];
-
 function ComparisonTable() {
-  return (
-    <div className="mt-16">
-      <Reveal>
-        <h3 className="text-display-sm text-ink-950">What you actually get</h3>
-        <p className="mt-3 max-w-2xl text-sm leading-relaxed text-ink-600">
-          Where a feature is limited, the limit is written in the cell. A tick on a capped feature
-          would be a lie, so there are none.
-        </p>
-      </Reveal>
+  /* Grouped by the tier that introduces the capability, so the table reads as
+     "what does each step up actually buy" rather than as a wall of ticks. */
+  const groups = tierOrder
+    .filter((tier) => tier !== "free")
+    .map((tier) => ({
+      tier,
+      features: (Object.keys(featureTier) as Feature[]).filter(
+        (feature) => featureTier[feature] === tier,
+      ),
+    }))
+    .filter((group) => group.features.length > 0);
 
-      {/* The table scrolls inside its own container: the page itself must never
-          scroll sideways on a phone. */}
-      <Reveal delay={0.05}>
-        <div className="mt-6 overflow-x-auto rounded-2xl border border-ink-200 bg-paper">
-          <table className="w-full min-w-[46rem] border-collapse text-left">
-            <caption className="sr-only">Feature comparison across the four plans</caption>
-            <thead>
-              <tr className="border-b border-ink-200">
-                <th scope="col" className="w-[38%] px-5 py-4 text-sm font-semibold text-ink-950">
-                  Feature
+  return (
+    <div className="overflow-hidden rounded-2xl bg-white shadow-[var(--shadow-raise)] ring-1 ring-ink-950/5">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-ink-100 px-4 py-3 sm:px-5">
+        <h3 className="text-[0.9375rem] font-semibold text-ink-950">Compare tiers</h3>
+        <SampleTag label="Generated from entitlements" />
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[36rem] border-collapse text-left">
+          <thead>
+            <tr className="border-b border-ink-100">
+              <th scope="col" className="px-4 py-2.5 text-[0.8125rem] font-medium text-ink-500 sm:px-5">
+                Capability
+              </th>
+              {plans.map((plan) => (
+                <th
+                  key={plan.key}
+                  scope="col"
+                  className={cn(
+                    "w-20 px-2 py-2.5 text-center text-[0.8125rem] font-semibold",
+                    plan.recommended ? "text-ink-950" : "text-ink-600",
+                  )}
+                >
+                  {plan.name}
+                </th>
+              ))}
+            </tr>
+          </thead>
+
+          <tbody>
+            {/* Quotas: numbers rather than ticks. */}
+            <GroupRow title="Limits" />
+            <QuotaRow label="Smart asks a week" pick={(key) => quotas[key].aiAsksPerWeek} />
+            <QuotaRow label="Saved places and events" pick={(key) => quotas[key].savedItems} />
+            <QuotaRow label="Cities at once" pick={(key) => quotas[key].cities} />
+
+            <GroupRow title={TIER_HEADING.free} />
+            {ALWAYS_FREE.map((label) => (
+              <tr key={label} className="border-b border-ink-100 last:border-b-0">
+                <th
+                  scope="row"
+                  className="px-4 py-2.5 text-[0.8125rem] font-normal text-ink-700 sm:px-5"
+                >
+                  {label}
                 </th>
                 {plans.map((plan) => (
-                  <th
-                    key={plan.key}
-                    scope="col"
-                    className={cn(
-                      "px-4 py-4 text-center text-sm font-semibold",
-                      plan.recommended ? "bg-signal-soft text-ink-950" : "text-ink-950",
-                    )}
-                  >
-                    {plan.name}
-                  </th>
+                  <td key={plan.key} className="px-2 py-2.5 text-center">
+                    <Yes />
+                  </td>
                 ))}
               </tr>
-            </thead>
-
-            {featureMatrix.map((group) => (
-              <tbody key={group.title}>
-                <tr>
-                  <th
-                    scope="colgroup"
-                    colSpan={PLAN_KEYS.length + 1}
-                    className="bg-paper-2 px-5 py-2.5 text-left font-mono text-micro uppercase tracking-[0.12em] text-ink-500"
-                  >
-                    {group.title}
-                  </th>
-                </tr>
-                {group.rows.map((row) => (
-                  <tr key={row.label} className="border-t border-ink-100">
-                    <th scope="row" className="px-5 py-3.5 text-left align-top font-normal">
-                      <span className="block text-[0.875rem] font-medium text-ink-900">
-                        {row.label}
-                      </span>
-                      {row.hint ? (
-                        <span className="mt-0.5 block text-xs leading-snug text-ink-400">
-                          {row.hint}
-                        </span>
-                      ) : null}
-                    </th>
-                    {plans.map((plan) => (
-                      <td
-                        key={plan.key}
-                        className={cn(
-                          "px-4 py-3.5 text-center align-top",
-                          plan.recommended && "bg-signal-soft/40",
-                        )}
-                      >
-                        <Cell value={row.values[plan.key]} label={`${row.label}, ${plan.name}`} />
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
             ))}
-          </table>
-        </div>
-      </Reveal>
 
-      <Reveal>
-        <p className="mt-4 max-w-3xl text-xs leading-relaxed text-ink-400">{fairUseNote}</p>
-      </Reveal>
+            {groups.map((group) => (
+              <FeatureGroup key={group.tier} tier={group.tier} features={group.features} />
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <p className="border-t border-ink-100 px-4 py-3 text-xs leading-relaxed text-ink-400 sm:px-5">
+        Every row is generated from the entitlement map the product enforces, so this table cannot
+        promise something the app does not grant.
+      </p>
     </div>
   );
 }
 
-function Cell({ value, label }: { value: MatrixValue; label: string }) {
-  if (value === true) {
-    return (
-      <>
-        <Check className="mx-auto size-4.5 text-mint-deep" aria-hidden />
-        <span className="sr-only">{label}: included</span>
-      </>
-    );
-  }
-  if (value === false) {
-    return (
-      <>
-        <Minus className="mx-auto size-4 text-ink-300" aria-hidden />
-        <span className="sr-only">{label}: not included</span>
-      </>
-    );
-  }
-  return <span className="text-[0.8125rem] font-medium text-ink-700">{value}</span>;
+function FeatureGroup({ tier, features }: { tier: PlanKey; features: readonly Feature[] }) {
+  return (
+    <>
+      <GroupRow title={TIER_HEADING[tier]} />
+      {features.map((feature) => (
+        <tr key={feature} className="border-b border-ink-100 last:border-b-0">
+          <th scope="row" className="px-4 py-2.5 text-[0.8125rem] font-normal text-ink-700 sm:px-5">
+            {featureCopy[feature].label}
+            <span className="mt-0.5 block text-xs text-ink-400">
+              {featureCopy[feature].promise}
+            </span>
+          </th>
+          {plans.map((plan) => (
+            <td key={plan.key} className="px-2 py-2.5 text-center align-top">
+              {planHasFeature(plan.key, feature) ? <Yes /> : <No />}
+            </td>
+          ))}
+        </tr>
+      ))}
+    </>
+  );
+}
+
+function GroupRow({ title }: { title: string }) {
+  return (
+    <tr className="bg-paper-2">
+      <th
+        scope="colgroup"
+        colSpan={plans.length + 1}
+        className="px-4 py-2 text-left font-mono text-micro uppercase tracking-[0.12em] text-ink-500 sm:px-5"
+      >
+        {title}
+      </th>
+    </tr>
+  );
+}
+
+function QuotaRow({
+  label,
+  pick,
+}: {
+  label: string;
+  pick: (plan: PlanKey) => number | null;
+}) {
+  return (
+    <tr className="border-b border-ink-100">
+      <th scope="row" className="px-4 py-2.5 text-[0.8125rem] font-normal text-ink-700 sm:px-5">
+        {label}
+      </th>
+      {plans.map((plan) => {
+        const value = pick(plan.key);
+        return (
+          <td
+            key={plan.key}
+            className="tnum px-2 py-2.5 text-center font-mono text-[0.8125rem] text-ink-800"
+          >
+            {value === null ? "Unlimited" : value.toLocaleString("en-GB")}
+          </td>
+        );
+      })}
+    </tr>
+  );
+}
+
+function Yes() {
+  return (
+    <>
+      <Check className="mx-auto size-4 text-mint-deep" aria-hidden />
+      <span className="sr-only">Included</span>
+    </>
+  );
+}
+
+function No() {
+  return (
+    <>
+      <Minus className="mx-auto size-4 text-ink-300" aria-hidden />
+      <span className="sr-only">Not included</span>
+    </>
+  );
 }

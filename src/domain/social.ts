@@ -226,6 +226,78 @@ export function settleBucket(
 /* Marketplace                                                                 */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * The five lanes of Student Exchange. Buy/sell is one of them, not the whole
+ * thing: the same verified network that moves a desk between students also
+ * lends a drill, splits a taxi to the airport and finds someone to translate a
+ * contract. Each lane has its own categories and its own price semantics.
+ */
+export type ExchangeKind = "sell" | "borrow" | "help" | "ride" | "free";
+
+export const exchangeKindMeta: Record<
+  ExchangeKind,
+  {
+    label: string;
+    emoji: string;
+    /** What a listing in this lane is for, in one line. */
+    blurb: string;
+    /** Prompts for the "I need" / "I have" toggle. */
+    offer: string;
+    request: string;
+    /** Whether a price field makes sense at all. */
+    priced: boolean;
+    categories: readonly ListingCategory[];
+  }
+> = {
+  sell: {
+    label: "Buy & sell",
+    emoji: "📦",
+    blurb: "Second-hand between students. Outgoing students sell what incoming students need.",
+    offer: "I'm selling",
+    request: "I'm looking for",
+    priced: true,
+    categories: ["furniture", "books", "electronics", "kitchen", "clothing", "bikes", "supplies", "other"],
+  },
+  borrow: {
+    label: "Borrow",
+    emoji: "🔧",
+    blurb: "Tools, chargers, sports kit, books. Lend it for a day rather than buying it twice.",
+    offer: "I can lend",
+    request: "I need to borrow",
+    priced: false,
+    categories: ["tools", "chargers", "sports", "books", "household", "other"],
+  },
+  help: {
+    label: "Help",
+    emoji: "🙋",
+    blurb: "Move a sofa, translate a letter, fix a laptop, explain the registration form.",
+    offer: "I can help with",
+    request: "I need help with",
+    priced: false,
+    categories: ["moving", "translate", "advice", "airport", "tech", "study", "other"],
+  },
+  ride: {
+    label: "Rides & travel",
+    emoji: "🚕",
+    blurb: "Split a taxi to the airport, share a road trip, find a weekend travel buddy.",
+    offer: "I have space",
+    request: "I need a ride",
+    priced: true,
+    categories: ["taxi", "airport", "road-trip", "weekend", "other"],
+  },
+  free: {
+    label: "Free stuff",
+    emoji: "🎁",
+    blurb: "Things students are giving away. First to collect.",
+    offer: "I'm giving away",
+    request: "I'm looking for",
+    priced: false,
+    categories: ["furniture", "kitchen", "books", "electronics", "clothing", "household", "other"],
+  },
+};
+
+export const exchangeKinds = Object.keys(exchangeKindMeta) as ExchangeKind[];
+
 export type ListingCategory =
   | "furniture"
   | "books"
@@ -234,6 +306,21 @@ export type ListingCategory =
   | "bikes"
   | "clothing"
   | "supplies"
+  | "tools"
+  | "chargers"
+  | "sports"
+  | "household"
+  | "moving"
+  | "translate"
+  | "advice"
+  | "airport"
+  | "tech"
+  | "study"
+  | "taxi"
+  | "road-trip"
+  | "weekend"
+  | "other"
+  /** Legacy lane-as-category from the first marketplace. Rows keep it; new listings use `kind: "free"`. */
   | "free";
 
 export const listingCategoryMeta: Record<ListingCategory, { label: string; emoji: string }> = {
@@ -242,13 +329,30 @@ export const listingCategoryMeta: Record<ListingCategory, { label: string; emoji
   electronics: { label: "Electronics", emoji: "🎧" },
   kitchen: { label: "Kitchen", emoji: "🍳" },
   bikes: { label: "Bikes", emoji: "🚲" },
-  clothing: { label: "Clothing", emoji: "🧥" },
+  clothing: { label: "Clothes", emoji: "🧥" },
   supplies: { label: "Uni supplies", emoji: "✏️" },
+  tools: { label: "Tools", emoji: "🔧" },
+  chargers: { label: "Chargers & cables", emoji: "🔌" },
+  sports: { label: "Sports kit", emoji: "🏸" },
+  household: { label: "Household", emoji: "🧺" },
+  moving: { label: "Moving furniture", emoji: "🛋️" },
+  translate: { label: "Translate something", emoji: "🌐" },
+  advice: { label: "Local advice", emoji: "🧭" },
+  airport: { label: "Airport", emoji: "✈️" },
+  tech: { label: "Tech help", emoji: "💻" },
+  study: { label: "Study help", emoji: "📚" },
+  taxi: { label: "Shared taxi", emoji: "🚕" },
+  "road-trip": { label: "Road trip", emoji: "🚗" },
+  weekend: { label: "Weekend travel", emoji: "🚆" },
+  other: { label: "Other", emoji: "✨" },
   free: { label: "Free stuff", emoji: "🎁" },
 };
 
+export type ListingMode = "offer" | "request";
+export type ListingStatus = "active" | "reserved" | "sold" | "completed" | "withdrawn";
+
 /**
- * A marketplace listing.
+ * An exchange listing.
  *
  * This closes the strongest loop in the product: a student in Leaving Mode has
  * a flat full of things they cannot take, and a student in Arrival Mode needs
@@ -258,32 +362,60 @@ export const listingCategoryMeta: Record<ListingCategory, { label: string; emoji
  *
  * `meetArea` is a public place label — a campus building, a metro station. The
  * type has no address field at all, so a listing physically cannot carry one.
+ *
+ * `mode` is what makes it a network rather than a shop: "I need a desk under
+ * €30" is a listing too, and it is the one a departing student can answer.
  */
 export type Listing = {
   id: Id;
   citySlug: string;
   campusSlug: string | null;
   sellerId: Id;
+  /** Which lane. Older rows without one are read as `sell`, or `free` when `category` is `free`. */
+  kind?: ExchangeKind;
+  /** Offering something, or asking for it. Older rows are offers. */
+  mode?: ListingMode;
   title: string;
   detail: string;
   category: ListingCategory;
   priceCents: Cents;
   condition: "new" | "good" | "used" | "worn";
   meetArea: string;
-  status: "active" | "reserved" | "sold" | "withdrawn";
+  status: ListingStatus;
   /** Listed as part of Leaving Mode. Surfaced to arriving students first. */
   fromLeaving: boolean;
+  /** For rides and borrows: when it is needed or available. */
+  whenAt?: Iso | null;
   createdAt: Iso;
   soldAt: Iso | null;
 };
+
+/** Resolve the lane for any row, including ones written before lanes existed. */
+export function listingKind(listing: Pick<Listing, "kind" | "category">): ExchangeKind {
+  if (listing.kind) return listing.kind;
+  return listing.category === "free" ? "free" : "sell";
+}
+
+export function listingMode(listing: Pick<Listing, "mode">): ListingMode {
+  return listing.mode ?? "offer";
+}
 
 /** Safety guidance shown on every listing. Not dismissible. */
 export const marketplaceSafety = [
   "Meet somewhere public — a campus building or a station, never a flat.",
   "Pay when you collect. Nobody legitimate needs a deposit up front.",
-  "Bring a friend for anything large or expensive.",
+  "Bring a friend for anything large or expensive, and for any ride share.",
   "Report anything that feels off. It is one tap and it is anonymous.",
 ] as const;
+
+/** The line shown per lane on top of the general guidance. */
+export const exchangeKindSafety: Record<ExchangeKind, string> = {
+  sell: "Check it works before you pay. Cash or an instant transfer on the spot, never a deposit.",
+  borrow: "Agree the return date in the chat so it is written down.",
+  help: "Keep it to public places and daylight for anything involving a stranger's flat or yours.",
+  ride: "Share the driver's details with a friend and split the fare in the app chat before you leave.",
+  free: "Collect from a public place. If someone wants you to come inside, take a friend.",
+};
 
 /* -------------------------------------------------------------------------- */
 /* Personal memory                                                             */

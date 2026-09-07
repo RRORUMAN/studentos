@@ -15,11 +15,16 @@ import { findMany } from "@/server/db";
  * default; a row only exists when an admin changed something, so deleting the
  * row restores the default.
  *
- * Keys are namespaced strings. The three namespaces:
+ * Keys are namespaced strings. The four namespaces:
  *
  *   city.<slug>.status        CityStatus
  *   quota.aiAsksPerWeek.<plan> integer, or "null" for uncapped
  *   flag.<name>               "on" | "off"
+ *   ai.<setting>              provider, models, ceilings and cost caps
+ *
+ * The AI **API key** is deliberately not one of them, and never will be: a
+ * secret settable from a web form is a secret that ends up in a database
+ * backup and a screen share. Keys come from the environment only.
  * ============================================================================
  */
 

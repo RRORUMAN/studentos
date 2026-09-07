@@ -300,7 +300,7 @@ export const leavingTasks: readonly ArrivalTaskSpec[] = [
     label: "Sell what you cannot take",
     detail: "Arriving students need exactly what you are about to throw away.",
     effort: "30 min",
-    href: "/marketplace/new",
+    href: "/exchange/new?mode=offer",
   },
   {
     id: "transport-pass",

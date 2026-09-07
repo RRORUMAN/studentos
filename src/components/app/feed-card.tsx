@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FeedbackMenu } from "@/components/app/feedback-menu";
 import { Badge } from "@/components/ui/primitives";
 import type { FeedItem } from "@/server/engines/feed";
+import { fmtWhen } from "@/lib/dates";
 import { cn, money } from "@/lib/utils";
 
 /**
@@ -39,13 +40,16 @@ export function FeedCard({
   item,
   where,
   now,
+  timeZone,
 }: {
   item: FeedItem;
   where: { currency: string; locale: string };
   now: Date;
+  /** The city's zone. Times are formatted on the server, so they never hydrate differently. */
+  timeZone: string;
 }) {
   const Icon = KIND_ICON[item.kind];
-  const time = item.startsAt ? whenLabel(item.startsAt, now) : null;
+  const time = item.startsAt ? fmtWhen(item.startsAt, timeZone, now) : null;
 
   return (
     <article className="group relative flex gap-3.5 rounded-xl bg-white p-4 shadow-[var(--shadow-flat)] ring-1 ring-ink-950/6 transition-shadow hover:shadow-[var(--shadow-raise)]">
@@ -124,13 +128,3 @@ export function FeedCard({
   );
 }
 
-/** "Tonight 19:00", "Tomorrow 10:00", "Sat 12 Sep 18:00". */
-export function whenLabel(iso: string, now: Date): string {
-  const date = new Date(iso);
-  const time = date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
-  if (date.toDateString() === now.toDateString()) return `Tonight ${time}`;
-  const tomorrow = new Date(now);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  if (date.toDateString() === tomorrow.toDateString()) return `Tomorrow ${time}`;
-  return `${date.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })} ${time}`;
-}

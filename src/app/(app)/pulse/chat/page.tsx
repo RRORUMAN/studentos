@@ -4,7 +4,8 @@ import Link from "next/link";
 
 import { ChatHubRow } from "@/components/app/chat-hub-row";
 import { MascotArt } from "@/components/mascot/mascot-art";
-import { loadChatHub, type ChatGroup } from "@/server/queries/chat";
+import { markChannelsSeen } from "@/server/actions/chat";
+import { loadChatHub, searchChat, type ChatGroup } from "@/server/queries/chat";
 import { requestNow } from "@/server/now";
 import { requireViewer } from "@/server/viewer";
 import { cn } from "@/lib/utils";
@@ -19,8 +20,12 @@ export const metadata: Metadata = {
  * CHAT HUB
  * ----------------------------------------------------------------------------
  * Every conversation, grouped: Direct · Groups · Campus · Events · Anyone Down.
- * Pinned first, archived hidden behind a toggle, muted with no unread badge.
- * Search filters the titles and last lines.
+ * Pinned first, archived hidden behind a toggle (but still searchable), muted
+ * with no unread badge.
+ *
+ * Search reads titles, last lines and message bodies — but only inside the
+ * conversations this student can already read, so it can never surface a
+ * message from a room they are not in.
  * ============================================================================
  */
 
@@ -45,7 +50,7 @@ export default async function ChatHubPage(props: PageProps<"/pulse/chat">) {
 
   const group = GROUPS.some((entry) => entry.value === one("group")) ? (one("group") as ChatGroup | "all") : "all";
   const showArchived = one("archived") === "1";
-  const query = (one("q") ?? "").trim().toLowerCase();
+  const query = (one("q") ?? "").trim();
 
   const rows = await loadChatHub({
     userId: viewer.user.id,
@@ -53,20 +58,29 @@ export default async function ChatHubPage(props: PageProps<"/pulse/chat">) {
     campusSlug: viewer.profile.campusSlug,
   });
 
-  const visible = rows
+  /* First visit: city rooms this student has never opened are read as of now.
+     Without this a new account lands on fifteen unread badges for
+     conversations that happened before they existed. */
+  await markChannelsSeen(rows.filter((row) => row.group === "groups" || row.group === "campus").map((row) => row.channel));
+
+  const matched = query ? await searchChat({ userId: viewer.user.id, citySlug: viewer.profile.citySlug, query, rows }) : rows;
+
+  const visible = matched
     .filter((row) => (group === "all" ? true : row.group === group))
-    .filter((row) => (showArchived ? row.archived : !row.archived))
-    .filter((row) =>
-      query
-        ? row.title.toLowerCase().includes(query) || (row.lastLine ?? "").toLowerCase().includes(query)
-        : true,
-    );
+    /* A search looks everywhere, archived included — that is usually why
+       someone is searching. */
+    .filter((row) => (query ? true : showArchived ? row.archived : !row.archived));
 
   const unreadTotal = rows.filter((row) => !row.archived).reduce((sum, row) => sum + row.unread, 0);
 
   const urlWith = (patch: Record<string, string | null>) => {
     const next = new URLSearchParams();
-    const current = { group: group === "all" ? null : group, archived: showArchived ? "1" : null, q: query || null, ...patch };
+    const current = {
+      group: group === "all" ? null : group,
+      archived: showArchived ? "1" : null,
+      q: query || null,
+      ...patch,
+    };
     for (const [key, value] of Object.entries(current)) if (value) next.set(key, value);
     const qs = next.toString();
     return qs ? `/pulse/chat?${qs}` : "/pulse/chat";
@@ -83,7 +97,7 @@ export default async function ChatHubPage(props: PageProps<"/pulse/chat">) {
         <div>
           <h1 className="text-display-xs text-ink-950 sm:text-display-sm">Chat</h1>
           <p className="mt-1 text-[0.9375rem] text-ink-500">
-            {unreadTotal > 0 ? `${unreadTotal} unread` : "You are caught up."} · Updates every few seconds while open.
+            {unreadTotal > 0 ? `${unreadTotal} unread` : "You are caught up."} · Checks for new messages while open.
           </p>
         </div>
       </header>
@@ -94,8 +108,8 @@ export default async function ChatHubPage(props: PageProps<"/pulse/chat">) {
         <input
           name="q"
           defaultValue={query}
-          placeholder="Search chats"
-          aria-label="Search chats"
+          placeholder="Search chats and messages"
+          aria-label="Search chats and messages"
           className="h-11 w-full rounded-full bg-white pl-10 pr-4 text-[0.9375rem] text-ink-900 ring-1 ring-ink-950/8 placeholder:text-ink-400 focus:ring-ink-950/25"
         />
       </form>
@@ -121,15 +135,17 @@ export default async function ChatHubPage(props: PageProps<"/pulse/chat">) {
           <div className="flex flex-col items-center px-5 py-10 text-center">
             <MascotArt state="social" className="size-16" />
             <p className="mt-4 text-[0.9375rem] text-ink-700">
-              {group === "direct"
-                ? "Direct messages open once you are friends with someone."
-                : group === "events"
-                  ? "Say you are going to an event and its chat appears here."
-                  : group === "anyone-down"
-                    ? "Join a plan and its group appears here."
-                    : showArchived
-                      ? "Nothing archived."
-                      : "Nothing here yet."}
+              {query
+                ? `Nothing matching “${query}”.`
+                : group === "direct"
+                  ? "No direct messages yet. Open anyone's profile in your city and say hello."
+                  : group === "events"
+                    ? "Say you are going to an event and its chat appears here."
+                    : group === "anyone-down"
+                      ? "Join a plan and its group appears here."
+                      : showArchived
+                        ? "Nothing archived."
+                        : "Nothing here yet."}
             </p>
             <Link
               href={group === "direct" ? "/you/friends" : group === "events" ? "/events" : group === "anyone-down" ? "/anyone-down" : "/pulse"}
@@ -151,11 +167,13 @@ export default async function ChatHubPage(props: PageProps<"/pulse/chat">) {
         )}
       </section>
 
-      <p className="mt-3 text-center text-[0.8125rem]">
-        <Link href={urlWith({ archived: showArchived ? null : "1" })} className="font-medium text-ink-500 underline underline-offset-4 hover:text-ink-900">
-          {showArchived ? "Back to active chats" : "Show archived"}
-        </Link>
-      </p>
+      {!query ? (
+        <p className="mt-3 text-center text-[0.8125rem]">
+          <Link href={urlWith({ archived: showArchived ? null : "1" })} className="font-medium text-ink-500 underline underline-offset-4 hover:text-ink-900">
+            {showArchived ? "Back to active chats" : "Show archived"}
+          </Link>
+        </p>
+      ) : null}
     </div>
   );
 }

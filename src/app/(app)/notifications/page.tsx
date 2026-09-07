@@ -6,6 +6,7 @@ import { MarkAllReadButton } from "@/components/app/mark-read-button";
 import { MascotArt } from "@/components/mascot/mascot-art";
 import type { NotificationTopic } from "@/domain/types";
 import { findMany } from "@/server/db";
+import { notificationBody } from "@/server/notify";
 import { minutesSince } from "@/server/now";
 import { requireViewer } from "@/server/viewer";
 import { ago, cn } from "@/lib/utils";
@@ -89,7 +90,7 @@ export default async function NotificationsPage(props: PageProps<"/notifications
                 <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[0.6875rem] font-semibold", meta.accent)}>{meta.label}</span>
                 <span className="min-w-0 flex-1">
                   <span className={cn("block text-[0.9375rem]", notification.readAt ? "text-ink-600" : "font-medium text-ink-950")}>{notification.title}</span>
-                  <span className="mt-0.5 block text-[0.8125rem] leading-snug text-ink-500">{notification.body}</span>
+                  <span className="mt-0.5 block text-[0.8125rem] leading-snug text-ink-500">{notificationBody(notification.body)}</span>
                 </span>
                 <span className="shrink-0 font-mono text-micro text-ink-400">{ago(minutesSince(notification.createdAt))}</span>
               </>

@@ -2,14 +2,15 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { PlanItinerary } from "@/components/app/plan-itinerary";
 import { Wordmark } from "@/components/brand/logo";
 import { MascotArt } from "@/components/mascot/mascot-art";
 import { ButtonLink } from "@/components/ui/button";
-import { getCity } from "@/data/cities";
+import { getCity, resolveCity } from "@/data/cities";
 import { loadPlan } from "@/server/queries/plans";
 import { getViewer } from "@/server/viewer";
 import { brand } from "@/brand/brand.config";
-import { cn, money } from "@/lib/utils";
+import { fmtLongDay } from "@/lib/dates";
 
 export const metadata: Metadata = {
   title: "Shared plan",
@@ -21,8 +22,12 @@ export const metadata: Metadata = {
  * PUBLIC PLAN
  * ----------------------------------------------------------------------------
  * A plan its owner chose to share. Readable signed out; joining needs an
- * account. Shows the lines and the total — never who is on it, never the
- * owner's budget, never anything about where anyone lives.
+ * account. Shows the lines, the total and how many are in — never who they
+ * are, never the owner's budget, never anything about where anyone lives.
+ *
+ * The lines render through the same `PlanItinerary` the signed-in screen uses,
+ * with the internal links off, so a shared plan and the owner's plan can never
+ * quietly disagree about a price.
  * ============================================================================
  */
 export default async function PublicPlanPage(props: PageProps<"/p/[id]">) {
@@ -31,10 +36,11 @@ export default async function PublicPlanPage(props: PageProps<"/p/[id]">) {
   const data = await loadPlan(id, viewer?.user.id ?? null);
   if (!data || (!data.plan.shared && !data.mine && !data.member)) notFound();
 
-  const { plan, owner } = data;
+  const { plan, owner, people } = data;
   const city = getCity(plan.citySlug);
+  const context = resolveCity(plan.citySlug);
   const where = { currency: city?.currency.code ?? "EUR", locale: "en-IE" };
-  const total = plan.items.reduce((sum, item) => sum + item.priceCents, 0);
+  const timeZone = context?.timezone ?? "UTC";
 
   return (
     <main id="main" className="relative flex flex-1 flex-col">
@@ -46,33 +52,19 @@ export default async function PublicPlanPage(props: PageProps<"/p/[id]">) {
 
         <header className="mt-8">
           <p className="font-mono text-micro uppercase tracking-[0.12em] text-ink-400">
-            {city?.name ?? "A plan"}
-            {plan.forDate ? ` · ${new Date(plan.forDate).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })}` : ""}
+            {city?.name ?? context?.name ?? "A plan"}
+            {plan.forDate ? ` · ${fmtLongDay(plan.forDate, timeZone)}` : ""}
           </p>
           <h1 className="mt-2 text-display-sm text-ink-950">{plan.title}</h1>
-          {owner ? <p className="mt-1 text-[0.9375rem] text-ink-500">Shared by {owner.avatarEmoji} {owner.displayName}</p> : null}
+          <p className="mt-1 text-[0.9375rem] text-ink-500">
+            {owner ? `Shared by ${owner.avatarEmoji} ${owner.displayName}` : "Shared plan"}
+            {people > 1 ? ` · ${people} people in` : ""}
+          </p>
         </header>
 
-        <section className="mt-6 overflow-hidden rounded-2xl bg-white shadow-[var(--shadow-raise)] ring-1 ring-ink-950/6">
-          <ol className="divide-y divide-ink-100">
-            {plan.items.map((item, index) => (
-              <li key={`${item.title}-${index}`} className="flex items-start gap-3 px-5 py-3.5">
-                <span className="tnum w-6 shrink-0 pt-0.5 font-mono text-[0.75rem] text-ink-400">{item.time || index + 1}</span>
-                <div className="min-w-0 flex-1">
-                  <p className="text-[0.9375rem] font-medium text-ink-900">{item.title}</p>
-                  {item.detail ? <p className="mt-0.5 text-[0.8125rem] text-ink-500">{item.detail}</p> : null}
-                </div>
-                <span className={cn("tnum shrink-0 font-mono text-[0.9375rem] font-medium", item.priceCents === 0 ? "text-mint-deep" : "text-ink-900")}>
-                  {item.priceCents === 0 ? "Free" : money(item.priceCents / 100, where)}
-                </span>
-              </li>
-            ))}
-          </ol>
-          <div className="flex items-baseline justify-between border-t border-ink-100 bg-paper-2/60 px-5 py-3.5">
-            <span className="font-mono text-micro uppercase tracking-[0.1em] text-ink-500">Total</span>
-            <span className="tnum font-mono text-[1.25rem] font-semibold text-ink-950">{total === 0 ? "Free" : money(total / 100, where)}</span>
-          </div>
-        </section>
+        <div className="mt-6">
+          <PlanItinerary items={plan.items} where={where} links={false} />
+        </div>
 
         <div className="mt-6 flex items-center gap-4 rounded-2xl bg-ink-950 p-5 text-paper">
           <MascotArt state="social" className="size-12 shrink-0" />

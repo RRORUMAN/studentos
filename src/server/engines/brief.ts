@@ -19,7 +19,7 @@ import type { Cents, CityEvent } from "@/domain/types";
  */
 
 export type BriefLine = {
-  kind: "tonight" | "free" | "friends" | "deal" | "money" | "task" | "people" | "pulse";
+  kind: "tonight" | "free" | "friends" | "deal" | "money" | "task" | "people" | "pulse" | "payment" | "mission" | "exchange";
   text: string;
   href: string;
   /** Secondary detail shown smaller, when there is one. */
@@ -44,11 +44,39 @@ export type BriefInput = {
   formatMoney: (cents: Cents) => string;
   /** Local hour, to decide whether "tonight" is still meaningful. */
   hour: number;
+  /** LifeOps: dated items due today and items that slipped. */
+  lifeops?: { dueToday: number; slipped: number; firstTitle: string | null };
+  /** Repeating charges landing in the next three days. */
+  paymentsDue?: { count: number; totalCents: Cents; firstLabel: string | null };
+  /** The active mission's next open step. */
+  mission?: { title: string; step: string; href: string } | null;
+  /** Exchange requests in the city that match something the student listed, or new departing stock for arrivals. */
+  exchange?: { count: number; label: string; href: string } | null;
 };
 
 export function buildDailyBrief(input: BriefInput): BriefLine[] {
   const lines: BriefLine[] = [];
   const fmt = input.formatMoney;
+
+  /* ---- what slipped ------------------------------------------------------ */
+  if (input.lifeops && input.lifeops.slipped > 0) {
+    lines.push({
+      kind: "task",
+      text: `${input.lifeops.slipped} ${input.lifeops.slipped === 1 ? "thing" : "things"} slipped past ${input.lifeops.slipped === 1 ? "its" : "their"} date`,
+      detail: input.lifeops.firstTitle ?? undefined,
+      href: "/lifeops",
+    });
+  }
+
+  /* ---- money going out --------------------------------------------------- */
+  if (input.paymentsDue && input.paymentsDue.count > 0) {
+    lines.push({
+      kind: "payment",
+      text: `${fmt(input.paymentsDue.totalCents)} goes out in the next three days`,
+      detail: input.paymentsDue.count === 1 ? (input.paymentsDue.firstLabel ?? undefined) : `${input.paymentsDue.count} repeating charges`,
+      href: "/lifeops?view=week",
+    });
+  }
 
   /* ---- tonight ---------------------------------------------------------- */
   if (input.tonight.length > 0 && input.hour < 23) {
@@ -106,12 +134,39 @@ export function buildDailyBrief(input: BriefInput): BriefLine[] {
     lines.push({
       kind: "task",
       text: `Next: ${input.nextTask.label}`,
-      href: "/arrival",
+      detail: input.lifeops && input.lifeops.dueToday > 0 ? `${input.lifeops.dueToday} on your timeline today` : undefined,
+      href: "/lifeops",
+    });
+  } else if (input.lifeops && input.lifeops.dueToday > 0 && input.lifeops.slipped === 0) {
+    lines.push({
+      kind: "task",
+      text: `${input.lifeops.dueToday} ${input.lifeops.dueToday === 1 ? "thing" : "things"} on your timeline today`,
+      detail: input.lifeops.firstTitle ?? undefined,
+      href: "/lifeops",
+    });
+  }
+
+  /* ---- mission ----------------------------------------------------------- */
+  if (input.mission && lines.length < 6) {
+    lines.push({
+      kind: "mission",
+      text: `Next mission step: ${input.mission.step}`,
+      detail: input.mission.title,
+      href: input.mission.href,
+    });
+  }
+
+  /* ---- exchange ---------------------------------------------------------- */
+  if (input.exchange && input.exchange.count > 0 && lines.length < 6) {
+    lines.push({
+      kind: "exchange",
+      text: input.exchange.label,
+      href: input.exchange.href,
     });
   }
 
   /* ---- pulse ------------------------------------------------------------ */
-  if (input.trendingPosts > 0 && lines.length < 5) {
+  if (input.trendingPosts > 0 && lines.length < 6) {
     lines.push({
       kind: "pulse",
       text: `${input.trendingPosts} ${input.trendingPosts === 1 ? "post" : "posts"} students in your city are talking about`,
@@ -119,7 +174,7 @@ export function buildDailyBrief(input: BriefInput): BriefLine[] {
     });
   }
 
-  return lines.slice(0, 5);
+  return lines.slice(0, 6);
 }
 
 /**

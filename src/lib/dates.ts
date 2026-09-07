@@ -1,0 +1,66 @@
+/**
+ * ============================================================================
+ * DATES IN THE CITY'S TIME
+ * ----------------------------------------------------------------------------
+ * Every time a student sees is in their city's timezone, formatted on the
+ * server. Formatting on the client would render in whatever zone the browser
+ * happens to be in, and would also hydrate differently from the server — a
+ * timeline that says "19:00" on first paint and "18:00" a frame later is
+ * worse than either.
+ *
+ * Pure and dependency-free so it can be unit tested.
+ * ============================================================================
+ */
+
+const LOCALE = "en-GB";
+
+export function fmtTime(iso: string, timeZone: string): string {
+  return new Intl.DateTimeFormat(LOCALE, { hour: "2-digit", minute: "2-digit", timeZone }).format(new Date(iso));
+}
+
+/** "2026-09-06" in the city's calendar. */
+export function dayKey(iso: string | Date, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat("en-CA", { year: "numeric", month: "2-digit", day: "2-digit", timeZone }).formatToParts(
+    typeof iso === "string" ? new Date(iso) : iso,
+  );
+  const get = (type: string) => parts.find((part) => part.type === type)?.value ?? "";
+  return `${get("year")}-${get("month")}-${get("day")}`;
+}
+
+/** "Today", "Tomorrow", "Sat 12 Sep". */
+export function fmtDay(iso: string, timeZone: string, now: Date): string {
+  const key = dayKey(iso, timeZone);
+  if (key === dayKey(now, timeZone)) return "Today";
+  if (key === dayKey(new Date(now.getTime() + 86_400_000), timeZone)) return "Tomorrow";
+  if (key === dayKey(new Date(now.getTime() - 86_400_000), timeZone)) return "Yesterday";
+  return new Intl.DateTimeFormat(LOCALE, { weekday: "short", day: "numeric", month: "short", timeZone }).format(new Date(iso));
+}
+
+/** "Today 19:00", "Sat 12 Sep 18:00", or just the day for all-day items. */
+export function fmtWhen(iso: string, timeZone: string, now: Date, allDay = false): string {
+  const day = fmtDay(iso, timeZone, now);
+  return allDay ? day : `${day} ${fmtTime(iso, timeZone)}`;
+}
+
+/** "Saturday 12 September". */
+export function fmtLongDay(iso: string, timeZone: string): string {
+  return new Intl.DateTimeFormat(LOCALE, { weekday: "long", day: "numeric", month: "long", timeZone }).format(new Date(iso));
+}
+
+/** Local hour (0-23) in the city, for "tonight" decisions. */
+export function hourIn(now: Date, timeZone: string): number {
+  return Number(new Intl.DateTimeFormat("en-GB", { hour: "numeric", hour12: false, timeZone }).format(now));
+}
+
+/** Local weekday (0 = Sunday) in the city. */
+export function weekdayIn(now: Date, timeZone: string): number {
+  const label = new Intl.DateTimeFormat("en-US", { weekday: "short", timeZone }).format(now);
+  return ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(label);
+}
+
+/** Whole days from now to a date, on the city's calendar. */
+export function daysUntil(iso: string, timeZone: string, now: Date): number {
+  const [y1, m1, d1] = dayKey(now, timeZone).split("-").map(Number);
+  const [y2, m2, d2] = dayKey(iso, timeZone).split("-").map(Number);
+  return Math.round((Date.UTC(y2, m2 - 1, d2) - Date.UTC(y1, m1 - 1, d1)) / 86_400_000);
+}

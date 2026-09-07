@@ -8,6 +8,7 @@ import type { SavedPlanItem } from "@/domain/types";
 import { findOne, insert, newId, nowIso, remove, transaction, update } from "@/server/db";
 import { STRATEGY_VERSION } from "@/server/engines/recommend";
 import { recordOutcome } from "@/server/actions/insight";
+import { limits, rateLimit } from "@/server/rate-limit";
 import { loadFriendIds } from "@/server/queries/social";
 import { requireUserId } from "@/server/viewer";
 
@@ -41,6 +42,10 @@ const lineSchema = z.object({
   refId: z.string().nullable(),
 });
 
+function throttled(userId: string): boolean {
+  return !rateLimit(`plans:write:${userId}`, limits.post.limit, limits.post.windowSeconds).ok;
+}
+
 /**
  * Save an Ask answer as a plan.
  *
@@ -55,6 +60,7 @@ export async function savePlanFromAnswer(input: {
   forDate?: string | null;
 }): Promise<PlanActionResult> {
   const userId = await requireUserId();
+  if (throttled(userId)) return { ok: false, message: "That is a lot of plans. Try again in a bit." };
 
   const parsed = z.array(lineSchema).min(1).max(12).safeParse(input.lines);
   if (!parsed.success) return { ok: false, message: "That plan did not save." };
@@ -72,7 +78,7 @@ export async function savePlanFromAnswer(input: {
     id,
     userId,
     citySlug: profile.citySlug,
-    title: input.title.slice(0, 120),
+    title: String(input.title ?? "Plan").slice(0, 120),
     query: input.query,
     budgetCents: input.budgetCents,
     items,
@@ -134,6 +140,7 @@ async function trustedLine(
 
 export async function createPlan(formData: FormData): Promise<PlanActionResult> {
   const userId = await requireUserId();
+  if (throttled(userId)) return { ok: false, message: "That is a lot of plans. Try again in a bit." };
 
   const parsed = z
     .object({
@@ -175,30 +182,51 @@ export async function createPlan(formData: FormData): Promise<PlanActionResult> 
   return { ok: true, id };
 }
 
+/* -------------------------------------------------------------------------- */
+/* Add to plan                                                                 */
+/* -------------------------------------------------------------------------- */
+
+export type AddToPlanResult =
+  | {
+      ok: true;
+      id: string;
+      title: string;
+      /** True when the call created the plan rather than adding to one. */
+      created: boolean;
+      /** True when the line was already on the plan and nothing changed. */
+      already: boolean;
+    }
+  | { ok: false; message: string };
+
+const addSchema = z.object({
+  refKind: z.enum(["place", "event"]),
+  refId: z.string().trim().min(1).max(120),
+  planId: z.string().trim().min(1).max(120).nullable().optional(),
+  title: z.string().trim().max(80).nullable().optional(),
+});
+
 /**
- * "Add to plan" from an event or a place. Picks the student's most recent
- * upcoming plan when none is named, or creates one.
+ * "Add to plan" from an event or a place.
+ *
+ * The chooser on the client names the plan: an existing one by id, or a new
+ * one (optionally titled). There is no silent fallback to "the most recent
+ * plan" — a line landing on last Saturday's plan without being asked is the
+ * kind of surprise that makes a student stop using the button.
  */
 export async function addToPlan(input: {
   refKind: "place" | "event";
   refId: string;
   planId?: string | null;
-}): Promise<PlanActionResult> {
+  title?: string | null;
+}): Promise<AddToPlanResult> {
   const userId = await requireUserId();
+
+  const parsed = addSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, message: "That is not something we can add." };
+  if (throttled(userId)) return { ok: false, message: "That is a lot of edits. Try again in a bit." };
+
   const profile = await findOne("profiles", (row) => row.userId === userId);
   if (!profile) return { ok: false, message: "Finish setting up your account first." };
-
-  let plan = input.planId
-    ? await findOne("plans", (row) => row.id === input.planId && row.userId === userId)
-    : null;
-
-  if (!plan) {
-    const now = Date.now();
-    const candidates = (await findMany_(userId)).filter(
-      (row) => !row.forDate || Date.parse(row.forDate) + 86_400_000 > now,
-    );
-    plan = candidates.sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ?? null;
-  }
 
   const line = await trustedLine(
     {
@@ -209,54 +237,63 @@ export async function addToPlan(input: {
       walkMinutes: null,
       kind: "activity",
       source: "students",
-      refKind: input.refKind,
-      refId: input.refId,
+      refKind: parsed.data.refKind,
+      refId: parsed.data.refId,
     },
     profile.citySlug,
   );
   if (!line.refId) return { ok: false, message: "That is not something we can add." };
 
-  if (!plan) {
-    const id = newId();
-    await insert("plans", {
-      id,
-      userId,
-      citySlug: profile.citySlug,
-      title: "My plan",
-      query: null,
-      budgetCents: null,
-      items: [line],
-      strategy: "manual",
-      forDate: null,
-      shared: false,
-      createdAt: nowIso(),
-    });
+  if (parsed.data.planId) {
+    const plan = await findOne(
+      "plans",
+      (row) => row.id === parsed.data.planId && row.userId === userId,
+    );
+    if (!plan) return { ok: false, message: "That plan is not yours." };
+
+    if (plan.items.some((item) => item.refId === line.refId)) {
+      return { ok: true, id: plan.id, title: plan.title, created: false, already: true };
+    }
+
+    await update("plans", (row) => row.id === plan.id, { items: [...plan.items, line] });
     revalidatePath("/plans");
-    return { ok: true, id };
+    revalidatePath(`/plans/${plan.id}`);
+    revalidatePath(`/p/${plan.id}`);
+    return { ok: true, id: plan.id, title: plan.title, created: false, already: false };
   }
 
-  if (plan.items.some((item) => item.refId === line.refId)) {
-    return { ok: true, id: plan.id };
-  }
+  const title = parsed.data.title?.trim() || line.title.slice(0, 80);
+  const id = newId();
+  await insert("plans", {
+    id,
+    userId,
+    citySlug: profile.citySlug,
+    title,
+    query: null,
+    budgetCents: null,
+    items: [line],
+    strategy: "manual",
+    forDate: null,
+    shared: false,
+    createdAt: nowIso(),
+  });
 
-  await update("plans", (row) => row.id === plan!.id, { items: [...plan.items, line] });
+  await recordOutcome("plan-created", title);
   revalidatePath("/plans");
-  revalidatePath(`/plans/${plan.id}`);
-  return { ok: true, id: plan.id };
-}
-
-async function findMany_(userId: string) {
-  const { findMany } = await import("@/server/db");
-  return findMany("plans", (row) => row.userId === userId);
+  return { ok: true, id, title, created: true, already: false };
 }
 
 export async function removePlanLine(planId: string, index: number): Promise<PlanActionResult> {
   const userId = await requireUserId();
   const plan = await findOne("plans", (row) => row.id === planId && row.userId === userId);
   if (!plan) return { ok: false, message: "That plan is not yours." };
+  if (!Number.isInteger(index) || index < 0 || index >= plan.items.length) {
+    return { ok: false, message: "No such line." };
+  }
   const items = plan.items.filter((_, i) => i !== index);
   await update("plans", (row) => row.id === planId, { items });
   revalidatePath(`/plans/${planId}`);
+  revalidatePath(`/p/${planId}`);
   return { ok: true, id: planId };
 }
 
@@ -266,9 +303,15 @@ export async function removePlanLine(planId: string, index: number): Promise<Pla
 
 export async function setPlanShared(planId: string, shared: boolean): Promise<PlanActionResult> {
   const userId = await requireUserId();
-  const updated = await update("plans", (row) => row.id === planId && row.userId === userId, { shared });
+  const updated = await update(
+    "plans",
+    (row) => row.id === planId && row.userId === userId,
+    { shared: Boolean(shared) },
+  );
   if (!updated) return { ok: false, message: "That plan is not yours." };
   revalidatePath(`/plans/${planId}`);
+  revalidatePath(`/p/${planId}`);
+  revalidatePath("/plans");
   return { ok: true, id: planId };
 }
 
@@ -309,6 +352,8 @@ export async function inviteToPlan(planId: string, friendId: string): Promise<Pl
 
 export async function respondToPlan(planId: string, status: "in" | "out"): Promise<PlanActionResult> {
   const userId = await requireUserId();
+  if (status !== "in" && status !== "out") return { ok: false, message: "Say in or out." };
+
   const member = await findOne("planMembers", (row) => row.planId === planId && row.userId === userId);
   const plan = await findOne("plans", (row) => row.id === planId);
   if (!plan) return { ok: false, message: "That plan has gone." };
@@ -334,6 +379,8 @@ export async function votePlanItem(
   value: 1 | -1,
 ): Promise<PlanActionResult> {
   const userId = await requireUserId();
+  if (value !== 1 && value !== -1) return { ok: false, message: "A vote is up or down." };
+
   const plan = await findOne("plans", (row) => row.id === planId);
   if (!plan) return { ok: false, message: "That plan has gone." };
 
@@ -341,7 +388,9 @@ export async function votePlanItem(
   if (plan.userId !== userId && member?.status !== "in") {
     return { ok: false, message: "Join the plan to vote on it." };
   }
-  if (itemIndex < 0 || itemIndex >= plan.items.length) return { ok: false, message: "No such line." };
+  if (!Number.isInteger(itemIndex) || itemIndex < 0 || itemIndex >= plan.items.length) {
+    return { ok: false, message: "No such line." };
+  }
 
   await transaction((db) => {
     const index = db.planVotes.findIndex(
@@ -366,6 +415,9 @@ export async function deletePlan(planId: string): Promise<PlanActionResult> {
   if (removed === 0) return { ok: false, message: "That plan is not yours." };
   await remove("planMembers", (row) => row.planId === planId);
   await remove("planVotes", (row) => row.planId === planId);
+  /* Bookmarks pointing at a plan that no longer exists are noise on Saved. */
+  await remove("saved", (row) => row.kind === "plan" && row.targetId === planId);
   revalidatePath("/plans");
+  revalidatePath("/saved");
   return { ok: true, id: planId };
 }

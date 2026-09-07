@@ -1,94 +1,51 @@
-import { ArrowRight, Check } from "lucide-react";
-
-import { MascotArt } from "@/components/mascot/mascot-art";
+import { Mascot } from "@/components/mascot/mascot";
 import { ButtonLink } from "@/components/ui/button";
+import { Section } from "@/components/ui/primitives";
 import { Reveal } from "@/components/ui/reveal";
-import { brand } from "@/brand/brand.config";
-import { defaultCurrency, localeFor, plans } from "@/config/pricing";
+import { cities } from "@/data/cities";
 import { coverageStats } from "@/config/regions";
-import { money } from "@/lib/utils";
 
 /**
- * The one loud moment on the page.
- *
- * Everything above this is warm paper and hairlines, which is exactly what
- * earns a full field of signal green here: after ten quiet sections the eye has
- * nothing to compare it to, so the close lands. Used twice it would land nowhere.
+ * ============================================================================
+ * FINAL CTA
+ * ----------------------------------------------------------------------------
+ * The second and last full-bleed dark field on the page. One line, the
+ * character, one button — everything that could dilute the ask has already
+ * been said above it.
+ * ============================================================================
  */
 export function FinalCta() {
-  const cheapestPaid = Math.min(
-    ...plans.filter((plan) => plan.monthly > 0).map((plan) => plan.monthly),
-  );
-  const where = { currency: defaultCurrency, locale: localeFor(defaultCurrency) };
-
-  const assurances = [
-    "Free tier, not a trial",
-    "No card to start",
-    `Works in ${coverageStats.countries} countries`,
-  ];
-
   return (
-    <section className="relative isolate overflow-hidden bg-signal py-20 text-ink-950 sm:py-28">
-      {/* Two decorative layers, both very low contrast: a dot field that keeps
-          the flat green from looking like a colour swatch, and grain over it so
-          the edge between them never bands on a wide gradient-poor display. */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 text-ink-950/25 dotfield [mask-image:radial-gradient(75%_65%_at_50%_45%,black,transparent)]"
-      />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 opacity-[0.13] mix-blend-multiply grain"
-      />
+    <Section tone="dark" className="overflow-hidden">
+      <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="mesh-blob bottom-[-16rem] left-1/2 size-[38rem] -translate-x-1/2 bg-signal/16" />
+      </div>
 
       <div className="page relative">
-        <Reveal className="flex flex-col items-center text-center">
-          {/* The close is the one place he is the focal point rather than a
-              detail. He has been in the margins for twelve sections; putting
-              him centre stage, packed and ready, is what makes the ending feel
-              like a character saying goodbye rather than a form. */}
-          <MascotArt state="excited" accessory="backpack" className="size-28 sm:size-32" />
-
-          <h2 className="mt-6 max-w-3xl text-display-lg text-balance">
-            Your new city is easier when you know where to look.
-          </h2>
-
-          <p className="mt-5 max-w-xl text-lg leading-relaxed text-ink-950/70">
-            Discover more, spend smarter and meet the people around you. Your first month somewhere
-            new only happens once — spend it doing things instead of working out what they cost.
+        <Reveal className="mx-auto flex max-w-2xl flex-col items-center text-center">
+          <Mascot state="celebrating" size="xl" />
+          <h2 className="mt-6 text-display-lg text-white">Your new city, figured out.</h2>
+          <p className="mt-4 max-w-lg text-base leading-relaxed text-white/60 sm:text-lg">
+            Set your city, your budget and your university, and the first week is waiting for you.
+            It takes four questions.
           </p>
 
-          <div className="mt-9 flex flex-col gap-3 sm:flex-row">
-            <ButtonLink href="/get-started" variant="primary" size="lg" className="group">
-              Build my {brand.name}
-              <ArrowRight
-                className="size-4.5 transition-transform duration-200 group-hover:translate-x-0.5"
-                aria-hidden
-              />
+          <div className="mt-8 flex w-full flex-col items-stretch gap-2.5 sm:w-auto sm:flex-row sm:items-center">
+            <ButtonLink href="/get-started" variant="signal" size="lg">
+              Get started free
             </ButtonLink>
-            <ButtonLink
-              href="/#demo"
-              size="lg"
-              className="border-2 border-ink-950 bg-transparent text-ink-950 shadow-none hover:bg-ink-950/8"
-            >
-              Explore the product
+            <ButtonLink href="/pricing" variant="onDarkGhost" size="lg">
+              See pricing
             </ButtonLink>
           </div>
 
-          <ul className="mt-8 flex flex-wrap items-center justify-center gap-x-6 gap-y-2">
-            {assurances.map((item) => (
-              <li key={item} className="flex items-center gap-1.5 text-sm text-ink-950/70">
-                <Check className="size-4 shrink-0" aria-hidden />
-                {item}
-              </li>
-            ))}
-          </ul>
-
-          <p className="mt-6 text-sm text-ink-950/55">
-            Paid tiers start at {money(cheapestPaid, where)} a month, in your own currency.
+          <p className="mt-4 text-[0.8125rem] text-white/40">Free to join. No card required.</p>
+          <p className="tnum mt-6 font-mono text-micro uppercase tracking-[0.12em] text-white/30">
+            {cities.length} cities with deep data · {coverageStats.cities} cities ·{" "}
+            {coverageStats.countries} countries · {coverageStats.currencies} currencies
           </p>
         </Reveal>
       </div>
-    </section>
+    </Section>
   );
 }

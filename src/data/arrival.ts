@@ -104,3 +104,87 @@ export const genericArrivalTasks: readonly ArrivalTask[] = arrivalTasksByCity.ma
 export function arrivalTasksFor(citySlug: string): readonly ArrivalTask[] {
   return arrivalTasksByCity[citySlug] ?? genericArrivalTasks;
 }
+
+/* -------------------------------------------------------------------------- */
+/* Arrival stages: the landing page view of Arrival Mode                       */
+/* -------------------------------------------------------------------------- */
+
+export type ArrivalStageKey = "before" | "first-day" | "first-week" | "first-month";
+
+export type ArrivalStageTask = {
+  label: string;
+  detail: string;
+  /** The row links to an official source in the product. */
+  official?: boolean;
+  cost?: string;
+  kind:
+    | "transport"
+    | "sim"
+    | "supermarket"
+    | "university"
+    | "gym"
+    | "community"
+    | "budget"
+    | "social"
+    | "bank"
+    | "registration"
+    | "travel";
+};
+
+export type ArrivalStage = {
+  key: ArrivalStageKey;
+  label: string;
+  tagline: string;
+  tasks: readonly ArrivalStageTask[];
+};
+
+/**
+ * Sample tasks per stage. In the product the list is generated per city from
+ * the city record and official sources; the shape is the same.
+ */
+export const arrivalStages: readonly ArrivalStage[] = [
+  {
+    key: "before",
+    label: "Before arrival",
+    tagline: "The things that are cheaper or faster from home.",
+    tasks: [
+      { kind: "budget", label: "Set a budget that matches the city", detail: "Rent, transport, a realistic food number. In the local currency." },
+      { kind: "registration", label: "Book the registration appointment", detail: "Slots go weeks ahead in most cities. Official link attached.", official: true },
+      { kind: "transport", label: "Order the transport card if it ships", detail: "Some cities post it. Others need you in person.", official: true },
+      { kind: "community", label: "Read your future city's feed", detail: "What students are asking this month is what you will be asking next month." },
+    ],
+  },
+  {
+    key: "first-day",
+    label: "First day",
+    tagline: "Four things, then sleep.",
+    tasks: [
+      { kind: "sim", label: "Local SIM", detail: "Prepaid works on day one and needs only your passport.", cost: "€8 to €15 a month" },
+      { kind: "transport", label: "Transport card or semester ticket", detail: "Check what your university already includes before buying anything.", official: true },
+      { kind: "supermarket", label: "Find the cheap supermarket", detail: "One walk around the neighbourhood. This decision moves your weekly spend by €10 to €15." },
+      { kind: "university", label: "Walk to campus once, unhurried", detail: "So the first real day is not the first time." },
+    ],
+  },
+  {
+    key: "first-week",
+    label: "First week",
+    tagline: "Set up, then show up.",
+    tasks: [
+      { kind: "university", label: "University card and library", detail: "The card gets you the canteen price, the gym rate and the study rooms." },
+      { kind: "bank", label: "Bank account or EU digital account", detail: "A digital account covers weeks one and two. Official requirements linked.", official: true },
+      { kind: "community", label: "Join your campus feed and two societies", detail: "The step that decides whether the year is social or lonely. Free." },
+      { kind: "social", label: "Go to one free thing", detail: "Anything with other new students. The first one is the hardest and the only one that matters." },
+    ],
+  },
+  {
+    key: "first-month",
+    label: "First month",
+    tagline: "A routine, a budget that holds, a group.",
+    tasks: [
+      { kind: "gym", label: "Gym or sport", detail: "Municipal centres and university clubs are well under private gyms.", cost: "€15 to €25 a month" },
+      { kind: "budget", label: "Check what is charging you monthly", detail: "Subscriptions surface from your own history." },
+      { kind: "social", label: "Join something that repeats", detail: "A weekly game or a language exchange beats ten one-off events." },
+      { kind: "travel", label: "Plan one weekend away", detail: "A separate envelope for it, so it does not wreck the month." },
+    ],
+  },
+];

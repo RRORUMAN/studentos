@@ -6,6 +6,7 @@ import { useState, useTransition } from "react";
 
 import { ShareButton } from "@/components/app/share-button";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/toast";
 import {
   createPlan,
   deletePlan,
@@ -113,6 +114,67 @@ export function PlanVote({
   );
 }
 
+/**
+ * Share for anyone on the plan. Public link on: copy `/p/[id]`. Off: the
+ * owner sees the toggle; a member sees why there is nothing to copy yet.
+ */
+export function PlanShare({
+  planId,
+  title,
+  shared,
+  owner,
+}: {
+  planId: string;
+  title: string;
+  shared: boolean;
+  owner: boolean;
+}) {
+  const router = useRouter();
+  const toast = useToast();
+  const [isShared, setIsShared] = useState(shared);
+  const [pending, startTransition] = useTransition();
+
+  const toggle = () =>
+    startTransition(async () => {
+      const result = await setPlanShared(planId, !isShared);
+      if (!result.ok) {
+        toast({ tone: "warning", title: result.message });
+        return;
+      }
+      setIsShared(!isShared);
+      toast({
+        title: !isShared ? "Public link on" : "Public link off",
+        description: !isShared ? "Anyone with the link can see the stops and join." : "Only people on the plan can open it now.",
+      });
+      router.refresh();
+    });
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      {owner ? (
+        <button
+          type="button"
+          aria-pressed={isShared}
+          disabled={pending}
+          onClick={toggle}
+          className={cn(
+            "inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-[0.875rem] font-medium transition-colors",
+            isShared ? "bg-mint-soft text-mint-deep ring-1 ring-mint-deep/30" : "bg-white text-ink-700 ring-1 ring-ink-950/10 hover:ring-ink-950/25",
+          )}
+        >
+          {pending ? <Loader2 className="size-4 animate-spin" /> : <Link2 className="size-4" />}
+          {isShared ? "Public link on" : "Make link public"}
+        </button>
+      ) : null}
+      {isShared ? (
+        <ShareButton path={`/p/${planId}`} title={title} label="Share plan" />
+      ) : !owner ? (
+        <span className="text-[0.8125rem] text-ink-500">Private plan — the owner can turn on a public link.</span>
+      ) : null}
+    </div>
+  );
+}
+
 export function PlanOwnerControls({
   planId,
   title,
@@ -127,7 +189,7 @@ export function PlanOwnerControls({
   invited: ReadonlySet<string>;
 }) {
   const router = useRouter();
-  const [isShared, setIsShared] = useState(shared);
+  const toast = useToast();
   const [inviting, setInviting] = useState(false);
   const [pending, startTransition] = useTransition();
   const [sent, setSent] = useState<Set<string>>(new Set(invited));
@@ -135,30 +197,10 @@ export function PlanOwnerControls({
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
+        <PlanShare planId={planId} title={title} shared={shared} owner />
         <button
           type="button"
-          aria-pressed={isShared}
-          disabled={pending}
-          onClick={() =>
-            startTransition(async () => {
-              const result = await setPlanShared(planId, !isShared);
-              if (result.ok) {
-                setIsShared(!isShared);
-                router.refresh();
-              }
-            })
-          }
-          className={cn(
-            "inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-[0.875rem] font-medium transition-colors",
-            isShared ? "bg-mint-soft text-mint-deep ring-1 ring-mint-deep/30" : "bg-white text-ink-700 ring-1 ring-ink-950/10 hover:ring-ink-950/25",
-          )}
-        >
-          <Link2 className="size-4" />
-          {isShared ? "Public link on" : "Make link public"}
-        </button>
-        {isShared ? <ShareButton path={`/p/${planId}`} title={title} /> : null}
-        <button
-          type="button"
+          aria-expanded={inviting}
           onClick={() => setInviting((current) => !current)}
           className="inline-flex items-center gap-1.5 rounded-full bg-white px-3.5 py-2 text-[0.875rem] font-medium text-ink-700 ring-1 ring-ink-950/10 hover:ring-ink-950/25"
         >
@@ -168,13 +210,18 @@ export function PlanOwnerControls({
         <button
           type="button"
           aria-label="Delete plan"
+          title="Delete plan"
           disabled={pending}
-          onClick={() =>
+          onClick={() => {
+            if (!window.confirm(`Delete “${title}”? This cannot be undone.`)) return;
             startTransition(async () => {
               const result = await deletePlan(planId);
-              if (result.ok) router.push("/plans");
-            })
-          }
+              if (result.ok) {
+                toast({ title: "Plan deleted" });
+                router.push("/plans");
+              } else toast({ tone: "warning", title: result.message });
+            });
+          }}
           className="ml-auto grid size-9 place-items-center rounded-full text-ink-400 hover:bg-pulse-soft hover:text-pulse-deep"
         >
           <Trash2 className="size-4" />
@@ -202,8 +249,9 @@ export function PlanOwnerControls({
                           const result = await inviteToPlan(planId, friend.userId);
                           if (result.ok) {
                             setSent((current) => new Set([...current, friend.userId]));
+                            toast({ title: `Invited ${friend.displayName}` });
                             router.refresh();
-                          }
+                          } else toast({ tone: "warning", title: result.message });
                         })
                       }
                       className={cn(

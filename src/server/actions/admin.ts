@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
+import { type AiSettingKey, aiSettingMeta } from "@/config/ai";
 import { tierOrder } from "@/config/entitlements";
 import { cityDirectory } from "@/data/cities";
 import { nowIso, remove, transaction } from "@/server/db";
@@ -82,6 +83,52 @@ export async function setFlag(formData: FormData): Promise<void> {
   if (state !== "on" && state !== "off" && state !== "default") return note("Unknown state.");
 
   await put(`flag.${flag}`, state === "default" ? null : state);
+  await note(null);
+  revalidatePath("/admin");
+}
+
+/* -------------------------------------------------------------------------- */
+/* AI configuration                                                            */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Provider, per-tier model, ceilings and cost caps — everything except the API
+ * key, which comes from the environment and deliberately has no form.
+ *
+ * Values are validated against a closed vocabulary or a numeric range before
+ * they are stored, so a typo in this form cannot route every student to a
+ * model that does not exist.
+ */
+export async function setAiSetting(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const key = String(formData.get("key") ?? "");
+  const raw = String(formData.get("value") ?? "").trim();
+
+  if (!(key in aiSettingMeta)) return note("Unknown AI setting.");
+
+  /* Blank clears the row and restores the code or environment default. */
+  if (raw === "") {
+    await put(key, null);
+    await note(null);
+    revalidatePath("/admin");
+    return;
+  }
+
+  if (key === "ai.provider") {
+    if (raw !== "anthropic" && raw !== "openai" && raw !== "none") {
+      return note("Provider must be anthropic, openai or none.");
+    }
+  } else if (key === "ai.enabled") {
+    if (raw !== "on" && raw !== "off") return note("Model calls are either on or off.");
+  } else if (aiSettingMeta[key as AiSettingKey].kind === "number") {
+    const value = Number(raw);
+    if (!Number.isFinite(value) || value < 0) return note("Enter a number, or leave blank for the default.");
+    if (key === "ai.temperature" && value > 1) return note("Temperature is between 0 and 1.");
+  } else if (raw.length > 80) {
+    return note("That model name is too long to be real.");
+  }
+
+  await put(key, raw);
   await note(null);
   revalidatePath("/admin");
 }

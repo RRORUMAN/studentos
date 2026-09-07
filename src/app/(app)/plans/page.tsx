@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/primitives";
 import { loadMyPlans, type PlanCard } from "@/server/queries/plans";
 import { requestDate } from "@/server/now";
 import { requireViewer } from "@/server/viewer";
+import { fmtDay, fmtWhen } from "@/lib/dates";
 import { cn, money } from "@/lib/utils";
 
 export const metadata: Metadata = {
@@ -28,6 +29,7 @@ export default async function PlansPage(props: PageProps<"/plans">) {
   const params = await props.searchParams;
   const now = requestDate();
   const where = viewer.currency;
+  const timeZone = viewer.city.timezone;
 
   const raw = Array.isArray(params.tab) ? params.tab[0] : params.tab;
   const tab = raw === "invites" || raw === "past" ? raw : "upcoming";
@@ -96,7 +98,7 @@ export default async function PlansPage(props: PageProps<"/plans">) {
         <ul className="mt-6 space-y-3">
           {list.map((card) => (
             <li key={`${card.kind}-${card.id}`}>
-              <PlanRow card={card} where={where} />
+              <PlanRow card={card} where={where} timeZone={timeZone} now={now} />
             </li>
           ))}
         </ul>
@@ -105,7 +107,23 @@ export default async function PlansPage(props: PageProps<"/plans">) {
   );
 }
 
-function PlanRow({ card, where }: { card: PlanCard; where: { currency: string; locale: string } }) {
+function PlanRow({
+  card,
+  where,
+  timeZone,
+  now,
+}: {
+  card: PlanCard;
+  where: { currency: string; locale: string };
+  timeZone: string;
+  now: Date;
+}) {
+  const when = card.when
+    ? card.kind === "invite"
+      ? fmtWhen(card.when, timeZone, now)
+      : fmtDay(card.when, timeZone, now)
+    : "No date yet";
+
   return (
     <Link href={card.href} className="flex items-center gap-4 rounded-2xl bg-white p-4 shadow-[var(--shadow-flat)] ring-1 ring-ink-950/6 transition-shadow hover:shadow-[var(--shadow-raise)]">
       <span className={cn("grid size-12 shrink-0 place-items-center rounded-xl", card.kind === "invite" ? "bg-signal-soft" : "bg-flow-soft")}>
@@ -118,10 +136,15 @@ function PlanRow({ card, where }: { card: PlanCard; where: { currency: string; l
           {card.shared ? <Badge accent="mint">Public</Badge> : null}
         </span>
         <span className="mt-0.5 block text-[0.8125rem] text-ink-500">
-          {card.when ? new Date(card.when).toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: card.kind === "invite" ? "2-digit" : undefined, minute: card.kind === "invite" ? "2-digit" : undefined }) : "No date yet"}
+          {when}
           {" · "}
-          {card.kind === "invite" ? `${card.people} in` : `${card.stops} ${card.stops === 1 ? "stop" : "stops"}`}
-          {card.perPersonCents !== null ? ` · ~${money(card.perPersonCents / 100, where)} each` : card.totalCents ? ` · ${money(card.totalCents / 100, where)}` : ""}
+          <span className="tnum">{card.people}</span> {card.people === 1 ? "person" : "people"}
+          {card.kind === "plan" ? ` · ${card.stops} ${card.stops === 1 ? "stop" : "stops"}` : ""}
+          {card.perPersonCents !== null
+            ? ` · ~${money(card.perPersonCents / 100, where)} each`
+            : card.totalCents
+              ? ` · ${money(card.totalCents / 100, where)}`
+              : ""}
           {card.by && !card.mine ? ` · by ${card.by}` : ""}
           {card.votes > 0 ? ` · ${card.votes} votes` : ""}
         </span>

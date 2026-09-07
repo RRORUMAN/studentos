@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/toast";
 import { savePlanFromAnswer } from "@/server/actions/plans";
 import type { WeekItem } from "@/server/engines/week";
 
@@ -19,6 +20,7 @@ export function SaveWeekButton({
   budgetCents: number | null;
 }) {
   const router = useRouter();
+  const toast = useToast();
   const [saved, setSaved] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -49,7 +51,10 @@ export function SaveWeekButton({
           });
           if (result.ok) {
             setSaved(result.id);
-            window.setTimeout(() => router.push(`/plans/${result.id}`), 500);
+            toast({ title: "Saved to Plans", description: "Opening the plan." });
+            router.push(`/plans/${result.id}`);
+          } else {
+            toast({ tone: "warning", title: result.message });
           }
         })
       }

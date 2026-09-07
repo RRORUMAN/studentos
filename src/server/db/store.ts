@@ -8,6 +8,8 @@ import { join } from "node:path";
 import { env } from "@/services/env";
 
 import type { Move } from "@/domain/lifecycle";
+import type { LifeOpsTask } from "@/domain/lifeops";
+import type { Mission, MissionStep } from "@/domain/missions";
 import type { DealReport, Guide, OfficialFact, PriceObservation } from "@/domain/knowledge";
 import type {
   Challenge,
@@ -29,11 +31,17 @@ import type {
 import type {
   AdminSetting,
   ArrivalProgress,
+  AskHistoryRow,
   AiUsage,
   AuthToken,
+  Confirmation,
+  ContentReport,
+  Follow,
   BudgetEnvelope,
   BudgetSetup,
   ChatMessageRow,
+  ChatPoll,
+  ChatPollVote,
   ChatPrefs,
   ChatReaction,
   Collection,
@@ -49,6 +57,7 @@ import type {
   NotificationPrefs,
   PlanMember,
   PlanVote,
+  PollVote,
   Profile,
   RecurringExpense,
   SavedItem,
@@ -157,6 +166,20 @@ export type Database = {
   challenges: Challenge[];
   challengeEntries: ChallengeEntry[];
   explorations: Exploration[];
+
+  /* --- lifeops and missions ---------------------------------------------- */
+  lifeopsTasks: LifeOpsTask[];
+  missions: Mission[];
+  missionSteps: MissionStep[];
+
+  /* --- ask, follows, trust ------------------------------------------------ */
+  askHistory: AskHistoryRow[];
+  follows: Follow[];
+  contentReports: ContentReport[];
+  confirmations: Confirmation[];
+  pollVotes: PollVote[];
+  chatPolls: ChatPoll[];
+  chatPollVotes: ChatPollVote[];
 };
 
 export const DATABASE_VERSION = 1;
@@ -216,6 +239,16 @@ function emptyDatabase(): Database {
     challenges: [],
     challengeEntries: [],
     explorations: [],
+    lifeopsTasks: [],
+    missions: [],
+    missionSteps: [],
+    askHistory: [],
+    follows: [],
+    contentReports: [],
+    confirmations: [],
+    pollVotes: [],
+    chatPolls: [],
+    chatPollVotes: [],
   };
 }
 

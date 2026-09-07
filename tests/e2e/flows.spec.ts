@@ -54,9 +54,16 @@ test("a student can find something free, say they are going, and open the event 
   /* Going opens the chat. */
   await page.getByRole("link", { name: /Event chat/ }).click();
   await page.waitForURL(/\/pulse\/chat\/event-/);
-  await page.getByLabel("Message").fill("Anyone coming alone?");
+  /* Stamped: the store persists between runs and both Playwright projects
+     share it, so an unstamped message would accumulate in this channel and the
+     count assertion below would drift upwards run after run. */
+  const message = `Anyone coming alone? #${Date.now().toString(36).slice(-5)}`;
+  await page.getByLabel("Message").fill(message);
   await page.getByRole("button", { name: "Send" }).click();
-  await expect(page.getByText("Anyone coming alone?")).toBeVisible();
+
+  /* Sent once, and in the thread exactly once. */
+  const thread = page.getByRole("list", { name: "Conversation" });
+  await expect(thread.getByRole("listitem").filter({ hasText: message })).toHaveCount(1);
 
   /* Save it, and it shows in Saved. */
   await page.goBack();
@@ -79,13 +86,15 @@ test("Ask returns a real plan built from real rows, never an invented one", asyn
   const answer = page.getByRole("heading", { level: 2 }).first();
   await expect(answer).toBeVisible({ timeout: 20_000 });
 
+  /* The plan is priced and never exceeds the number the student gave. */
   const total = page.getByText("Total", { exact: true }).locator("..");
   await expect(total).toBeVisible();
   expect(toCents(await total.innerText())).toBeLessThanOrEqual(2_000);
 
+  /* Provenance, the parse, and a way to reach real people. */
   await expect(page.getByText("Sources", { exact: true })).toBeVisible();
-  await expect(page.getByText("Students say", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: /Ask this question to my campus/ })).toBeVisible();
+  await expect(page.getByText("Read as", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Ask my campus/ })).toBeVisible();
 });
 
 test("Ask never claims a priced list is free", async ({ page }) => {
@@ -188,7 +197,7 @@ test("a student can post a plan and it appears for the city", async ({ page }) =
 
   await page.waitForURL(/\/anyone-down\/[0-9a-f-]+/);
   await expect(page.getByRole("heading", { name: "Football" })).toBeVisible();
-  await expect(page.getByText(/1 of \d+ in/)).toBeVisible();
+  await expect(page.getByText(/1 in ·/)).toBeVisible();
 
   /* It also shows under Plans. */
   await page.goto("/plans");
@@ -211,15 +220,15 @@ test("Student Pulse is readable and postable on the free tier", async ({ page })
 
   await page.getByRole("button", { name: "Post something" }).click();
   await page.getByLabel("Title").fill(title);
-  await page.getByRole("button", { name: "question", exact: true }).click();
-  await page.getByRole("button", { name: "Post", exact: true }).click();
+  await page.getByRole("button", { name: "Question", exact: true }).click();
+  await page.getByRole("button", { name: "Post it", exact: true }).click();
 
   await expect(page.getByText(title)).toBeVisible();
 
   /* Open it and answer it. */
   await page.getByRole("link", { name: title }).click();
-  await page.getByLabel("Your reply").fill("There is one on Calle de la Princesa, €4 a load.");
-  await page.getByRole("button", { name: "Reply" }).click();
+  await page.getByLabel("Your answer").fill("There is one on Calle de la Princesa, €4 a load.");
+  await page.getByRole("button", { name: /^(Answer|Reply)$/ }).click();
   await expect(page.getByRole("paragraph").filter({ hasText: "€4 a load" })).toBeVisible();
 
   /* The chat hub lists the city channels. */

@@ -1,10 +1,13 @@
 import type { Metadata } from "next";
 
-import { CityStatusControls, FlagControls, QuotaControls } from "@/components/app/admin-controls";
+import { AiControls, AiToolList, CityStatusControls, FlagControls, QuotaControls } from "@/components/app/admin-controls";
+import { type AiSettingKey, aiSettingMeta } from "@/config/ai";
 import { upgradeTriggerMeta, type UpgradeTrigger } from "@/config/entitlements";
 import { cityDirectory } from "@/data/cities";
 import type { CityStatus } from "@/data/types";
 import { loadAdminMetrics, loadUnmetNeeds, loadUpgradeTriggerStats } from "@/server/queries/admin";
+import { aiConfig, degradedCopy, spendSince } from "@/server/ai/config";
+import { toolMeta, type ToolName, toolSchemas } from "@/server/ai/tools";
 import { type FlagName, flagMeta, loadSettings } from "@/server/queries/settings";
 import { requireAdmin } from "@/server/viewer";
 import { cn, money } from "@/lib/utils";
@@ -29,12 +32,19 @@ export const metadata: Metadata = {
 export default async function AdminPage() {
   await requireAdmin();
 
-  const [metrics, needs, triggers, settings] = await Promise.all([
+  const [metrics, needs, triggers, settings, ai] = await Promise.all([
     loadAdminMetrics(),
     loadUnmetNeeds(),
     loadUpgradeTriggerStats(),
     loadSettings(),
+    aiConfig(),
   ]);
+
+  const dayStart = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate())).toISOString();
+  const spentToday = await spendSince(dayStart);
+  const aiValues = Object.fromEntries(
+    (Object.keys(aiSettingMeta) as AiSettingKey[]).map((key) => [key, settings.get(key)]),
+  ) as Partial<Record<AiSettingKey, string>>;
 
   const usersByCity = new Map(metrics.cities.map((row) => [row.citySlug, row.users]));
   const cityRows = cityDirectory
@@ -223,6 +233,31 @@ export default async function AdminPage() {
             <p className="mb-3 text-[0.875rem] text-ink-500">Server-side. Reading, posting and joining are never behind a flag.</p>
             <FlagControls states={flagStates} />
           </div>
+        </div>
+      </section>
+
+      {/* ---- AI configuration ---------------------------------------------- */}
+      <section className="mt-8 grid gap-6 lg:grid-cols-[1.4fr_1fr]">
+        <div>
+          <h2 className="mb-1 text-[1.0625rem] font-semibold text-ink-950">AI configuration</h2>
+          <p className="mb-3 text-[0.875rem] leading-relaxed text-ink-500">
+            Provider, model per tier, ceilings and spend caps. Past a cap every answer falls back to the deterministic
+            one, which is always correct — nothing breaks, it just reads plainer.
+          </p>
+          <AiControls
+            values={aiValues}
+            live={ai.live}
+            degradedReason={ai.degradedReason ? degradedCopy[ai.degradedReason] : null}
+            spentTodayMicros={spentToday}
+            dailyCapMicros={ai.dailyCostCapMicros}
+          />
+        </div>
+        <div>
+          <h2 className="mb-1 text-[1.0625rem] font-semibold text-ink-950">What the AI can read</h2>
+          <p className="mb-3 text-[0.875rem] leading-relaxed text-ink-500">
+            The complete list. A model never touches the database — it receives the output of these, and nothing else.
+          </p>
+          <AiToolList tools={(Object.keys(toolSchemas) as ToolName[]).map((name) => toolMeta[name])} />
         </div>
       </section>
 

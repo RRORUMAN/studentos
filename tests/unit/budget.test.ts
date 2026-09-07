@@ -292,4 +292,26 @@ describe("budgetInsight", () => {
     assert.equal(insight.tone, "good");
     assert.match(insight.headline, /€/);
   });
+
+  it("never offers the screen you are already on as the next action", () => {
+    /* The insight is rendered at the top of /budget. "Open budget" as its
+       action was a link to the current page — an action that does nothing is
+       worse than no action, because it teaches people the line is decoration. */
+    const readings = [
+      readBudget({ now: NOW, envelopes: [envelope("groceries", 30_000)], transactions: [tx("groceries", 2_000)], recurring: [] }),
+      readBudget({ now: NOW, envelopes: [envelope("nightlife", 30_000)], transactions: [tx("nightlife", 25_000)], recurring: [] }),
+      readBudget({
+        now: NOW,
+        envelopes: [envelope("groceries", 30_000)],
+        transactions: [tx("groceries", 20_000)],
+        recurring: [recurring("housing", 20_000, 28)],
+      }),
+      readBudget({ now: NOW, envelopes: [envelope("housing", 30_000)], transactions: [tx("housing", 12_000)], recurring: [] }),
+    ];
+
+    for (const reading of readings) {
+      const insight = budgetInsight(reading, format);
+      assert.notEqual(insight.action?.href, "/budget", `"${insight.headline}" links to the page it is on`);
+    }
+  });
 });

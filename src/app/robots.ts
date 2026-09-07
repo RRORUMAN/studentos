@@ -34,7 +34,7 @@ export default function robots(): MetadataRoute.Robots {
           "/arrival",
           "/leaving",
           "/anyone-down",
-          "/marketplace",
+          "/exchange",
           "/guides",
           "/starter-pack",
           "/notifications",

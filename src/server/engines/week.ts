@@ -22,6 +22,16 @@ import type { Scored } from "@/server/engines/recommend";
 
 export type WeekDial = "cheaper" | "social" | "free" | "active" | "less-travel";
 
+/** Every dial, in the order the screen shows them. */
+export const weekDials: readonly WeekDial[] = ["cheaper", "free", "social", "active", "less-travel"];
+
+/**
+ * The dials free accounts can turn. The money dials are free at every tier
+ * because a planner that cannot be told "cheaper" is useless to the student
+ * this product is for; the taste dials are what Plus adds.
+ */
+export const freeWeekDials: readonly WeekDial[] = ["cheaper", "free"];
+
 export type WeekItem = {
   /** 0-6, local day of week of the slot. */
   day: number;

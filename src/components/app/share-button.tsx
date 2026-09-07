@@ -3,6 +3,7 @@
 import { Check, Share2 } from "lucide-react";
 import { useState } from "react";
 
+import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 
 /**
@@ -23,6 +24,7 @@ export function ShareButton({
   className?: string;
   size?: "sm" | "md";
 }) {
+  const toast = useToast();
   const [copied, setCopied] = useState(false);
 
   const share = async () => {
@@ -34,6 +36,7 @@ export function ShareButton({
       }
       await navigator.clipboard.writeText(url);
       setCopied(true);
+      toast({ title: "Link copied", description: url });
       window.setTimeout(() => setCopied(false), 1800);
     } catch {
       /* Cancelled share sheet or blocked clipboard: nothing to report. */

@@ -26,7 +26,7 @@ export function SiteFooter() {
 
             <p className="mt-5 max-w-xs text-[0.8125rem] leading-relaxed text-ink-400">
               Everything shown on this site is sample content, rendered through the real product
-              components. City availability is listed honestly.
+              components and marked as sample. City availability is listed honestly, city by city.
             </p>
           </div>
 
@@ -59,16 +59,22 @@ export function SiteFooter() {
           </p>
           <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
             <Link
-              href="/#worldwide"
+              href="/#cities"
               className="text-xs text-ink-500 underline-offset-4 transition-colors hover:text-ink-950 hover:underline"
             >
               Where it works
             </Link>
             <Link
-              href="/#city-brain"
+              href="/#ask"
               className="text-xs text-ink-500 underline-offset-4 transition-colors hover:text-ink-950 hover:underline"
             >
-              How recommendations work
+              How answers are built
+            </Link>
+            <Link
+              href="/#trust"
+              className="text-xs text-ink-500 underline-offset-4 transition-colors hover:text-ink-950 hover:underline"
+            >
+              Privacy
             </Link>
             <a
               href={`mailto:${brand.contact.support}`}

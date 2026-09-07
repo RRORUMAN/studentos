@@ -139,18 +139,41 @@ export function ProfileForm({
       </section>
 
       <section className="rounded-xl border border-ink-200 bg-white p-5">
-        <h2 className="mb-3 text-[1.0625rem] font-semibold text-ink-950">Where and how far</h2>
+        <h2 className="mb-1 text-[1.0625rem] font-semibold text-ink-950">Where and how far</h2>
+        <p className="mb-3 text-[0.875rem] text-ink-500">
+          A neighbourhood, not an address. It is used to sort places by how far they are and is never shown to another
+          student.
+        </p>
 
-        <div className="flex flex-wrap gap-2">
-          {neighbourhoods.map((area) => (
-            <SelectChip
-              key={area}
-              label={area}
-              selected={form.homeArea === area}
-              onSelect={() => setForm({ ...form, homeArea: form.homeArea === area ? "" : area })}
-            />
-          ))}
-        </div>
+        {neighbourhoods.length > 0 ? (
+          <div className="flex flex-wrap gap-2">
+            {neighbourhoods.map((area) => (
+              <SelectChip
+                key={area}
+                label={area}
+                selected={form.homeArea === area}
+                onSelect={() => setForm({ ...form, homeArea: form.homeArea === area ? "" : area })}
+              />
+            ))}
+          </div>
+        ) : null}
+
+        {/* Free text as well as the chips: the city directory carries no
+            neighbourhood list for most cities, and an empty step with nothing
+            to tap is how a student in Tallinn concluded the product was
+            broken. */}
+        <label className="mt-3 block">
+          <span className="mb-1.5 block text-sm font-medium text-ink-800">
+            {neighbourhoods.length > 0 ? "Or type it" : "Your neighbourhood"}
+          </span>
+          <input
+            value={form.homeArea}
+            onChange={(event) => setForm({ ...form, homeArea: event.target.value })}
+            placeholder="The area you live in"
+            maxLength={120}
+            className="h-11 w-full rounded-md border border-ink-200 bg-white px-3.5 text-[0.9375rem] text-ink-900 placeholder:text-ink-400"
+          />
+        </label>
 
         <div className="mt-4 space-y-2.5">
           {travelLimits.map((limit) => (

@@ -308,3 +308,97 @@ export const loopSummaries: Record<string, { body: string; sourceCount: number }
     sourceCount: 15,
   },
 };
+
+/* -------------------------------------------------------------------------- */
+/* Landing page showcase                                                        */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The Pulse section of the landing page. Sample content in the product's own
+ * shape, tagged as sample wherever it renders. Counts are illustrative.
+ */
+export const landingPulse: readonly LoopPost[] = [
+  {
+    id: "land-1",
+    citySlug: "berlin",
+    kind: "deal",
+    title: "€6 lunch near campus",
+    body: "Mensa Nord before 14:00. Ask for the student price, it is not on the board.",
+    author: { handle: "lena.k", initials: "LK", campusSlug: "hu", terms: 4 },
+    postedMinutesAgo: 22,
+    upvotes: 118,
+    comments: 14,
+    signal: "Verified by students",
+    place: "Mitte",
+    price: 6,
+    tags: ["Humboldt", "Lunch"],
+  },
+  {
+    id: "land-2",
+    citySlug: "berlin",
+    kind: "question",
+    title: "Anyone going tonight?",
+    body: "Open-air cinema at Volkspark. Going alone otherwise, which is fine, but still.",
+    author: { handle: "milan.p", initials: "MP", campusSlug: "tu", terms: 2 },
+    postedMinutesAgo: 41,
+    upvotes: 63,
+    comments: 47,
+    signal: "47 comments",
+    when: "Tonight · 21:00",
+    price: 0,
+    tags: ["TU Berlin", "Tonight"],
+  },
+  {
+    id: "land-3",
+    citySlug: "berlin",
+    kind: "looking-for",
+    title: "Need 3 players for football",
+    body: "Casual 5-a-side, mixed levels, nobody takes it seriously.",
+    author: { handle: "jonas.s", initials: "JS", campusSlug: "fu", terms: 1 },
+    postedMinutesAgo: 58,
+    upvotes: 31,
+    comments: 9,
+    signal: "2 of 5 in",
+    when: "Saturday · 16:00",
+    place: "Tempelhofer Feld",
+    price: 0,
+    tags: ["Freie", "Sport"],
+  },
+  {
+    id: "land-4",
+    citySlug: "berlin",
+    kind: "question",
+    title: "Best cheap gym?",
+    body: "Under €25 a month, near Neukölln. Weights, no classes needed.",
+    author: { handle: "amira.h", initials: "AH", campusSlug: "hu", terms: 3 },
+    postedMinutesAgo: 180,
+    upvotes: 54,
+    comments: 82,
+    signal: "82 replies",
+    place: "Neukölln",
+    tags: ["Fitness", "Budget"],
+  },
+  {
+    id: "land-5",
+    citySlug: "berlin",
+    kind: "event",
+    title: "Free rooftop event",
+    body: "No door fee before 21:00. Drinks are normal bar price, so eat first.",
+    author: { handle: "sofia.r", initials: "SR", campusSlug: "tu", terms: 2 },
+    postedMinutesAgo: 12,
+    upvotes: 201,
+    comments: 29,
+    signal: "138 interested",
+    when: "Tonight · 20:00",
+    place: "Neukölln",
+    price: 0,
+    tags: ["Free", "Tonight"],
+  },
+] as const;
+
+/** "Catch me up": the three things worth knowing today. Sample content. */
+export const catchUpItems: readonly { title: string; meta: string; kind: LoopKind }[] = [
+  { title: "Mensa Nord does a €6 lunch before 14:00", meta: "Verified by students", kind: "deal" },
+  { title: "The semester ticket now covers the airport express", meta: "Checked against the official fares page", kind: "tip" },
+  { title: "Saturday football is 3 players short", meta: "Tempelhofer Feld · 16:00", kind: "looking-for" },
+];

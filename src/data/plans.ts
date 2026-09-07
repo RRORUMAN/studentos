@@ -3,12 +3,10 @@ import { sum } from "@/lib/utils";
 import type { Plan } from "./types";
 
 /**
- * Seeded answers for the hero command interface.
- *
- * The marketing site never calls a live model or a paid maps API for an
- * anonymous visitor. These are pre-computed answers in exactly the shape the
- * real generator returns, so the hero is the real component with a fixed
- * response rather than an illustration of one.
+ * Seeded answers in exactly the shape the real generator returns. The
+ * onboarding flow and the seeded AI provider read `heroPlans`; the landing
+ * page hero now computes its plans from `services/ai/demo-planner.ts` so a
+ * city switch recomputes every row in that city's currency.
  */
 
 export const heroPlans: readonly Plan[] = [
@@ -177,7 +175,7 @@ export const heroPlans: readonly Plan[] = [
   },
 ] as const;
 
-/** Total spend for a plan. Never hardcode a total in copy — derive it. */
+/** Total spend for a plan. Never hardcode a total in copy; derive it. */
 export function planTotal(plan: Plan): number {
   return Math.round(sum(plan.items.map((item) => item.price)) * 100) / 100;
 }
@@ -187,12 +185,16 @@ export function planHeadroom(plan: Plan): number {
   return Math.round((plan.budget - planTotal(plan)) * 100) / 100;
 }
 
-/** The plan the hero opens on. */
+/** The plan the seeded provider and onboarding open on. */
 export const defaultPlan = heroPlans[0];
 
 /**
  * Shareable plans. Designed for a 9:16 story card and a WhatsApp link preview,
  * which is why the item list is short and the total is the loudest element.
+ *
+ * `savedBy` is optional and no longer rendered on the card: a saved count is
+ * social proof, and the site does not print social proof it cannot stand
+ * behind.
  */
 export type SharePlan = {
   id: string;
@@ -200,10 +202,23 @@ export type SharePlan = {
   title: string;
   subtitle: string;
   items: readonly { label: string; price: number }[];
-  savedBy: number;
+  savedBy?: number;
 };
 
 export const sharePlans: readonly SharePlan[] = [
+  {
+    id: "berlin-25-saturday",
+    citySlug: "berlin",
+    title: "€25 Berlin Saturday",
+    subtitle: "Lunch, a free museum, a night event, the U-Bahn and a coffee to end on.",
+    items: [
+      { label: "Lunch", price: 7 },
+      { label: "Museum", price: 0 },
+      { label: "Event", price: 10 },
+      { label: "Transport", price: 4 },
+      { label: "Coffee", price: 4 },
+    ],
+  },
   {
     id: "madrid-25-saturday",
     citySlug: "madrid",
@@ -216,7 +231,6 @@ export const sharePlans: readonly SharePlan[] = [
       { label: "Nightlife", price: 10 },
       { label: "Metro", price: 3 },
     ],
-    savedBy: 1240,
   },
   {
     id: "barcelona-18-sunday",
@@ -230,7 +244,6 @@ export const sharePlans: readonly SharePlan[] = [
       { label: "Open-air cinema", price: 0 },
       { label: "Metro", price: 1 },
     ],
-    savedBy: 610,
   },
   {
     id: "berlin-12-friday",
@@ -243,7 +256,6 @@ export const sharePlans: readonly SharePlan[] = [
       { label: "Späti round", price: 8.5 },
       { label: "Transport", price: 0 },
     ],
-    savedBy: 430,
   },
 ] as const;
 
@@ -254,3 +266,14 @@ export function sharePlanTotal(plan: SharePlan): number {
 export function sharePlansForCity(citySlug: string): SharePlan[] {
   return sharePlans.filter((plan) => plan.citySlug === citySlug);
 }
+
+/** The plan the landing page Share section shows. */
+export const landingSharePlan: SharePlan = sharePlans[0];
+
+/** Where a plan can go from the product. Each is a real share target there. */
+export const shareTargets: readonly { key: string; label: string; detail: string }[] = [
+  { key: "friends", label: "Friends", detail: "Straight to people you have added" },
+  { key: "pulse", label: "Student Pulse", detail: "Posted to your city or campus feed" },
+  { key: "group", label: "A group", detail: "Into the chat of a plan you are in" },
+  { key: "link", label: "Public link", detail: "A page anyone can open, no account needed" },
+];

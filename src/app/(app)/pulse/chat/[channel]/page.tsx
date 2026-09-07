@@ -1,17 +1,21 @@
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, FileText } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { type Attachable, ChatView } from "@/components/app/chat-view";
-import { placesForCity } from "@/data/places";
-import { markChannelRead } from "@/server/actions/chat";
+import { ChatView, MarkRead } from "@/components/app/chat-view";
 import { loopChannels } from "@/server/db/seed-content";
-import { canReadChannel, channelKind, channelTitle, loadChannelLines } from "@/server/queries/chat";
-import { findMany } from "@/server/db";
+import {
+  canReadChannel,
+  channelKind,
+  channelTitle,
+  loadChannelLines,
+  loadChannelParticipants,
+} from "@/server/queries/chat";
+import { loadAttachables, resolveAttachment, whereFor, type AttachmentCard } from "@/server/queries/loop";
+import { requestDate } from "@/server/now";
 import { requireViewer } from "@/server/viewer";
-import { isBackendConfigured } from "@/services/env";
-import { cn, money } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = {
   title: "Chat",
@@ -22,87 +26,54 @@ export const metadata: Metadata = {
  * One channel of any kind. Access is decided by `canReadChannel`; a channel
  * the student may not read renders as not found rather than as a locked room,
  * because confirming a private group exists is itself a leak.
+ *
+ * City rooms are scoped to the reader's city — the slug `#housing` exists in
+ * every city, and before this every one of them was the same room.
  */
 export default async function ChatPage(props: PageProps<"/pulse/chat/[channel]">) {
   const viewer = await requireViewer();
   const { channel } = await props.params;
 
-  if (!channelKind(channel)) notFound();
+  const kind = channelKind(channel);
+  if (!kind) notFound();
   if (!(await canReadChannel(viewer.user.id, channel))) notFound();
 
   const title = await channelTitle(channel, viewer.user.id);
   if (!title) notFound();
 
-  const lines = await loadChannelLines({ channel, userId: viewer.user.id });
-  await markChannelRead(channel);
+  const where = whereFor(viewer.profile.citySlug, viewer.profile);
+  const now = requestDate();
 
-  /* ---- resolve attachment cards and what can be attached ----------------- */
-  const where = viewer.currency;
-  const places = placesForCity(viewer.profile.citySlug);
-  const [events, saved, responses, plans] = await Promise.all([
-    findMany("events", (row) => row.citySlug === viewer.profile.citySlug),
-    findMany("saved", (row) => row.userId === viewer.user.id),
-    findMany("eventResponses", (row) => row.userId === viewer.user.id),
-    findMany("plans", (row) => row.userId === viewer.user.id),
+  const [lines, participants, attachables] = await Promise.all([
+    loadChannelLines({ channel, userId: viewer.user.id, citySlug: viewer.profile.citySlug }),
+    loadChannelParticipants({ channel, userId: viewer.user.id, citySlug: viewer.profile.citySlug }),
+    loadAttachables(viewer.profile.citySlug, where),
   ]);
 
-  const toCard = (kind: Attachable["kind"], id: string): Attachable | null => {
-    if (kind === "event") {
-      const event = events.find((row) => row.id === id);
-      return event
-        ? {
-            kind,
-            id,
-            title: event.title,
-            meta: `${new Date(event.startsAt).toLocaleString("en-GB", { weekday: "short", hour: "2-digit", minute: "2-digit" })} · ${event.priceCents === 0 ? "Free" : money(event.priceCents / 100, where)}`,
-            href: `/events/${id}`,
-          }
-        : null;
-    }
-    if (kind === "place") {
-      const place = places.find((row) => row.id === id);
-      return place
-        ? { kind, id, title: place.name, meta: `${place.priceLabel} · ${place.walkMinutes} min walk`, href: `/discover/${id}` }
-        : null;
-    }
-    if (kind === "plan") {
-      const plan = plans.find((row) => row.id === id);
-      return plan ? { kind, id, title: plan.title, meta: `${plan.items.length} stops`, href: `/plans/${id}` } : null;
-    }
-    return null;
-  };
-
-  const attachments: Record<string, Attachable> = {};
+  /* Attachments already in the timeline are resolved from their live rows —
+     including rows that are not in the picker (a plan, an invite, a mission),
+     and rows that have since gone, which render as "no longer listed". */
+  const cards = new Map<string, AttachmentCard>(attachables.map((card) => [`${card.kind}:${card.id}`, card]));
   for (const line of lines) {
     if (!line.attachment) continue;
-    const card = toCard(line.attachment.kind, line.attachment.id);
-    if (card) attachments[`${line.attachment.kind}:${line.attachment.id}`] = card;
+    const key = `${line.attachment.kind}:${line.attachment.id}`;
+    if (cards.has(key)) continue;
+    const card = await resolveAttachment(viewer.profile.citySlug, line.attachment, where, now);
+    if (card) cards.set(key, card);
   }
-
-  const attachables: Attachable[] = [
-    ...responses.map((row) => toCard("event", row.eventId)),
-    ...saved.filter((row) => row.kind === "place").map((row) => toCard("place", row.targetId)),
-    ...saved.filter((row) => row.kind === "event").map((row) => toCard("event", row.targetId)),
-    ...plans.map((row) => toCard("plan", row.id)),
-  ]
-    .filter((card): card is Attachable => card !== null)
-    .filter((card, index, list) => list.findIndex((other) => other.kind === card.kind && other.id === card.id) === index)
-    .slice(0, 12);
-
-  const kind = channelKind(channel)!;
 
   return (
     <div className="page max-w-2xl py-6 sm:py-8">
       <Link href={title.back} className="mb-5 inline-flex items-center gap-1.5 text-[0.875rem] font-medium text-ink-500 hover:text-ink-950">
         <ArrowLeft className="size-4" />
-        {kind.kind === "city" ? "All chats" : "Back"}
+        All chats
       </Link>
 
       <header className="flex items-center gap-3">
         <span className="grid size-11 place-items-center rounded-full bg-paper-2 text-xl" aria-hidden>
           {title.emoji}
         </span>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <h1 className="truncate text-display-xs text-ink-950">{title.title}</h1>
           <p className="text-[0.8125rem] text-ink-500">
             {kind.kind === "city"
@@ -114,10 +85,27 @@ export default async function ChatPage(props: PageProps<"/pulse/chat/[channel]">
                   : kind.kind === "plan"
                     ? "People on this plan"
                     : "Just the two of you"}
-            {" · "}
-            {isBackendConfigured ? "live" : "refreshes every 12s"}
           </p>
         </div>
+
+        {title.about ? (
+          <Link
+            href={title.about.href}
+            className="shrink-0 rounded-full bg-white px-3.5 py-2 text-[0.8125rem] font-medium text-ink-700 ring-1 ring-ink-950/8 hover:ring-ink-950/20"
+          >
+            {title.about.label}
+          </Link>
+        ) : null}
+
+        {title.posts ? (
+          <Link
+            href={title.posts}
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-white px-3.5 py-2 text-[0.8125rem] font-medium text-ink-700 ring-1 ring-ink-950/8 hover:ring-ink-950/20"
+          >
+            <FileText className="size-3.5" />
+            Posts in #{title.title}
+          </Link>
+        ) : null}
       </header>
 
       {kind.kind === "city" ? (
@@ -141,7 +129,17 @@ export default async function ChatPage(props: PageProps<"/pulse/chat/[channel]">
         <div className="mt-4" />
       )}
 
-      <ChatView channel={channel} lines={lines} attachments={attachments} attachables={attachables} />
+      <MarkRead channel={channel} />
+
+      <ChatView
+        channel={channel}
+        lines={lines}
+        attachables={[...cards.values()]}
+        participants={participants}
+        emptyLine={
+          kind.kind === "dm" ? "No messages yet. Say hello." : "Nothing here yet. Say the first thing."
+        }
+      />
     </div>
   );
 }

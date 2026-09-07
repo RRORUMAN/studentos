@@ -11,13 +11,17 @@ import { cn } from "@/lib/utils";
  * ============================================================================
  * DISCOVER FILTERS
  * ----------------------------------------------------------------------------
- * One rail of tabs, one row of price caps, one search box. Everything is in the
- * URL: the back button works, a view is shareable, and the server filters, so
- * a free student never receives rows they are not entitled to and then has
- * them hidden by CSS.
+ * One rail of categories, one row of refinements, one search box. Everything
+ * is in the URL: the back button works, a view is shareable, and the server
+ * filters, so a free student never receives rows they are not entitled to and
+ * then has them hidden by CSS.
  *
- * Locked tabs render, visibly locked, rather than vanishing. A student who
- * cannot see that "Study spots" exists cannot want it.
+ * Every control shown here applies to the current category. A refinement a
+ * category cannot honour (a price cap on deals, which carry no price) is not
+ * rendered rather than rendered inert.
+ *
+ * Locked categories render, visibly locked, rather than vanishing. A student
+ * who cannot see that "Study" exists cannot want it.
  * ============================================================================
  */
 
@@ -33,16 +37,24 @@ export function DiscoverFilters({
   activeCap,
   query,
   caps,
+  showCaps,
+  showVerified,
   verifiedLocked,
   verifiedActive,
+  placeholder = "cheap pizza, quiet café, student gym",
 }: {
   tabs: readonly DiscoverTab[];
   activeTab: string;
   activeCap: string | null;
   query: string;
   caps: readonly { value: string; label: string }[];
+  /** False on categories whose rows carry no price. */
+  showCaps: boolean;
+  /** False on categories with nothing to verify. */
+  showVerified: boolean;
   verifiedLocked: boolean;
   verifiedActive: boolean;
+  placeholder?: string;
 }) {
   const router = useRouter();
   const params = useSearchParams();
@@ -50,6 +62,10 @@ export function DiscoverFilters({
 
   const urlWith = (patch: Record<string, string | null>) => {
     const next = new URLSearchParams(params.toString());
+    /* Legacy keys are resolved server-side into `tab`; drop them so a chip
+       tap does not carry a stale filter along. */
+    next.delete("layer");
+    next.delete("filter");
     for (const [key, value] of Object.entries(patch)) {
       if (value === null) next.delete(key);
       else next.set(key, value);
@@ -61,6 +77,7 @@ export function DiscoverFilters({
   return (
     <div className="space-y-2.5">
       <form
+        role="search"
         onSubmit={(event) => {
           event.preventDefault();
           router.push(urlWith({ q: search.trim() || null }));
@@ -74,8 +91,9 @@ export function DiscoverFilters({
         <input
           value={search}
           onChange={(event) => setSearch(event.target.value)}
-          placeholder="cheap pizza, quiet café, student gym"
-          aria-label="Search places"
+          placeholder={placeholder}
+          aria-label="Search places, events and deals"
+          enterKeyHint="search"
           className="h-11 w-full rounded-full bg-white pr-10 pl-10 text-[0.9375rem] text-ink-900 shadow-[var(--shadow-flat)] ring-1 ring-ink-950/8 placeholder:text-ink-400 focus:ring-ink-950/25"
         />
         {search ? (
@@ -94,7 +112,7 @@ export function DiscoverFilters({
       </form>
 
       <nav
-        aria-label="Discover views"
+        aria-label="Discover categories"
         className="-mx-5 flex gap-2 overflow-x-auto px-5 pb-1 no-scrollbar edge-fade-x sm:mx-0 sm:flex-wrap sm:px-0 sm:[mask-image:none]"
       >
         {tabs.map((tab) => {
@@ -120,37 +138,45 @@ export function DiscoverFilters({
         })}
       </nav>
 
-      <div className="-mx-5 flex gap-2 overflow-x-auto px-5 pb-1 no-scrollbar edge-fade-x sm:mx-0 sm:flex-wrap sm:px-0 sm:[mask-image:none]">
-        {caps.map((cap) => {
-          const active = activeCap === cap.value;
-          return (
+      {showCaps || showVerified ? (
+        <div className="-mx-5 flex gap-2 overflow-x-auto px-5 pb-1 no-scrollbar edge-fade-x sm:mx-0 sm:flex-wrap sm:px-0 sm:[mask-image:none]">
+          {showCaps
+            ? caps.map((cap) => {
+                const active = activeCap === cap.value;
+                return (
+                  <Link
+                    key={cap.value}
+                    href={urlWith({ max: active ? null : cap.value })}
+                    aria-pressed={active}
+                    className={cn(
+                      "inline-flex h-8 shrink-0 items-center rounded-full px-3 text-[0.8125rem] font-medium transition-colors",
+                      active ? "bg-mint-soft text-mint-deep ring-1 ring-mint-deep/30" : "bg-paper-2 text-ink-600 hover:bg-ink-100",
+                    )}
+                  >
+                    {cap.label}
+                  </Link>
+                );
+              })
+            : null}
+          {showVerified ? (
             <Link
-              key={cap.value}
-              href={urlWith({ max: active ? null : cap.value })}
+              href={verifiedLocked ? "/upgrade?feature=combinedFilters" : urlWith({ verified: verifiedActive ? null : "1" })}
+              aria-pressed={verifiedActive}
               className={cn(
-                "inline-flex h-8 shrink-0 items-center rounded-full px-3 text-[0.8125rem] font-medium transition-colors",
-                active ? "bg-mint-soft text-mint-deep ring-1 ring-mint-deep/30" : "bg-paper-2 text-ink-600 hover:bg-ink-100",
+                "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-[0.8125rem] font-medium transition-colors",
+                verifiedActive
+                  ? "bg-mint-soft text-mint-deep ring-1 ring-mint-deep/30"
+                  : verifiedLocked
+                    ? "bg-paper-2 text-ink-400"
+                    : "bg-paper-2 text-ink-600 hover:bg-ink-100",
               )}
             >
-              {cap.label}
+              {verifiedLocked ? <Lock className="size-3" aria-hidden /> : null}
+              Student verified
             </Link>
-          );
-        })}
-        <Link
-          href={verifiedLocked ? "/upgrade?feature=combinedFilters" : urlWith({ verified: verifiedActive ? null : "1" })}
-          className={cn(
-            "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-[0.8125rem] font-medium transition-colors",
-            verifiedActive
-              ? "bg-mint-soft text-mint-deep ring-1 ring-mint-deep/30"
-              : verifiedLocked
-                ? "bg-paper-2 text-ink-400"
-                : "bg-paper-2 text-ink-600 hover:bg-ink-100",
-          )}
-        >
-          {verifiedLocked ? <Lock className="size-3" aria-hidden /> : null}
-          Student verified
-        </Link>
-      </div>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }

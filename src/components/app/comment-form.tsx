@@ -6,9 +6,34 @@ import { useState, useTransition } from "react";
 
 import { Button } from "@/components/ui/button";
 import { addComment } from "@/server/actions/loop";
+import { cn } from "@/lib/utils";
 
-/** Reply box. Clears and refreshes on success so the new comment appears. */
-export function CommentForm({ postId, parentId }: { postId: string; parentId?: string }) {
+/**
+ * Reply box. Clears and refreshes on success so the new comment appears.
+ *
+ * `parentId` makes it a reply to a comment rather than to the post; the
+ * server flattens anything deeper than one level, so a reply to a reply
+ * lands under the same root and the thread stays readable on a phone.
+ */
+export function CommentForm({
+  postId,
+  parentId,
+  placeholder = "Add what you know.",
+  submitLabel = "Reply",
+  compact = false,
+  autoFocus = false,
+  onDone,
+  onCancel,
+}: {
+  postId: string;
+  parentId?: string;
+  placeholder?: string;
+  submitLabel?: string;
+  compact?: boolean;
+  autoFocus?: boolean;
+  onDone?: () => void;
+  onCancel?: () => void;
+}) {
   const router = useRouter();
   const [body, setBody] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -32,17 +57,23 @@ export function CommentForm({ postId, parentId }: { postId: string; parentId?: s
             return;
           }
           setBody("");
+          onDone?.();
           router.refresh();
         });
       }}
     >
       <textarea
         value={body}
+        autoFocus={autoFocus}
         onChange={(event) => setBody(event.target.value)}
-        placeholder="Add what you know."
-        aria-label="Your reply"
-        rows={3}
-        className="w-full rounded-md border border-ink-200 bg-white px-3.5 py-2.5 text-[0.9375rem] text-ink-900 placeholder:text-ink-400 focus:border-ink-400"
+        placeholder={placeholder}
+        aria-label={parentId ? "Your reply" : "Your answer"}
+        rows={compact ? 2 : 3}
+        maxLength={2000}
+        className={cn(
+          "w-full rounded-lg bg-paper-2 px-3.5 py-2.5 text-[0.9375rem] text-ink-900 placeholder:text-ink-400 focus:ring-2 focus:ring-ink-950/20",
+          compact && "text-[0.875rem]",
+        )}
       />
 
       {error ? (
@@ -51,16 +82,21 @@ export function CommentForm({ postId, parentId }: { postId: string; parentId?: s
         </p>
       ) : null}
 
-      <Button
-        type="submit"
-        variant="primary"
-        size="sm"
-        className="mt-2"
-        disabled={pending || body.trim().length === 0}
-      >
-        {pending ? <Loader2 className="size-3.5 animate-spin" /> : null}
-        Reply
-      </Button>
+      <div className="mt-2 flex items-center gap-2">
+        <Button type="submit" variant="primary" size="sm" disabled={pending || body.trim().length === 0}>
+          {pending ? <Loader2 className="size-3.5 animate-spin" /> : null}
+          {submitLabel}
+        </Button>
+        {onCancel ? (
+          <button
+            type="button"
+            onClick={onCancel}
+            className="text-[0.8125rem] font-medium text-ink-500 hover:text-ink-950"
+          >
+            Cancel
+          </button>
+        ) : null}
+      </div>
     </form>
   );
 }

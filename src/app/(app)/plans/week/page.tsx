@@ -1,24 +1,24 @@
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Lock } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { after } from "next/server";
 
 import { SaveWeekButton } from "@/components/app/week-controls";
 import { Upsell } from "@/components/app/upsell";
 import { MascotArt } from "@/components/mascot/mascot-art";
 import { recordUpgradeTrigger } from "@/server/actions/upgrade";
-import { planWeek, type WeekDial, weekDialMeta } from "@/server/engines/week";
+import { freeWeekDials, planWeek, weekDials, type WeekDial, weekDialMeta } from "@/server/engines/week";
 import { loadPlaces, loadRecommendContext, loadScoredEvents } from "@/server/queries/discovery";
 import { loadMoney } from "@/server/queries/money";
 import { requestDate } from "@/server/now";
 import { requireViewer } from "@/server/viewer";
+import { fmtDay } from "@/lib/dates";
 import { cn, money } from "@/lib/utils";
 
 export const metadata: Metadata = {
   title: "Plan my week",
   robots: { index: false, follow: false },
 };
-
-const DIALS: readonly WeekDial[] = ["cheaper", "social", "free", "active", "less-travel"];
 
 /**
  * ============================================================================
@@ -28,9 +28,10 @@ const DIALS: readonly WeekDial[] = ["cheaper", "social", "free", "active", "less
  * most. The dials re-run the same selection with shifted weights, so the plan
  * changes instantly and predictably.
  *
- * Free sees a genuine preview: the first two picks, and the reasoning. Plus
- * unlocks the whole week, the dials and saving it as a plan — value first, then
- * the price.
+ * Free gets a genuine working product: the first two picks, and the two money
+ * dials — cheaper and more free — actually turn. A planner a broke student
+ * cannot tell to be cheaper is not a preview of anything. Plus unlocks the
+ * whole week, the taste dials and saving it as a plan: value first, then price.
  * ============================================================================
  */
 export default async function WeekPage(props: PageProps<"/plans/week">) {
@@ -38,10 +39,13 @@ export default async function WeekPage(props: PageProps<"/plans/week">) {
   const params = await props.searchParams;
   const now = requestDate();
   const where = viewer.currency;
+  const timeZone = viewer.city.timezone;
   const unlocked = viewer.entitlements.can.weeklyPlanner;
 
   const rawDials = Array.isArray(params.dial) ? params.dial : params.dial ? [params.dial] : [];
-  const dials = unlocked ? (rawDials.filter((dial) => DIALS.includes(dial as WeekDial)) as WeekDial[]) : [];
+  const asked = rawDials.filter((dial) => weekDials.includes(dial as WeekDial)) as WeekDial[];
+  /* Free keeps the money dials; the taste dials are what Plus adds. */
+  const dials = unlocked ? asked : asked.filter((dial) => freeWeekDials.includes(dial));
 
   const money$ = await loadMoney(viewer.user.id, now);
   const context = await loadRecommendContext({
@@ -67,7 +71,7 @@ export default async function WeekPage(props: PageProps<"/plans/week">) {
 
   const visible = unlocked ? plan.items : plan.items.slice(0, 2);
   const hidden = plan.items.length - visible.length;
-  if (!unlocked) await recordUpgradeTrigger("complex-plan");
+  if (!unlocked) after(() => recordUpgradeTrigger("complex-plan"));
 
   const urlWith = (toggle: WeekDial) => {
     const next = dials.includes(toggle) ? dials.filter((dial) => dial !== toggle) : [...dials, toggle];
@@ -94,18 +98,24 @@ export default async function WeekPage(props: PageProps<"/plans/week">) {
 
       {/* ---- dials ---------------------------------------------------------- */}
       <div className="mt-5 flex flex-wrap gap-2">
-        {DIALS.map((dial) => {
+        {weekDials.map((dial) => {
           const active = dials.includes(dial);
+          const locked = !unlocked && !freeWeekDials.includes(dial);
           return (
             <Link
               key={dial}
-              href={unlocked ? urlWith(dial) : "/upgrade?feature=weeklyPlanner"}
+              href={locked ? "/upgrade?feature=weeklyPlanner" : urlWith(dial)}
               aria-pressed={active}
               className={cn(
-                "inline-flex h-9 items-center rounded-full px-3.5 text-[0.875rem] font-medium transition-colors",
-                active ? "bg-ink-950 text-paper" : unlocked ? "bg-white text-ink-700 ring-1 ring-ink-950/8 hover:ring-ink-950/20" : "bg-paper-2 text-ink-400",
+                "inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 text-[0.875rem] font-medium transition-colors",
+                active
+                  ? "bg-ink-950 text-paper"
+                  : locked
+                    ? "bg-paper-2 text-ink-400"
+                    : "bg-white text-ink-700 ring-1 ring-ink-950/8 hover:ring-ink-950/20",
               )}
             >
+              {locked ? <Lock className="size-3" aria-hidden /> : null}
               {weekDialMeta[dial]}
             </Link>
           );
@@ -117,12 +127,9 @@ export default async function WeekPage(props: PageProps<"/plans/week">) {
         {visible.map((item) => (
           <li key={`${item.kind}-${item.refId}`}>
             <Link href={item.href} className="flex items-start gap-4 rounded-2xl bg-white p-4 shadow-[var(--shadow-flat)] ring-1 ring-ink-950/6 transition-shadow hover:shadow-[var(--shadow-raise)]">
-              <span className="w-14 shrink-0 text-center">
+              <span className="w-16 shrink-0 text-center">
                 <span className="block font-mono text-micro uppercase tracking-[0.1em] text-ink-400">
-                  {new Date(item.dateIso).toLocaleDateString("en-GB", { weekday: "short" })}
-                </span>
-                <span className="tnum block font-display text-[1.5rem] leading-none font-semibold text-ink-950">
-                  {new Date(item.dateIso).getDate()}
+                  {fmtDay(item.dateIso, timeZone, now)}
                 </span>
               </span>
               <span className="min-w-0 flex-1">
@@ -157,7 +164,7 @@ export default async function WeekPage(props: PageProps<"/plans/week">) {
         ) : (
           <Upsell
             feature="weeklyPlanner"
-            line={`The two picks above are real and inside ${money$.unset ? "your week" : money(Math.floor(money$.reading.safeThisWeekCents * 0.7) / 100, where)}. Plus builds the whole week, lets you dial it cheaper, more social, more free or more active, and saves it as a plan you can share.`}
+            line={`The two picks above are real, and the money dials work. Plus builds the whole week, adds more social, more active and less travel, and saves it as a plan you can share${money$.unset ? "" : `, inside ${money(Math.floor(money$.reading.safeThisWeekCents * 0.7) / 100, where)}`}.`}
           />
         )}
       </div>

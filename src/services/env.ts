@@ -22,6 +22,14 @@ export const env = {
   /** Overrides where the JSON store keeps its file. Set by the e2e config. */
   dataDir: optional(process.env.STUDENTOS_DATA_DIR),
 
+  /**
+   * When set, the seeder creates a fully populated demo student at
+   * demo@studentos.local with this password. There is deliberately no default:
+   * a seeded account with a known credential is a real account with a
+   * published password, and it should only exist where somebody chose it.
+   */
+  demoPassword: optional(process.env.STUDENTOS_DEMO_PASSWORD),
+
   hosting: {
     /**
      * Serverless platforms mount the deployment read-only; the only writable
@@ -41,10 +49,13 @@ export const env = {
   },
 
   ai: {
-    /** Which provider adapter to construct. */
+    /** Which provider adapter to construct: "anthropic", "openai" or "none". */
     provider: optional(process.env.AI_PROVIDER),
     apiKey: optional(process.env.AI_API_KEY),
+    /** Pins one model across every tier. Leave unset to use the per-tier defaults. */
     model: optional(process.env.AI_MODEL),
+    /** For OpenAI-compatible gateways and self-hosted endpoints. */
+    baseUrl: optional(process.env.AI_BASE_URL),
   },
 
   google: {

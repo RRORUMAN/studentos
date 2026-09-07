@@ -125,7 +125,7 @@ export default async function LeavingPage() {
         ) : null}
 
         <Link
-          href="/marketplace/new"
+          href="/exchange/new?mode=offer"
           className="mt-3.5 inline-flex items-center gap-1.5 rounded-full bg-ink-950 px-4 py-2 text-[0.875rem] font-medium text-paper hover:bg-ink-800"
         >
           List something

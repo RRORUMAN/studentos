@@ -1,4 +1,4 @@
-import type { CityEvent, CommunityPost, Invite } from "@/domain/types";
+import type { Cents, CityEvent, CommunityPost, Invite } from "@/domain/types";
 
 /**
  * ============================================================================
@@ -24,6 +24,17 @@ export type RightNowItem = {
   /** Minutes until it starts. Negative when already under way. */
   inMinutes: number | null;
   free: boolean;
+  /** The row's price, when it has one. Null for posts. */
+  priceCents: Cents | null;
+};
+
+/** Human labels for the kinds, shared by Home and Discover so they never drift. */
+export const rightNowKindLabel: Record<RightNowItem["kind"], string> = {
+  happening: "Happening now",
+  "free-now": "Free, starting soon",
+  soon: "Starting soon",
+  filling: "Group forming",
+  posted: "Just posted",
 };
 
 export function rightNow(input: {
@@ -50,6 +61,7 @@ export function rightNow(input: {
         href: `/events/${event.id}`,
         inMinutes,
         free: event.priceCents === 0,
+        priceCents: event.priceCents,
       });
     } else if (inMinutes > 0 && inMinutes <= 180) {
       out.push({
@@ -60,6 +72,7 @@ export function rightNow(input: {
         href: `/events/${event.id}`,
         inMinutes,
         free: event.priceCents === 0,
+        priceCents: event.priceCents,
       });
     }
   }
@@ -77,6 +90,7 @@ export function rightNow(input: {
       href: `/anyone-down/${invite.id}`,
       inMinutes,
       free: invite.budgetCents === 0,
+      priceCents: invite.budgetCents,
     });
   }
 
@@ -95,6 +109,7 @@ export function rightNow(input: {
       href: `/pulse/${post.id}`,
       inMinutes: null,
       free: false,
+      priceCents: null,
     });
   }
 

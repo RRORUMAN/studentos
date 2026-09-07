@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import type { City } from "../../src/data/types.ts";
-import { buildSurvivalPlan, previewSurvivalPlan } from "../../src/server/engines/survival.ts";
+import {
+  buildSurvivalPlan,
+  previewSurvivalPlan,
+  survivalPlanLines,
+  survivalPlanTitle,
+} from "../../src/server/engines/survival.ts";
 
 /**
  * ============================================================================
@@ -127,6 +132,37 @@ describe("buildSurvivalPlan", () => {
     const plan = buildSurvivalPlan({ amountCents: 2_000, days: 0, city: MADRID });
     assert.equal(plan.days, 1);
     assert.ok(Number.isFinite(plan.perDayCents));
+  });
+});
+
+describe("saving a plan", () => {
+  it("turns every line into something the plan store will accept", () => {
+    const plan = buildSurvivalPlan({ amountCents: 4_500, days: 4, city: MADRID });
+    const lines = survivalPlanLines(plan);
+
+    assert.equal(lines.length, plan.lines.length, "no line is dropped on the way to a saved plan");
+    for (const line of lines) {
+      assert.ok(line.title.length > 0);
+      assert.ok(Number.isInteger(line.priceCents) && line.priceCents >= 0);
+      /* Survival lines are the student's own allocation, not a place or an
+         event, so they must not claim a source row they do not have. */
+      assert.equal(line.refKind, null);
+      assert.equal(line.refId, null);
+    }
+
+    assert.equal(
+      lines.reduce((sum, line) => sum + line.priceCents, 0),
+      plan.allocatedCents,
+      "the saved plan is worth exactly what the student has",
+    );
+  });
+
+  it("names the plan after the money and the days it covers", () => {
+    const plan = buildSurvivalPlan({ amountCents: 4_500, days: 4, city: MADRID });
+    const title = survivalPlanTitle(plan, (cents) => `€${(cents / 100).toFixed(0)}`);
+
+    assert.match(title, /€45/);
+    assert.match(title, /4 days/);
   });
 });
 
