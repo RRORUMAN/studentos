@@ -24,6 +24,67 @@ import { all, findMany } from "@/server/db";
 
 const DAY = 86_400_000;
 
+/** How many days of daily series the dashboard draws. Four weeks. */
+const SERIES_DAYS = 28;
+
+/**
+ * A daily series, oldest first, with no gaps.
+ *
+ * Gaps are the whole point of building it this way. A chart drawn from grouped
+ * rows silently omits the days nothing happened, which turns a week of silence
+ * into a flat line between two points and reads as steady rather than dead.
+ * Every day in the window gets a row, whether or not anything landed in it.
+ */
+function dailySeries(
+  now: number,
+  days: number,
+  rows: readonly { at: string; value?: number; userId?: string }[],
+  mode: "count" | "sum" | "unique" = "count",
+): { day: string; value: number }[] {
+  const start = new Date(now - (days - 1) * DAY);
+  const startOfDay = Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate());
+
+  const buckets = new Map<string, number>();
+  const seen = new Map<string, Set<string>>();
+
+  for (let index = 0; index < days; index += 1) {
+    buckets.set(new Date(startOfDay + index * DAY).toISOString().slice(0, 10), 0);
+  }
+
+  for (const row of rows) {
+    const parsed = Date.parse(row.at);
+    if (!Number.isFinite(parsed) || parsed < startOfDay) continue;
+
+    const key = new Date(parsed).toISOString().slice(0, 10);
+    if (!buckets.has(key)) continue;
+
+    if (mode === "sum") {
+      buckets.set(key, (buckets.get(key) ?? 0) + (row.value ?? 0));
+    } else if (mode === "unique") {
+      const set = seen.get(key) ?? new Set<string>();
+      seen.set(key, set);
+      if (row.userId) set.add(row.userId);
+      buckets.set(key, set.size);
+    } else {
+      buckets.set(key, (buckets.get(key) ?? 0) + 1);
+    }
+  }
+
+  return [...buckets].map(([day, value]) => ({ day, value }));
+}
+
+/**
+ * Change against the matching previous window, as a percentage.
+ *
+ * Null rather than zero when the previous window was empty. "Up 100%" from a
+ * base of zero is a number that means nothing, and rendering it next to real
+ * ones teaches the reader to distrust all of them.
+ */
+function delta(current: number, previous: number): number | null {
+  if (previous === 0) return null;
+  return Math.round(((current - previous) / previous) * 100);
+}
+
 export type AdminMetrics = {
   users: { total: number; dau: number; wau: number; mau: number };
   retention: { d1: number; d7: number; d30: number };
@@ -45,6 +106,47 @@ export type AdminMetrics = {
   };
   community: { posts: number; comments: number; chat: number; invites: number; joins: number };
   cities: { citySlug: string; users: number }[];
+
+  /** Daily series for the last four weeks, oldest first, gaps included. */
+  series: {
+    signups: { day: string; value: number }[];
+    active: { day: string; value: number }[];
+    outcomes: { day: string; value: number }[];
+    aiCostMicros: { day: string; value: number }[];
+  };
+
+  growth: {
+    today: number;
+    last7: number;
+    last28: number;
+    /** Against the previous window of the same length. Null when it was empty. */
+    delta7: number | null;
+    delta28: number | null;
+  };
+
+  /**
+   * Where accounts stop. Every step is counted from a real column, and the
+   * first one is deliberately "account created" rather than "visitor": nothing
+   * in this product records an anonymous visit, so a visitor row would be a
+   * number nobody could source.
+   */
+  funnel: { step: string; detail: string; count: number }[];
+
+  /**
+   * Subscription health that can be read off the rows themselves.
+   *
+   * MRR *movement* — new, expansion, contraction, churn — is deliberately absent
+   * rather than estimated. A `Subscription` row carries only its current state
+   * and `updatedAt`, so movement would have to be inferred, and an inferred
+   * churn number is the kind of figure a decision gets made on. It arrives when
+   * the webhook has been writing an event log for a month.
+   */
+  subscriptions: {
+    active: number;
+    pastDue: number;
+    cancelling: number;
+    annualShare: number;
+  };
 };
 
 const PRICE_CENTS: Record<PlanKey, number> = { free: 0, plus: 799, pro: 999, max: 1499 };
@@ -150,6 +252,29 @@ export async function loadAdminMetrics(): Promise<AdminMetrics> {
     .map(([citySlug, count]) => ({ citySlug, users: count }))
     .sort((a, b) => b.users - a.users);
 
+  /* ---- growth ----------------------------------------------------------- */
+  const createdSince = (ms: number) =>
+    users.filter((user) => now - Date.parse(user.createdAt) < ms).length;
+  const createdBetween = (from: number, to: number) =>
+    users.filter((user) => {
+      const at = now - Date.parse(user.createdAt);
+      return at >= from && at < to;
+    }).length;
+
+  const last7 = createdSince(7 * DAY);
+  const last28 = createdSince(28 * DAY);
+
+  /* ---- funnel ----------------------------------------------------------- */
+  const onboardingStarted = profiles.length;
+  const onboarded = profiles.filter((profile) => profile.onboardedAt !== null).length;
+  const activated = new Set(outcomes.map((row) => row.userId)).size;
+
+  /* ---- subscription health ---------------------------------------------- */
+  const good = subscriptions.filter(
+    (row) => row.status === "active" || row.status === "trialing",
+  );
+  const annual = good.filter((row) => row.period === "annual").length;
+
   return {
     users: {
       total: users.length,
@@ -186,6 +311,46 @@ export async function loadAdminMetrics(): Promise<AdminMetrics> {
       joins: responses.filter((row) => row.status === "in").length,
     },
     cities,
+
+    series: {
+      signups: dailySeries(now, SERIES_DAYS, users.map((user) => ({ at: user.createdAt }))),
+      active: dailySeries(
+        now,
+        SERIES_DAYS,
+        outcomes.map((row) => ({ at: row.createdAt, userId: row.userId })),
+        "unique",
+      ),
+      outcomes: dailySeries(now, SERIES_DAYS, outcomes.map((row) => ({ at: row.createdAt }))),
+      aiCostMicros: dailySeries(
+        now,
+        SERIES_DAYS,
+        aiUsage.map((row) => ({ at: row.createdAt, value: row.costMicros })),
+        "sum",
+      ),
+    },
+
+    growth: {
+      today: createdSince(DAY),
+      last7,
+      last28,
+      delta7: delta(last7, createdBetween(7 * DAY, 14 * DAY)),
+      delta28: delta(last28, createdBetween(28 * DAY, 56 * DAY)),
+    },
+
+    funnel: [
+      { step: "Account created", detail: "Signed up and got a session", count: users.length },
+      { step: "Onboarding started", detail: "Reached the first question", count: onboardingStarted },
+      { step: "Onboarding finished", detail: "City, campus and preferences set", count: onboarded },
+      { step: "Activated", detail: "Got at least one useful outcome", count: activated },
+      { step: "Paying", detail: "Plus, Pro or Max in good standing", count: paidUsers },
+    ],
+
+    subscriptions: {
+      active: good.length,
+      pastDue: subscriptions.filter((row) => row.status === "past_due").length,
+      cancelling: subscriptions.filter((row) => row.cancelAtPeriodEnd).length,
+      annualShare: good.length === 0 ? 0 : Math.round((annual / good.length) * 100),
+    },
   };
 }
 

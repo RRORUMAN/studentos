@@ -47,6 +47,11 @@ export function fmtLongDay(iso: string, timeZone: string): string {
   return new Intl.DateTimeFormat(LOCALE, { weekday: "long", day: "numeric", month: "long", timeZone }).format(new Date(iso));
 }
 
+/** "12 Sep". Compact, for axis and tooltip labels where the year is implied. */
+export function fmtDayLabel(iso: string, timeZone: string): string {
+  return new Intl.DateTimeFormat(LOCALE, { day: "numeric", month: "short", timeZone }).format(new Date(iso));
+}
+
 /** Local hour (0-23) in the city, for "tonight" decisions. */
 export function hourIn(now: Date, timeZone: string): number {
   return Number(new Intl.DateTimeFormat("en-GB", { hour: "numeric", hour12: false, timeZone }).format(now));
