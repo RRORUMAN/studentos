@@ -7,72 +7,23 @@ import { join } from "node:path";
 
 import { env } from "@/services/env";
 
-import type { Move } from "@/domain/lifecycle";
-import type { LifeOpsTask } from "@/domain/lifeops";
-import type { Mission, MissionStep } from "@/domain/missions";
-import type { DealReport, Guide, OfficialFact, PriceObservation } from "@/domain/knowledge";
-import type { Claim, Verification } from "@/domain/truth";
-import type { Answer, Question } from "@/domain/questions";
-import type { ReputationEvent } from "@/domain/reputation";
-import type {
-  Challenge,
-  ChallengeEntry,
-  Exploration,
-  SearchMiss,
-  UnmetNeed,
-} from "@/domain/insight";
-import type {
-  Bucket,
-  BucketEntry,
-  Community,
-  CommunityMember,
-  Group,
-  GroupMember,
-  Listing,
-  Memory,
-} from "@/domain/social";
-import type {
-  AdminSetting,
-  ArrivalProgress,
-  AskHistoryRow,
-  AiUsage,
-  AuthToken,
-  Confirmation,
-  ContentReport,
-  Follow,
-  BudgetEnvelope,
-  BudgetSetup,
-  ChatMessageRow,
-  ChatPoll,
-  ChatPollVote,
-  ChatPrefs,
-  ChatReaction,
-  Collection,
-  Comment,
-  CommunityPost,
-  CityEvent,
-  Deal,
-  EventResponse,
-  Friendship,
-  Invite,
-  InviteResponse,
-  Notification,
-  NotificationPrefs,
-  PlanMember,
-  PlanVote,
-  PollVote,
-  Profile,
-  RecurringExpense,
-  SavedItem,
-  SavedPlan,
-  Session,
-  Subscription,
-  Transaction,
-  UpgradeTriggerRow,
-  UsefulOutcome,
-  User,
-  Vote,
-} from "@/domain/types";
+import {
+  DATABASE_VERSION,
+  emptyDatabase,
+  type Database,
+  type Persistence,
+  type StudentOsStore,
+  type TableName,
+} from "@/server/db/schema";
+
+export {
+  DATABASE_VERSION,
+  emptyDatabase,
+  type Database,
+  type Persistence,
+  type StudentOsStore,
+  type TableName,
+};
 
 /**
  * ============================================================================
@@ -102,187 +53,9 @@ import type {
  */
 
 /* -------------------------------------------------------------------------- */
-/* Shape                                                                       */
-/* -------------------------------------------------------------------------- */
-
-export type Database = {
-  /** Bumped when a migration changes the on-disk shape. */
-  version: number;
-  users: User[];
-  sessions: Session[];
-  authTokens: AuthToken[];
-  profiles: Profile[];
-  subscriptions: Subscription[];
-  budgetSetups: BudgetSetup[];
-  envelopes: BudgetEnvelope[];
-  transactions: Transaction[];
-  recurring: RecurringExpense[];
-  events: CityEvent[];
-  deals: Deal[];
-  saved: SavedItem[];
-  collections: Collection[];
-  posts: CommunityPost[];
-  comments: Comment[];
-  votes: Vote[];
-  chat: ChatMessageRow[];
-  chatReactions: ChatReaction[];
-  chatPrefs: ChatPrefs[];
-  eventResponses: EventResponse[];
-  invites: Invite[];
-  inviteResponses: InviteResponse[];
-  friendships: Friendship[];
-  plans: SavedPlan[];
-  planMembers: PlanMember[];
-  planVotes: PlanVote[];
-  arrival: ArrivalProgress[];
-  notifications: Notification[];
-  notificationPrefs: NotificationPrefs[];
-  aiUsage: AiUsage[];
-  outcomes: UsefulOutcome[];
-  upgradeTriggers: UpgradeTriggerRow[];
-  adminSettings: AdminSetting[];
-  /** Stripe event ids already processed. The idempotency guard for webhooks. */
-  processedStripeEvents: { id: string; at: string }[];
-
-  /* --- lifecycle --------------------------------------------------------- */
-  moves: Move[];
-
-  /* --- knowledge --------------------------------------------------------- */
-  officialFacts: OfficialFact[];
-  guides: Guide[];
-  dealReports: DealReport[];
-  priceObservations: PriceObservation[];
-
-  /* --- social ------------------------------------------------------------ */
-  communities: Community[];
-  communityMembers: CommunityMember[];
-  groups: Group[];
-  groupMembers: GroupMember[];
-  buckets: Bucket[];
-  bucketEntries: BucketEntry[];
-  listings: Listing[];
-  memories: Memory[];
-
-  /* --- insight ----------------------------------------------------------- */
-  searchMisses: SearchMiss[];
-  unmetNeeds: UnmetNeed[];
-  challenges: Challenge[];
-  challengeEntries: ChallengeEntry[];
-  explorations: Exploration[];
-
-  /* --- lifeops and missions ---------------------------------------------- */
-  lifeopsTasks: LifeOpsTask[];
-  missions: Mission[];
-  missionSteps: MissionStep[];
-
-  /* --- local truth --------------------------------------------------------
-     The moat. `claims` is every assertion a student made about a city and
-     `verifications` is every time someone else checked one. `reputationEvents`
-     is the ledger that decides whose check counts for how much. All three are
-     append-mostly: rows are superseded and retired, never rewritten, because
-     the history of a price IS the product. */
-  claims: Claim[];
-  verifications: Verification[];
-  reputationEvents: ReputationEvent[];
-
-  /* --- ask students ------------------------------------------------------- */
-  questions: Question[];
-  answers: Answer[];
-
-  /* --- ask, follows, trust ------------------------------------------------ */
-  askHistory: AskHistoryRow[];
-  follows: Follow[];
-  contentReports: ContentReport[];
-  confirmations: Confirmation[];
-  pollVotes: PollVote[];
-  chatPolls: ChatPoll[];
-  chatPollVotes: ChatPollVote[];
-};
-
-export const DATABASE_VERSION = 1;
-
-function emptyDatabase(): Database {
-  return {
-    version: DATABASE_VERSION,
-    users: [],
-    sessions: [],
-    authTokens: [],
-    profiles: [],
-    subscriptions: [],
-    budgetSetups: [],
-    envelopes: [],
-    transactions: [],
-    recurring: [],
-    events: [],
-    deals: [],
-    saved: [],
-    collections: [],
-    posts: [],
-    comments: [],
-    votes: [],
-    chat: [],
-    chatReactions: [],
-    chatPrefs: [],
-    eventResponses: [],
-    invites: [],
-    inviteResponses: [],
-    friendships: [],
-    plans: [],
-    planMembers: [],
-    planVotes: [],
-    arrival: [],
-    notifications: [],
-    notificationPrefs: [],
-    aiUsage: [],
-    outcomes: [],
-    upgradeTriggers: [],
-    adminSettings: [],
-    processedStripeEvents: [],
-    moves: [],
-    officialFacts: [],
-    guides: [],
-    dealReports: [],
-    priceObservations: [],
-    communities: [],
-    communityMembers: [],
-    groups: [],
-    groupMembers: [],
-    buckets: [],
-    bucketEntries: [],
-    listings: [],
-    memories: [],
-    searchMisses: [],
-    unmetNeeds: [],
-    challenges: [],
-    challengeEntries: [],
-    explorations: [],
-    lifeopsTasks: [],
-    missions: [],
-    missionSteps: [],
-    claims: [],
-    verifications: [],
-    reputationEvents: [],
-    questions: [],
-    answers: [],
-    askHistory: [],
-    follows: [],
-    contentReports: [],
-    confirmations: [],
-    pollVotes: [],
-    chatPolls: [],
-    chatPollVotes: [],
-  };
-}
-
-export type TableName = {
-  [K in keyof Database]: Database[K] extends unknown[] ? K : never;
-}[keyof Database];
-
-/* -------------------------------------------------------------------------- */
 /* File location                                                               */
 /* -------------------------------------------------------------------------- */
 
-export type Persistence = "disk" | "ephemeral";
 
 /**
  * Where the file lives, in order of preference:
@@ -326,7 +99,7 @@ async function proveWritable(dir: string): Promise<void> {
 /* The store                                                                   */
 /* -------------------------------------------------------------------------- */
 
-class JsonStore {
+class JsonStore implements StudentOsStore {
   private data: Database | null = null;
   private loading: Promise<Database> | null = null;
   /** Serialises writes. Every mutation appends to this chain. */
@@ -337,9 +110,23 @@ class JsonStore {
 
   /** Registered once by `seed.ts`, called the first time the file is absent. */
   private seeder: ((db: Database) => void | Promise<void>) | null = null;
+  private migrator: ((db: Database, from: number) => void | Promise<void>) | null = null;
 
   registerSeeder(seeder: (db: Database) => void | Promise<void>): void {
     this.seeder = seeder;
+  }
+
+  /**
+   * Run once when an existing file is older than `DATABASE_VERSION`.
+   *
+   * Adding a table is already forward-compatible — the spread in `readOrSeed`
+   * fills a missing one with an empty array. What that cannot do is *populate*
+   * it, so a store written before Work existed came back with an empty job
+   * board and no way to tell that from a city where nobody has posted. This is
+   * the hook that fills a newly added table with its seed rows.
+   */
+  registerMigrator(migrator: (db: Database, from: number) => void | Promise<void>): void {
+    this.migrator = migrator;
   }
 
   async load(): Promise<Database> {
@@ -393,7 +180,15 @@ class JsonStore {
       const parsed = JSON.parse(raw) as Database;
       /* Forward-compatible: a file written by an older shape gets the missing
          tables filled in rather than being rejected. */
-      return { ...emptyDatabase(), ...parsed, version: DATABASE_VERSION };
+      const merged = { ...emptyDatabase(), ...parsed, version: DATABASE_VERSION };
+
+      const from = typeof parsed.version === "number" ? parsed.version : 0;
+      if (from < DATABASE_VERSION && this.migrator) {
+        await this.migrator(merged, from);
+        await this.persist(merged);
+      }
+
+      return merged;
     } catch {
       const fresh = emptyDatabase();
       if (this.seeder) await this.seeder(fresh);
@@ -499,115 +294,3 @@ const globalForStore = globalThis as unknown as { __studentosStore?: JsonStore }
 
 export const store: JsonStore = (globalForStore.__studentosStore ??= new JsonStore());
 
-/* -------------------------------------------------------------------------- */
-/* Generic helpers                                                             */
-/* -------------------------------------------------------------------------- */
-
-export function newId(): string {
-  return randomUUID();
-}
-
-export function nowIso(): string {
-  return new Date().toISOString();
-}
-
-/** `disk` when writes outlive the process, `ephemeral` on a serverless host. */
-export async function storePersistence(): Promise<Persistence> {
-  return store.persistence();
-}
-
-/** `select` a whole table. */
-export async function all<K extends TableName>(table: K): Promise<Database[K]> {
-  return store.read((db) => db[table]);
-}
-
-/** First row matching a predicate, or null. */
-export async function findOne<K extends TableName>(
-  table: K,
-  match: (row: Database[K][number]) => boolean,
-): Promise<Database[K][number] | null> {
-  return store.read((db) => (db[table] as Database[K][number][]).find(match) ?? null);
-}
-
-/** Every row matching a predicate. */
-export async function findMany<K extends TableName>(
-  table: K,
-  match: (row: Database[K][number]) => boolean,
-): Promise<Database[K][number][]> {
-  return store.read((db) => (db[table] as Database[K][number][]).filter(match));
-}
-
-export async function insert<K extends TableName>(
-  table: K,
-  row: Database[K][number],
-): Promise<Database[K][number]> {
-  return store.write((db) => {
-    (db[table] as Database[K][number][]).push(row);
-    return row;
-  });
-}
-
-export async function insertMany<K extends TableName>(
-  table: K,
-  rows: readonly Database[K][number][],
-): Promise<void> {
-  await store.write((db) => {
-    (db[table] as Database[K][number][]).push(...rows);
-  });
-}
-
-/**
- * Update the first matching row. Returns the updated row, or null when nothing
- * matched — callers treat null as "not found" rather than silently succeeding.
- */
-export async function update<K extends TableName>(
-  table: K,
-  match: (row: Database[K][number]) => boolean,
-  patch: Partial<Database[K][number]>,
-): Promise<Database[K][number] | null> {
-  return store.write((db) => {
-    const rows = db[table] as Database[K][number][];
-    const index = rows.findIndex(match);
-    if (index === -1) return null;
-    rows[index] = { ...rows[index], ...patch };
-    return rows[index];
-  });
-}
-
-/** Insert, or patch the existing row when one matches. */
-export async function upsert<K extends TableName>(
-  table: K,
-  match: (row: Database[K][number]) => boolean,
-  row: Database[K][number],
-): Promise<Database[K][number]> {
-  return store.write((db) => {
-    const rows = db[table] as Database[K][number][];
-    const index = rows.findIndex(match);
-    if (index === -1) {
-      rows.push(row);
-      return row;
-    }
-    rows[index] = { ...rows[index], ...row };
-    return rows[index];
-  });
-}
-
-/** Remove every matching row. Returns how many went. */
-export async function remove<K extends TableName>(
-  table: K,
-  match: (row: Database[K][number]) => boolean,
-): Promise<number> {
-  return store.write((db) => {
-    const rows = db[table] as Database[K][number][];
-    const kept = rows.filter((row) => !match(row));
-    const removed = rows.length - kept.length;
-    (db[table] as Database[K][number][]).length = 0;
-    (db[table] as Database[K][number][]).push(...kept);
-    return removed;
-  });
-}
-
-/** Multiple mutations under one persist. Use for anything that must be atomic. */
-export async function transaction<T>(mutate: (db: Database) => T | Promise<T>): Promise<T> {
-  return store.write(mutate);
-}

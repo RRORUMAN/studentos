@@ -1,8 +1,8 @@
 import "server-only";
 
-import { isBackendConfigured } from "@/services/env";
-import { rollSeededEventsForward, seedDatabase } from "@/server/db/seed";
-import { store, transaction } from "@/server/db/store";
+import { isRowStoreConfigured, isSampleContent } from "@/services/env";
+import { migrateDatabase, rollSeededEventsForward, seedDatabase } from "@/server/db/seed";
+import { store, storeKind, transaction } from "@/server/db/access";
 
 /**
  * ============================================================================
@@ -12,30 +12,35 @@ import { store, transaction } from "@/server/db/store";
  * belong to any single repository.
  *
  * ---------------------------------------------------------------------------
- * WHAT ACTUALLY RUNS TODAY, stated plainly
+ * WHAT ACTUALLY RUNS, stated plainly
  *
- * Every read and write in this application goes through the JSON store in
- * `store.ts`. It is durable, serialised and correct for a single Node process,
- * which is what `next dev` and `next start` are.
+ * Two stores exist and `access.ts` chooses between them from the environment:
  *
- * `supabase/migrations/0001_init.sql` is the production schema — same shapes,
- * same units, plus the constraints and RLS policies the JSON store cannot
- * express. **The Supabase-backed repository that would read and write it is not
- * implemented yet.** Setting `NEXT_PUBLIC_SUPABASE_URL` today changes exactly
- * one thing: it hides the "sample city data" notice. It does not move storage.
+ *   NEXT_PUBLIC_SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY
+ *       → the Postgres row store (`supabase-store.ts`). One row per record,
+ *         per-row writes, optimistic concurrency, survives a redeploy and
+ *         several instances.
  *
- * Writing that adapter is the remaining step to production, and it is a
- * mechanical one: the call sites all go through `findOne` / `findMany` /
- * `insert` / `update` / `remove` / `transaction`, so it is those six functions
- * that need a Supabase implementation, not the forty files that use them.
+ *   neither
+ *       → the JSON file (`store.ts`). Durable for one Node process, which is
+ *         what `next dev` and `next start` are, and wiped on every redeploy of
+ *         a serverless host, which is why `isEphemeralStore` puts a standing
+ *         notice on the page when that is what is running.
  *
- * This note exists because the previous version of this comment claimed
- * Supabase "takes over" when configured, which was not true. A comment that
- * overstates what is wired up is the same defect as a UI that does.
+ * `supabase/migrations/0005_row_store.sql` is the schema the row store speaks.
+ * Migrations 0001–0004 describe the relational schema the product is heading
+ * for, table by table; nothing reads them yet, and `docs/data-layer.md` says so
+ * and explains the route from here to there.
+ *
+ * This note exists because an earlier version of it claimed Supabase "takes
+ * over" when configured, at a time when it did not. A comment that overstates
+ * what is wired up is the same defect as a UI that does — so if the store ever
+ * changes again, this paragraph changes with it.
  * ============================================================================
  */
 
 store.registerSeeder(seedDatabase);
+store.registerMigrator(migrateDatabase);
 
 /**
  * True when the product is answering from seeded sample content.
@@ -45,15 +50,19 @@ store.registerSeeder(seedDatabase);
  * is the most damaging thing this product could do to its own credibility, and
  * a demo that quietly looks like production is how it happens.
  *
- * It is hard-coded true, not derived from `isBackendConfigured`, and stays that
- * way until the Supabase repository above actually exists. Letting an env var
- * silence a truthful warning about invented content, while the content is still
- * invented, would be precisely the dishonesty the notice guards against.
+ * It is *not* derived from whether a database is connected, because those are
+ * different claims. Connecting Postgres moves where rows live; it does not make
+ * an invented event real. Dropping the notice needs two separate things to be
+ * true — somebody reviewed the cities and set `STUDENTOS_CONTENT_MODE=real`,
+ * and the rows are somewhere a redeploy does not delete.
  */
-export const isSeededData = true;
+export const isSeededData = isSampleContent;
+
+/** Which store is serving this process. Reported in `/admin`. */
+export const activeStore = storeKind;
 
 /** Kept referenced so the env contract stays visible from here. */
-export const backendConfigured = isBackendConfigured;
+export const backendConfigured = isRowStoreConfigured;
 
 /* -------------------------------------------------------------------------- */
 /* Freshness                                                                   */
@@ -94,5 +103,5 @@ export {
   transaction,
   update,
   upsert,
-} from "@/server/db/store";
-export type { Database, Persistence, TableName } from "@/server/db/store";
+} from "@/server/db/access";
+export type { Database, Persistence, TableName } from "@/server/db/schema";

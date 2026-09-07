@@ -10,7 +10,8 @@
     "lint:fix": "eslint --fix",
     "typecheck": "next typegen && tsc --noEmit",
     "check": "pnpm typecheck && pnpm lint && pnpm test && pnpm build",
-    "test": "node --test --experimental-strip-types \"tests/unit/*.test.ts\"",
+    "db:verify": "node scripts/db-verify.mjs",
+    "test": "node --test --experimental-strip-types --import ./scripts/test-register.mjs \"tests/unit/*.test.ts\"",
     "test:e2e": "playwright test",
     "mascot:manifest": "node scripts/mascot-manifest.mjs"
   },

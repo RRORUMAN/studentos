@@ -353,7 +353,7 @@ export type EventResponse = {
 /* Saved                                                                       */
 /* -------------------------------------------------------------------------- */
 
-export type SavedKind = "place" | "event" | "deal" | "plan" | "listing" | "post";
+export type SavedKind = "place" | "event" | "deal" | "plan" | "listing" | "post" | "opportunity";
 
 export type SavedItem = {
   id: Id;
@@ -433,7 +433,16 @@ export type Vote = {
  * shows up in a three-day-old message too.
  */
 export type ChatAttachment = {
-  kind: "event" | "place" | "plan" | "deal" | "invite" | "listing" | "poll" | "mission";
+  kind:
+    | "event"
+    | "place"
+    | "plan"
+    | "deal"
+    | "invite"
+    | "listing"
+    | "poll"
+    | "mission"
+    | "opportunity";
   id: Id;
 };
 
@@ -718,6 +727,23 @@ export type Follow = {
 };
 
 /**
+ * Somebody who asked to be told when their city opens.
+ *
+ * A real row, because the alternative is a form that thanks a student and
+ * discards their address. The email is stored lowercased and trimmed so that
+ * "the same person twice" is answerable, and `citySlug` is nullable because
+ * asking without naming a city is a legitimate thing to do.
+ */
+export type WaitlistEntry = {
+  id: Id;
+  email: string;
+  citySlug: string | null;
+  createdAt: Iso;
+  /** Whether the confirmation email actually went out. Null when never tried. */
+  notifiedAt: Iso | null;
+};
+
+/**
  * One row per model call. This table is the reason the business can answer
  * "what does a free user cost us?" — without it, AI spend is a single line on
  * a vendor invoice with no way to attribute it.
@@ -867,7 +893,9 @@ export type ReportTargetKind =
   | "listing"
   | "post"
   | "comment"
-  | "user";
+  | "user"
+  | "opportunity"
+  | "employer";
 export type ReportReason =
   | "wrong-price"
   | "closed"
