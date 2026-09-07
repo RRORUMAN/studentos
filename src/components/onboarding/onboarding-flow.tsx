@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { ArrowLeft, ArrowRight, Check, GraduationCap, RotateCcw } from "lucide-react";
+import { ArrowLeft, ArrowRight, RotateCcw } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
@@ -15,6 +15,8 @@ import { brand } from "@/brand/brand.config";
 import { plans as pricingPlans, type PlanKey } from "@/config/pricing";
 import { arrivalTasksFor } from "@/data/arrival";
 import { campusesForCity, cities, cityStatusLabel, getCity } from "@/data/cities";
+import type { Campus } from "@/data/types";
+import { UniversityPicker } from "@/components/onboarding/university-picker";
 import { heroPlans, planTotal } from "@/data/plans";
 import { placesForCity } from "@/data/places";
 import { loopSummaries } from "@/data/loop";
@@ -66,6 +68,8 @@ export function OnboardingFlow({
   const [step, setStep] = useState(0);
   const [citySlug, setCitySlug] = useState<string | null>(null);
   const [campusSlug, setCampusSlug] = useState<string | null>(null);
+  /* A student whose university is not in the list still has one. */
+  const [universityName, setUniversityName] = useState("");
   const [budget, setBudget] = useState(BUDGET_DEFAULT);
   const [interests, setInterests] = useState<string[]>(["cheap-eats", "free-culture"]);
   const [done, setDone] = useState(false);
@@ -88,6 +92,7 @@ export function OnboardingFlow({
     track("onboarding_completed", {
       citySlug: citySlug ?? null,
       campusSlug: campusSlug ?? null,
+      universityName: universityName || null,
       budget,
       interests: interests.join(","),
     });
@@ -155,6 +160,11 @@ export function OnboardingFlow({
                 cityName={city?.name ?? ""}
                 campuses={campuses}
                 value={campusSlug}
+                universityName={universityName}
+                onTyped={(name) => {
+                  setUniversityName(name);
+                  setCampusSlug(null);
+                }}
                 onChange={setCampusSlug}
               />
             ) : null}
@@ -286,57 +296,35 @@ function StepCampus({
   cityName,
   campuses,
   value,
+  universityName,
   onChange,
+  onTyped,
 }: {
   cityName: string;
-  campuses: readonly { slug: string; shortName: string; name: string; area: string }[];
+  campuses: readonly Campus[];
   value: string | null;
+  universityName: string;
   onChange: (slug: string | null) => void;
+  onTyped: (name: string) => void;
 }) {
   return (
     <div>
       <StepHeading
         title={`Which university in ${cityName}?`}
-        lead="This unlocks your campus feed, which is the one most students end up reading every day."
+        lead="Search for yours. If it is not here, type it — only the campus feed needs us to know the place."
       />
-      <div className="grid gap-2 sm:grid-cols-2">
-        {campuses.map((campus) => {
-          const selected = value === campus.slug;
-          return (
-            <button
-              key={campus.slug}
-              type="button"
-              aria-pressed={selected}
-              onClick={() => onChange(selected ? null : campus.slug)}
-              className={cn(
-                "flex items-center gap-3 rounded-lg border p-4 text-left transition-all duration-150",
-                selected
-                  ? "border-ink-950 bg-white shadow-[var(--shadow-raise)]"
-                  : "border-ink-200 bg-paper hover:border-ink-300 hover:bg-white",
-              )}
-            >
-              <span
-                className={cn(
-                  "grid size-9 shrink-0 place-items-center rounded-md",
-                  selected ? "bg-signal text-ink-950" : "bg-flow-soft text-flow-deep",
-                )}
-              >
-                {selected ? (
-                  <Check className="size-4.5" aria-hidden />
-                ) : (
-                  <GraduationCap className="size-4.5" aria-hidden />
-                )}
-              </span>
-              <span className="min-w-0">
-                <span className="block text-[0.9375rem] font-semibold text-ink-950">
-                  {campus.shortName}
-                </span>
-                <span className="mt-0.5 block truncate text-xs text-ink-400">{campus.area}</span>
-              </span>
-            </button>
-          );
-        })}
-      </div>
+      <UniversityPicker
+        cityName={cityName}
+        campuses={campuses}
+        campusSlug={value}
+        universityName={universityName}
+        onPickCampus={(slug) => onChange(slug)}
+        onPickTyped={onTyped}
+        onClear={() => {
+          onChange(null);
+          onTyped("");
+        }}
+      />
     </div>
   );
 }

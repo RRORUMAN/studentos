@@ -24,6 +24,7 @@ import {
   travelLimits,
 } from "@/config/onboarding";
 import { campusesForCity, cityDirectory, cityStatusLabel, resolveCity } from "@/data/cities";
+import { UniversityPicker } from "@/components/onboarding/university-picker";
 import { interfaceLanguages } from "@/config/regions";
 import { completeOnboarding, type OnboardingInput } from "@/server/actions/onboarding";
 import { cn } from "@/lib/utils";
@@ -556,35 +557,18 @@ function CityStep({ answers, update }: StepProps) {
 
 function UniversityStep({ answers, update }: StepProps) {
   const options = answers.citySlug ? campusesForCity(answers.citySlug) : [];
+  const cityName = answers.citySlug ? (resolveCity(answers.citySlug)?.name ?? "your city") : "your city";
 
   return (
-    <>
-      {options.map((campus) => (
-        <OptionRow
-          key={campus.slug}
-          label={campus.name}
-          detail={campus.area}
-          selected={answers.campusSlug === campus.slug}
-          onSelect={() => update({ campusSlug: campus.slug, universityName: "" })}
-        />
-      ))}
-
-      <label className="block pt-1">
-        <span className="mb-1.5 block text-sm font-medium text-ink-800">
-          Not listed? Type it instead.
-        </span>
-        <input
-          value={answers.universityName}
-          onChange={(event) => update({ universityName: event.target.value, campusSlug: null })}
-          placeholder="Your university"
-          className="h-12 w-full rounded-md border border-ink-200 bg-white px-3.5 text-[0.9375rem] text-ink-900 placeholder:text-ink-400"
-        />
-      </label>
-
-      <p className="text-[0.8125rem] text-ink-500">
-        This is what connects you to your campus feed, campus events and campus-only deals.
-      </p>
-    </>
+    <UniversityPicker
+      cityName={cityName}
+      campuses={options}
+      campusSlug={answers.campusSlug}
+      universityName={answers.universityName}
+      onPickCampus={(slug) => update({ campusSlug: slug, universityName: "" })}
+      onPickTyped={(name) => update({ universityName: name, campusSlug: null })}
+      onClear={() => update({ campusSlug: null, universityName: "" })}
+    />
   );
 }
 

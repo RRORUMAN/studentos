@@ -183,22 +183,70 @@ export const cities: readonly City[] = [
   },
 ] as const;
 
+/**
+ * Universities the product knows the location of.
+ *
+ * This list exists to be *searched*, not to be complete. Madrid alone has more
+ * than thirty institutions and no seeded list will ever cover a whole sector. A
+ * student whose university is missing types it, and it is stored on their
+ * profile as `universityName` with no `campusSlug`.
+ *
+ * That distinction is why this list stays conservative rather than long. A row
+ * here claims to know where the buildings are, and `area` feeds the commute
+ * figures in the neighbourhood engine. Adding an institution with a guessed
+ * neighbourhood would produce a confident "18 min from campus" derived from
+ * nothing, which serves that student worse than not being listed at all. Every
+ * row names the campus its own students would name; where an institution has
+ * several, it is the principal one.
+ */
 export const campuses: readonly Campus[] = [
+  /* --- Madrid ----------------------------------------------------------- */
   { slug: "ucm", name: "Universidad Complutense de Madrid", shortName: "Complutense", citySlug: "madrid", area: "Moncloa" },
   { slug: "uam", name: "Universidad Autónoma de Madrid", shortName: "Autónoma", citySlug: "madrid", area: "Cantoblanco" },
   { slug: "uc3m", name: "Universidad Carlos III de Madrid", shortName: "Carlos III", citySlug: "madrid", area: "Getafe" },
   { slug: "upm", name: "Universidad Politécnica de Madrid", shortName: "Politécnica", citySlug: "madrid", area: "Ciudad Universitaria" },
+  { slug: "urjc", name: "Universidad Rey Juan Carlos", shortName: "Rey Juan Carlos", citySlug: "madrid", area: "Móstoles" },
+  { slug: "uah", name: "Universidad de Alcalá", shortName: "Alcalá", citySlug: "madrid", area: "Alcalá de Henares" },
+  { slug: "comillas", name: "Universidad Pontificia Comillas (ICADE)", shortName: "Comillas", citySlug: "madrid", area: "Chamberí" },
+  { slug: "ceu-usp", name: "Universidad CEU San Pablo", shortName: "CEU San Pablo", citySlug: "madrid", area: "Montepríncipe" },
+  { slug: "uem", name: "Universidad Europea de Madrid", shortName: "Europea", citySlug: "madrid", area: "Villaviciosa de Odón" },
+  { slug: "ufv", name: "Universidad Francisco de Vitoria", shortName: "Francisco de Vitoria", citySlug: "madrid", area: "Pozuelo de Alarcón" },
+  { slug: "nebrija", name: "Universidad Antonio de Nebrija", shortName: "Nebrija", citySlug: "madrid", area: "Princesa" },
+  { slug: "uax", name: "Universidad Alfonso X el Sabio", shortName: "Alfonso X", citySlug: "madrid", area: "Villanueva de la Cañada" },
+  { slug: "ucjc", name: "Universidad Camilo José Cela", shortName: "Camilo José Cela", citySlug: "madrid", area: "Villafranca del Castillo" },
+  { slug: "ie-madrid", name: "IE University (Madrid)", shortName: "IE", citySlug: "madrid", area: "Chamartín" },
+  { slug: "uned", name: "Universidad Nacional de Educación a Distancia", shortName: "UNED", citySlug: "madrid", area: "Ciudad Universitaria" },
+
+  /* --- Barcelona -------------------------------------------------------- */
   { slug: "ub", name: "Universitat de Barcelona", shortName: "UB", citySlug: "barcelona", area: "Raval" },
   { slug: "upf", name: "Universitat Pompeu Fabra", shortName: "Pompeu Fabra", citySlug: "barcelona", area: "Ciutadella" },
   { slug: "upc", name: "Universitat Politècnica de Catalunya", shortName: "UPC", citySlug: "barcelona", area: "Les Corts" },
+  { slug: "uab", name: "Universitat Autònoma de Barcelona", shortName: "Autònoma", citySlug: "barcelona", area: "Bellaterra" },
+  { slug: "uoc", name: "Universitat Oberta de Catalunya", shortName: "UOC", citySlug: "barcelona", area: "Poblenou" },
+  { slug: "url-esade", name: "Universitat Ramon Llull (ESADE)", shortName: "Ramon Llull", citySlug: "barcelona", area: "Sant Cugat" },
+
+  /* --- London ----------------------------------------------------------- */
   { slug: "ucl", name: "University College London", shortName: "UCL", citySlug: "london", area: "Bloomsbury" },
   { slug: "kcl", name: "King's College London", shortName: "KCL", citySlug: "london", area: "Strand" },
   { slug: "qmul", name: "Queen Mary University of London", shortName: "Queen Mary", citySlug: "london", area: "Mile End" },
+  { slug: "imperial", name: "Imperial College London", shortName: "Imperial", citySlug: "london", area: "South Kensington" },
+  { slug: "lse", name: "London School of Economics", shortName: "LSE", citySlug: "london", area: "Holborn" },
+  { slug: "city", name: "City, University of London", shortName: "City", citySlug: "london", area: "Islington" },
+  { slug: "soas", name: "SOAS University of London", shortName: "SOAS", citySlug: "london", area: "Bloomsbury" },
+  { slug: "westminster", name: "University of Westminster", shortName: "Westminster", citySlug: "london", area: "Marylebone" },
+
+  /* --- Amsterdam -------------------------------------------------------- */
   { slug: "uva", name: "Universiteit van Amsterdam", shortName: "UvA", citySlug: "amsterdam", area: "Roeterseiland" },
   { slug: "vu", name: "Vrije Universiteit Amsterdam", shortName: "VU", citySlug: "amsterdam", area: "Zuidas" },
+  { slug: "hva", name: "Hogeschool van Amsterdam", shortName: "HvA", citySlug: "amsterdam", area: "Amstelcampus" },
+
+  /* --- Berlin ----------------------------------------------------------- */
   { slug: "hu", name: "Humboldt-Universität zu Berlin", shortName: "Humboldt", citySlug: "berlin", area: "Mitte" },
   { slug: "fu", name: "Freie Universität Berlin", shortName: "Freie", citySlug: "berlin", area: "Dahlem" },
   { slug: "tu", name: "Technische Universität Berlin", shortName: "TU Berlin", citySlug: "berlin", area: "Charlottenburg" },
+  { slug: "htw", name: "Hochschule für Technik und Wirtschaft Berlin", shortName: "HTW", citySlug: "berlin", area: "Oberschöneweide" },
+  { slug: "hwr", name: "Hochschule für Wirtschaft und Recht Berlin", shortName: "HWR", citySlug: "berlin", area: "Schöneberg" },
+  { slug: "charite", name: "Charité – Universitätsmedizin Berlin", shortName: "Charité", citySlug: "berlin", area: "Mitte" },
 ] as const;
 
 /* -------------------------------------------------------------------------- */
