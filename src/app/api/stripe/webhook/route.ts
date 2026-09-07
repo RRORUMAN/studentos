@@ -3,7 +3,7 @@ import type Stripe from "stripe";
 import type { PlanKey } from "@/config/pricing";
 import type { SubscriptionStatus } from "@/domain/types";
 import { fetchSubscription, planForPriceId, verifyWebhook } from "@/server/billing/stripe";
-import { findOne, nowIso, transaction } from "@/server/db";
+import { nowIso, transaction } from "@/server/db";
 
 /**
  * ============================================================================
@@ -39,9 +39,24 @@ export async function POST(request: Request): Promise<Response> {
     return new Response("Invalid signature", { status: 400 });
   }
 
-  /* ---- idempotency ------------------------------------------------------ */
-  const alreadyProcessed = await findOne("processedStripeEvents", (row) => row.id === event.id);
-  if (alreadyProcessed) return new Response("Already processed", { status: 200 });
+  /* ---- idempotency ------------------------------------------------------
+     Claimed in one transaction, before any handling, rather than checked and
+     marked around it. Stripe retries, and a retry can arrive while the first
+     delivery is still awaiting `fetchSubscription` — with the check and the
+     mark at opposite ends of the handler, both deliveries pass the check and
+     both process the event. Reading and writing inside one transaction makes
+     the claim atomic, and the row store's optimistic check means the second
+     instance loses the race and sees the claim on its replay.
+
+     The claim is released again if handling throws, so a genuine failure still
+     gets the retry it needs. */
+  const claimed = await transaction((db) => {
+    if (db.processedStripeEvents.some((row) => row.id === event.id)) return false;
+    db.processedStripeEvents.push({ id: event.id, at: nowIso() });
+    return true;
+  });
+
+  if (!claimed) return new Response("Already processed", { status: 200 });
 
   try {
     switch (event.type) {
@@ -78,20 +93,26 @@ export async function POST(request: Request): Promise<Response> {
         break;
     }
 
+    /* Keep the guard table bounded. Stripe does not retry beyond a few days,
+       so anything older than a week cannot still be in flight. */
     await transaction((db) => {
-      db.processedStripeEvents.push({ id: event.id, at: nowIso() });
-      /* Keep the guard table bounded. Stripe does not retry beyond a few days,
-         so anything older than a week cannot still be in flight. */
       const cutoff = Date.now() - 7 * 86_400_000;
       const kept = db.processedStripeEvents.filter((row) => Date.parse(row.at) > cutoff);
-      db.processedStripeEvents.length = 0;
-      db.processedStripeEvents.push(...kept);
+      db.processedStripeEvents.length = kept.length;
+      for (let index = 0; index < kept.length; index += 1) db.processedStripeEvents[index] = kept[index];
     });
 
     return new Response("ok", { status: 200 });
   } catch {
-    /* 500 so Stripe retries: something transient went wrong on our side and
-       the event has not been marked processed, so a retry is safe. */
+    /* Release the claim, then 500 so Stripe retries. Leaving it in place would
+       make the retry a no-op and lose the event permanently — a subscription
+       paid for and never granted, which is the worst outcome available here. */
+    await transaction((db) => {
+      const kept = db.processedStripeEvents.filter((row) => row.id !== event.id);
+      db.processedStripeEvents.length = kept.length;
+      for (let index = 0; index < kept.length; index += 1) db.processedStripeEvents[index] = kept[index];
+    });
+
     return new Response("Handler failed", { status: 500 });
   }
 }

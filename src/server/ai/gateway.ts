@@ -408,7 +408,8 @@ export async function runAi<T>(call: GatewayCall<T>): Promise<GatewayResult<T>> 
     /* A second ceiling under the weekly allowance: a per-user daily cap, so a
        single account cannot burn a week's worth of the global budget in an
        afternoon. Hitting it degrades rather than errors. */
-    if (config.perUserDailyCalls > 0 && (await callsToday(call.userId)) >= config.perUserDailyCalls) {
+    const dailyCallCeiling = config.perPlanDailyCalls[plan];
+    if (dailyCallCeiling > 0 && (await callsToday(call.userId)) >= dailyCallCeiling) {
       const value = call.fallback();
       await logUsage({
         userId: call.userId,

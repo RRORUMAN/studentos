@@ -1,20 +1,27 @@
 import { NextResponse } from "next/server";
 
 import { getCity } from "@/data/cities";
+import { findOne, insert, newId, nowIso, update } from "@/server/db";
 import { sendTemplate } from "@/services/email";
-import { isBackendConfigured } from "@/services/env";
+import { isEphemeralStore } from "@/services/env";
 import { captureError } from "@/services/monitoring";
 
 /**
  * ============================================================================
  * WAITLIST
  * ----------------------------------------------------------------------------
- * A real endpoint with real validation. When Supabase and Resend are wired up
- * it stores the row and sends the confirmation; until then it says so plainly
- * rather than returning a success the product cannot honour.
+ * A real endpoint with real validation. It writes the row first and sends the
+ * confirmation second, and it only answers `stored` once the row exists.
  *
- * Never returning a fake 200 is deliberate — the whole product is built on not
- * telling students something is true when it is not.
+ * That order is the whole point. An earlier version of this route sent the
+ * email and returned `stored` while persisting nothing — a form that thanked a
+ * student and discarded their address. The product is built on not telling
+ * students something is true when it is not, and a waitlist that forgets you is
+ * the smallest and most tempting version of exactly that.
+ *
+ * Where the row would not survive — a serverless instance with no database —
+ * it returns `not-configured` instead, and the form says so and offers a route
+ * that works.
  * ============================================================================
  */
 
@@ -55,23 +62,67 @@ export async function POST(request: Request) {
     );
   }
 
-  if (!isBackendConfigured) {
+  /* The question is not "is Supabase connected" but "will this row still be
+     here tomorrow". A development machine writing to `.data/` is a real
+     waitlist; a serverless instance writing to its own temp directory is a
+     waitlist that a redeploy deletes, and promising somebody a place on that is
+     the same lie as not storing them at all. */
+  if (isEphemeralStore) {
     return NextResponse.json<WaitlistResponse>({ status: "not-configured" }, { status: 200 });
   }
 
+  const address = email.trim().toLowerCase();
+  const citySlugValue = city?.slug ?? null;
+
   try {
-    // Persisted through the Supabase service in the product build.
-    await sendTemplate({
-      to: email.trim(),
-      template: "waitlist-confirmed",
-      data: { city: city?.name ?? "your city" },
-    });
+    /* Asking twice is not an error, and it must not create a second row or a
+       second email. Matched on the pair, so somebody who asked about Barcelona
+       can still ask about Berlin. */
+    const existing = await findOne(
+      "waitlist",
+      (row) => row.email === address && row.citySlug === citySlugValue,
+    );
+
+    const entry =
+      existing ??
+      (await insert("waitlist", {
+        id: newId(),
+        email: address,
+        citySlug: citySlugValue,
+        createdAt: nowIso(),
+        notifiedAt: null,
+      }));
+
+    /* The row is what was promised; the email is a courtesy on top of it. A
+       provider outage must not turn a stored signup into an error the student
+       reads as "that did not work", so the send is allowed to fail on its own.
+       `notifiedAt` stays null and names the ones to retry. */
+    if (entry.notifiedAt === null) {
+      const sent = await sendTemplate({
+        to: address,
+        template: "waitlist-confirmed",
+        data: { city: city?.name ?? "your city" },
+      });
+
+      /* Stamped only on a real send. `sendTemplate` reports failure in its
+         return value rather than throwing, so writing the timestamp
+         unconditionally would record a confirmation that never left the
+         building — and this column is what a later retry reads to decide who
+         still needs one. */
+      if (sent.ok) {
+        await update("waitlist", (row) => row.id === entry.id, { notifiedAt: nowIso() });
+      }
+    }
+
     return NextResponse.json<WaitlistResponse>({
       status: "stored",
       city: city?.name ?? "your city",
     });
   } catch (error) {
-    captureError(error, { route: "waitlist" });
+    /* The row could not be written, so nothing was promised. Saying
+       `not-configured` is honest here: from the student's side the waitlist is
+       not working, and the form offers them a route that is. */
+    captureError(error, { route: "waitlist", stage: "store" });
     return NextResponse.json<WaitlistResponse>({ status: "not-configured" }, { status: 200 });
   }
 }

@@ -11,7 +11,7 @@ import {
 import { destroyAllSessions } from "@/server/auth/session";
 import { findOne, insert, newId, nowIso, remove, update } from "@/server/db";
 import { limits, rateLimit, resetLimit } from "@/server/rate-limit";
-import { sendTemplate } from "@/services/email";
+import { absoluteUrl, sendTemplate } from "@/services/email";
 import type { AuthToken, User } from "@/domain/types";
 
 /**
@@ -184,8 +184,8 @@ export async function signUp(input: {
     await hashPassword(input.password);
     await sendTemplate({
       to: email,
-      template: "waitlist-confirmed",
-      data: { reason: "duplicate-signup" },
+      template: "duplicate-signup",
+      data: { url: absoluteUrl("/signin") ?? "" },
     });
     return { ok: true, userId: existing.id, needsVerification: !existing.emailVerifiedAt };
   }
@@ -204,7 +204,27 @@ export async function signUp(input: {
   await insert("users", user);
   const verifyToken = await issueToken(user.id, "verify-email");
 
-  return { ok: true, userId: user.id, needsVerification: true, verifyToken };
+  /* Send the link, and only hand it back to the caller when sending failed.
+     `verifyToken` is what the sign-up action redirects through, so returning it
+     unconditionally means every new account verifies itself the moment it is
+     created — which is the correct behaviour on a laptop with no email provider
+     and a hole in production, because it makes the address on the account
+     unproven while the product treats it as proven.
+
+     A deployment with a key and a verified domain therefore never takes that
+     path; one without a key keeps working exactly as it does today, and
+     `/admin` → Services says plainly which of the two it is. */
+  const link = absoluteUrl(`/verify-email?token=${encodeURIComponent(verifyToken)}&next=/onboarding`);
+  const sent = link
+    ? await sendTemplate({ to: email, template: "verify-email", data: { url: link } })
+    : ({ ok: false, reason: "no-site-url" } as const);
+
+  return {
+    ok: true,
+    userId: user.id,
+    needsVerification: true,
+    verifyToken: sent.ok ? undefined : verifyToken,
+  };
 }
 
 /* -------------------------------------------------------------------------- */
@@ -299,9 +319,16 @@ export async function requestPasswordReset(
   if (!user) return { ok: true, token: null };
 
   const token = await issueToken(user.id, "reset-password");
-  await sendTemplate({ to: email, template: "waitlist-confirmed", data: { kind: "reset" } });
 
-  return { ok: true, token };
+  /* Same rule as verification, and it matters more here: a reset link shown on
+     screen to whoever typed the address is a way to take over an account by
+     knowing an email address. Handed back only when it could not be sent. */
+  const link = absoluteUrl(`/reset-password?token=${encodeURIComponent(token)}`);
+  const sent = link
+    ? await sendTemplate({ to: email, template: "reset-password", data: { url: link } })
+    : ({ ok: false, reason: "no-site-url" } as const);
+
+  return { ok: true, token: sent.ok ? null : token };
 }
 
 /**

@@ -58,12 +58,27 @@ export { isBillingConfigured };
  * than silently charging the wrong amount.
  */
 function priceIdFor(plan: PlanKey, period: BillingPeriod): string | null {
-  const key = `STRIPE_PRICE_${plan.toUpperCase()}_${period.toUpperCase()}`;
-  const fromEnv = process.env[key];
-  if (fromEnv) return fromEnv;
+  if (plan === "free") return null;
+  return env.stripe.prices[plan][period];
+}
 
-  /* Fall back to anything declared in the pricing config. */
-  return plans.find((entry) => entry.key === plan)?.stripePriceIds[period] ?? null;
+/**
+ * Which of the six price ids are missing.
+ *
+ * `/admin` renders this, because "Stripe is connected" and "a student can buy
+ * Pro annual" are different facts, and the second one is the one that matters
+ * on the morning of a launch.
+ */
+export function missingPriceIds(): string[] {
+  const missing: string[] = [];
+  for (const plan of ["plus", "pro", "max"] as const) {
+    for (const period of ["monthly", "annual"] as const) {
+      if (!env.stripe.prices[plan][period]) {
+        missing.push(`STRIPE_PRICE_${plan.toUpperCase()}_${period.toUpperCase()}`);
+      }
+    }
+  }
+  return missing;
 }
 
 /** Reverse lookup, for the webhook. */

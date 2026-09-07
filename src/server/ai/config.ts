@@ -62,15 +62,30 @@ export const aiConfig = cache(async (): Promise<AiRuntimeConfig> => {
 
   const enabled = settings.get("ai.enabled") !== "off";
 
+  /**
+   * Most specific wins: an admin who changed it in `/admin`, then a per-tier
+   * environment variable, then a deployment-wide pin, then the default for the
+   * provider. `AI_MODEL` sits below `AI_SMALL_MODEL` and friends because
+   * setting both means "this one everywhere, except here".
+   */
   const modelTier = (tier: 1 | 2 | 3): string => {
     const setting = settings.get(`ai.model.tier${tier}` as AiSettingKey);
     if (setting) return setting;
-    /* A single AI_MODEL override applies to every tier, which is what someone
-       pinning one model for a whole deployment means by it. */
+    const perTier = env.ai.models[tier];
+    if (perTier) return perTier;
     if (env.ai.model) return env.ai.model;
     return provider === "none" ? "none" : defaultModels[provider][tier];
   };
 
+  /**
+   * `AI_MAX_TOKENS` caps every tier. It lowers a ceiling, never raises one: a
+   * deployment-wide cap that let tier 1 write more than its budget allows would
+   * be a cost control that increases cost.
+   */
+  const capTokens = (value: number): number =>
+    env.ai.maxTokens === null ? value : Math.min(value, env.ai.maxTokens);
+
+  const perUserDailyCalls = readNumber(settings, "ai.perUserDailyCalls", aiDefaults.perUserDailyCalls);
   const dailyCostCapMicros = readNumber(settings, "ai.dailyCostCapMicros", aiDefaults.dailyCostCapMicros);
   const monthlyCostCapMicros = readNumber(settings, "ai.monthlyCostCapMicros", aiDefaults.monthlyCostCapMicros);
 
@@ -96,13 +111,19 @@ export const aiConfig = cache(async (): Promise<AiRuntimeConfig> => {
     temperature: Math.min(1, Math.max(0, readNumber(settings, "ai.temperature", aiDefaults.temperature))),
     maxOutputTokens: {
       0: 0,
-      1: readNumber(settings, "ai.maxOutputTokens.tier1", tierLimits[1].maxOutputTokens),
-      2: readNumber(settings, "ai.maxOutputTokens.tier2", tierLimits[2].maxOutputTokens),
-      3: readNumber(settings, "ai.maxOutputTokens.tier3", tierLimits[3].maxOutputTokens),
+      1: capTokens(readNumber(settings, "ai.maxOutputTokens.tier1", tierLimits[1].maxOutputTokens)),
+      2: capTokens(readNumber(settings, "ai.maxOutputTokens.tier2", tierLimits[2].maxOutputTokens)),
+      3: capTokens(readNumber(settings, "ai.maxOutputTokens.tier3", tierLimits[3].maxOutputTokens)),
     } as Record<Tier, number>,
     dailyCostCapMicros,
     monthlyCostCapMicros,
-    perUserDailyCalls: readNumber(settings, "ai.perUserDailyCalls", aiDefaults.perUserDailyCalls),
+    perUserDailyCalls,
+    perPlanDailyCalls: {
+      free: env.ai.dailyCalls.free ?? perUserDailyCalls,
+      plus: env.ai.dailyCalls.plus ?? perUserDailyCalls,
+      pro: env.ai.dailyCalls.pro ?? perUserDailyCalls,
+      max: env.ai.dailyCalls.max ?? perUserDailyCalls,
+    },
     degradedReason,
   };
 });

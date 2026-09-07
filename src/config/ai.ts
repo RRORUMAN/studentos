@@ -1,4 +1,5 @@
 import type { AiOperation } from "@/domain/types";
+import type { PlanKey } from "@/config/pricing";
 
 /**
  * ============================================================================
@@ -187,6 +188,14 @@ export type AiRuntimeConfig = {
   dailyCostCapMicros: number;
   monthlyCostCapMicros: number;
   perUserDailyCalls: number;
+  /**
+   * Per-plan daily call ceilings, resolved from `AI_DAILY_LIMIT_*`.
+   *
+   * A plan with no variable set falls back to `perUserDailyCalls`, so a
+   * deployment that sets none of them behaves exactly as it did before these
+   * existed. Zero means no ceiling for that plan, matching the admin control.
+   */
+  perPlanDailyCalls: Record<PlanKey, number>;
   /** Why the gateway is not calling a model, when it is not. */
   degradedReason: "no-key" | "disabled" | "provider-none" | "daily-cap" | "monthly-cap" | null;
 };
