@@ -12,9 +12,11 @@ import { ShareButton } from "@/components/app/share-button";
 import { MascotArt } from "@/components/mascot/mascot-art";
 import { Badge } from "@/components/ui/primitives";
 import { placesForCity, sourceLabel } from "@/data/places";
+import { describe as describeRelation, relate } from "@/domain/graph";
 import { isStudentVerified } from "@/services/db/schema";
 import { betterOption } from "@/server/engines/better-option";
-import { loadCommunitySignals, loadPlaces, loadRecommendContext } from "@/server/queries/discovery";
+import { loadPlaces, loadRecommendContext } from "@/server/queries/discovery";
+import { loadCityGraph, viewerNode } from "@/server/queries/graph";
 import { loadMoney } from "@/server/queries/money";
 import { loadPlanChoices } from "@/server/queries/plans";
 import { findMany, findOne } from "@/server/db";
@@ -55,10 +57,9 @@ export default async function PlacePage(props: PageProps<"/discover/[id]">) {
     budgetCents: money$.unset ? null : money$.reading.safeTodayCents,
   });
 
-  const [scoredAll, saved, signals, mentions, plans] = await Promise.all([
+  const [scoredAll, saved, mentions, plans, graph] = await Promise.all([
     loadPlaces(context),
     findOne("saved", (row) => row.userId === viewer.user.id && row.kind === "place" && row.targetId === id),
-    loadCommunitySignals(viewer.user.id, viewer.profile.campusSlug),
     findMany(
       "posts",
       (row) =>
@@ -67,7 +68,14 @@ export default async function PlacePage(props: PageProps<"/discover/[id]">) {
         (row.placeId === id || row.title.toLowerCase().includes(place.name.split(",")[0].toLowerCase())),
     ),
     loadPlanChoices({ userId: viewer.user.id, citySlug: viewer.profile.citySlug, now }),
+    loadCityGraph(viewer.profile.citySlug),
   ]);
+
+  /* Everything the city graph can honestly say about this student and this
+     place: a friend's save, a floored campus count, the area it is in, the
+     commute from that area to their campus. Facts, not a score — the match
+     percentage above is the score, and it does not explain itself. */
+  const relations = relate(graph, viewerNode(graph, viewer.user.id), { kind: "place", id: place.id });
 
   const scored = scoredAll.find((entry) => entry.item.id === id);
   const better = betterOption({
@@ -142,18 +150,32 @@ export default async function PlacePage(props: PageProps<"/discover/[id]">) {
               Needs {10 - place.verifiedBy} more independent confirmations to be verified.
             </span>
           )}
-          {signals.savedByFriends.has(place.id) ? (
-            <span className="inline-flex items-center gap-1 text-pulse-deep">
-              <Users className="size-3.5" /> Friends saved this
-            </span>
-          ) : signals.savedByCampus.has(place.id) ? (
-            <span className="inline-flex items-center gap-1 text-flow-deep">
-              <Users className="size-3.5" /> Students from your campus saved this
-            </span>
-          ) : null}
           <span className="text-ink-400">{sourceLabel[place.source]}</span>
         </p>
       </section>
+
+      {/* ---- how it sits in your city --------------------------------------
+           From the city graph rather than from the place row: these are edges
+           — who saved it, where it is, how far that is from your campus — and
+           every count about other students is floored before it gets here. */}
+      {relations.length > 0 ? (
+        <section className="mt-3 rounded-2xl bg-white p-5 shadow-[var(--shadow-flat)] ring-1 ring-ink-950/6">
+          <h2 className="flex items-center gap-2 text-[1.0625rem] font-semibold text-ink-950">
+            <Users className="size-4 text-ink-400" />
+            How this sits in your city
+          </h2>
+          <ul className="mt-3 flex flex-wrap gap-1.5">
+            {relations.map((relation) => (
+              <li
+                key={relation.kind}
+                className="rounded-full bg-paper-2 px-3 py-1 text-[0.8125rem] text-ink-700"
+              >
+                {describeRelation(relation)}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       {/* ---- better option -------------------------------------------------- */}
       {better ? (
