@@ -85,7 +85,7 @@ export function BudgetPanel({ className }: { className?: string }) {
       {/* ---- two numbers that matter --------------------------------------- */}
       <div className="mt-5 grid grid-cols-2 gap-2.5">
         <StatTile
-          label="Safe today"
+          label="Safe to spend today"
           value={money(safe)}
           note={`${money(remaining - upcomingTotal())} spread over ${budgetMonth.daysLeft} days`}
           accent="mint"

@@ -131,7 +131,7 @@ export default async function EventsPage(props: PageProps<"/events">) {
         <div>
           <p className="font-mono text-micro uppercase tracking-[0.12em] text-ink-400">
             {viewer.city.name}
-            {money$.unset ? "" : ` · ${money(money$.reading.safeTodayCents / 100, where)} safe today`}
+            {money$.unset ? "" : ` · ${money(money$.reading.safeTodayCents / 100, where)} safe to spend today`}
           </p>
           <h1 className="mt-1 text-display-xs text-ink-950 sm:text-display-sm">Event radar</h1>
         </div>

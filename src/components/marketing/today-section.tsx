@@ -55,7 +55,7 @@ export function TodaySection() {
             <ul className="mt-8 flex max-w-lg flex-col gap-4">
               <Point
                 title="Two numbers, not a spreadsheet"
-                detail="Safe today and safe this week, both worked out after the charges you already know are coming."
+                detail="What you can safely spend today, and what is left for the week — both worked out after the charges you already know are coming."
               />
               <Point
                 title="One insight, not a dashboard"
@@ -85,8 +85,8 @@ export function TodaySection() {
 
               {/* the two numbers */}
               <div className="mt-3 grid grid-cols-2 gap-2">
-                <Stat label="Safe today" value={money(safe)} accent="mint" />
-                <Stat label="Safe this week" value={money(week)} accent="flow" />
+                <Stat label="Safe to spend today" value={money(safe)} accent="mint" />
+                <Stat label="Safe to spend this week" value={money(week)} accent="flow" />
               </div>
 
               {/* insight */}

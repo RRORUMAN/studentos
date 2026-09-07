@@ -20,6 +20,7 @@ import {
 import { SubscriptionsPanel, type DetectedView, type SubscriptionView } from "@/components/app/budget-subscriptions";
 import { BudgetTelemetry } from "@/components/app/budget-telemetry";
 import { AddTransaction, BudgetHistory, type HistoryGroup } from "@/components/app/budget-ui";
+import { IncomeBridge } from "@/components/app/income-bridge";
 import { Upsell } from "@/components/app/upsell";
 import { MascotArt } from "@/components/mascot/mascot-art";
 import type { Feature } from "@/config/entitlements";
@@ -60,7 +61,7 @@ export const metadata: Metadata = {
  *
  *   1. Log a spend. The most repeated action in the product is the first
  *      control on the page and stays reachable as it scrolls.
- *   2. Safe today, safe this week, and the month bar with its pace marker.
+ *   2. Safe to spend today, safe to spend this week, and the month bar with its pace marker.
  *   3. One sentence about what that means, with a link somewhere else.
  *   4. Categories, then the concrete cheaper things in the drifting one.
  *   5. What repeats, what the weeks look like, where the month lands.
@@ -267,13 +268,13 @@ export default async function BudgetPage() {
 
             <div className="mt-6 grid grid-cols-2 gap-6 border-t border-paper/12 pt-5">
               <div>
-                <p className="font-mono text-micro uppercase tracking-[0.12em] text-paper/55">Safe today</p>
+                <p className="font-mono text-micro uppercase tracking-[0.12em] text-paper/55">Safe to spend today</p>
                 <p className="tnum mt-1.5 font-display text-[2.25rem] leading-none font-semibold tracking-tight text-signal sm:text-[2.75rem]">
                   {fmt(reading.safeTodayCents)}
                 </p>
               </div>
               <div>
-                <p className="font-mono text-micro uppercase tracking-[0.12em] text-paper/55">Safe this week</p>
+                <p className="font-mono text-micro uppercase tracking-[0.12em] text-paper/55">Safe to spend this week</p>
                 <p className="tnum mt-1.5 font-display text-[2.25rem] leading-none font-semibold tracking-tight sm:text-[2.75rem]">
                   {fmt(reading.safeThisWeekCents)}
                 </p>
@@ -333,6 +334,13 @@ export default async function BudgetPage() {
       </div>
 
       <div className="mt-6 space-y-6">
+        {/* ---- income ----------------------------------------------------- */}
+        <IncomeBridge
+          userId={viewer.user.id}
+          monthlyPlannedCents={unset ? null : reading.plannedCents}
+          where={where}
+        />
+
         {/* ---- categories ------------------------------------------------- */}
         <section className="rounded-2xl bg-white p-5 shadow-[var(--shadow-flat)] ring-1 ring-ink-950/6">
           <div className="mb-2 flex items-baseline justify-between gap-4">

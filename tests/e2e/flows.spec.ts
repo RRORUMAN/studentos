@@ -22,7 +22,7 @@ test("a new student can sign up, set up, and land on a personalised Home", async
   await expect(page.locator("main").getByText("Madrid", { exact: false }).first()).toBeVisible();
 
   /* The budget they entered has become a daily figure. */
-  const safeToday = page.getByText("Safe today", { exact: true }).locator("..");
+  const safeToday = page.getByText("Safe to spend today", { exact: true }).locator("..");
   await expect(safeToday).toBeVisible();
   expect(toCents(await safeToday.innerText())).toBeGreaterThan(0);
 
@@ -134,7 +134,7 @@ test("logging a spend moves the budget and the safe-to-spend figure", async ({ p
 
   /* Home shows the same safe-today engine, and the figure moved. */
   await page.goto("/home");
-  const safe = page.getByText("Safe today", { exact: true }).locator("..");
+  const safe = page.getByText("Safe to spend today", { exact: true }).locator("..");
   await expect(safe).toBeVisible();
 });
 

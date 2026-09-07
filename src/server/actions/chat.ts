@@ -57,6 +57,13 @@ async function attachmentExists(attachment: ChatAttachment, citySlug: string, us
       return Boolean(await findOne("chatPolls", (row) => row.id === id));
     case "mission":
       return Boolean(await findOne("missions", (row) => row.id === id && row.userId === userId));
+    case "opportunity":
+      return Boolean(
+        await findOne(
+          "opportunities",
+          (row) => row.id === id && row.moderation === "published",
+        ),
+      );
   }
 }
 

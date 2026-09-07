@@ -212,7 +212,7 @@ function daysBetween(from: Date, to: Date): number {
  *
  * The money in a trip envelope is *reserved*: it counts in the month's plan
  * but is subtracted from safe-to-spend until the trip starts. A weekend away
- * should not quietly inflate the "safe today" figure the week before it.
+ * should not quietly inflate the "safe to spend today" figure the week before it.
  */
 export const TRIP_PREFIX = "travel:";
 

@@ -6,6 +6,7 @@ import { campuses, cities } from "@/data/cities";
 import { places } from "@/data/places";
 import { defaultPrivacy } from "@/domain/types";
 import { seedDemoAccount } from "@/server/db/seed-demo";
+import { rollSeededGigsForward, seedWork } from "@/server/db/seed-work";
 import { seedTruth } from "@/server/db/seed-truth";
 import type { Database } from "@/server/db/store";
 import {
@@ -513,9 +514,25 @@ export async function seedDatabase(db: Database): Promise<void> {
   seedPrices(db);
   seedChallengeRows(db, now);
   seedTruth(db, { seedId, iso, daysAgo });
+  seedWork(db, { seedId, iso, daysAgo, daysFromNow });
 
   /* Only when an operator set STUDENTOS_DEMO_PASSWORD. See seed-demo.ts. */
   await seedDemoAccount(db);
+}
+
+/**
+ * Fill tables that did not exist when this store file was written.
+ *
+ * Only ever *adds*. A migration that rewrote or removed a student's rows would
+ * be a data-loss bug hiding behind a version number, and the version is bumped
+ * far too casually for that to be safe.
+ */
+export async function migrateDatabase(db: Database, from: number): Promise<void> {
+  /* v2 introduced Work. A store written before it has an empty board, which
+     reads exactly like a city where nobody has posted — so seed it. */
+  if (from < 2 && db.opportunities.length === 0) {
+    seedWork(db, { seedId, iso, daysAgo, daysFromNow });
+  }
 }
 
 /* -------------------------------------------------------------------------- */
@@ -551,6 +568,11 @@ export function rollSeededEventsForward(db: Database): number {
     event.endsAt = new Date(starts + duration).toISOString();
     moved += 1;
   }
+
+  /* Dated gigs go stale the same way and for the same reason: a demo whose
+     Saturday shift was three weeks ago teaches a visitor that the board is
+     dead, which is a worse first impression than an empty one. */
+  moved += rollSeededGigsForward(db, now, seedId);
 
   return moved;
 }

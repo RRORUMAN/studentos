@@ -30,7 +30,7 @@ export type SaveResult =
   | { ok: false; reason: "error"; message: string };
 
 const schema = z.object({
-  kind: z.enum(["place", "event", "deal", "plan", "listing", "post"]),
+  kind: z.enum(["place", "event", "deal", "plan", "listing", "post", "opportunity"]),
   targetId: z.string().trim().min(1).max(120),
 });
 
@@ -49,6 +49,15 @@ async function targetExists(kind: SavedKind, targetId: string, citySlug: string)
       return Boolean(await findOne("listings", (row) => row.id === targetId));
     case "post":
       return Boolean(await findOne("posts", (row) => row.id === targetId && row.hiddenAt === null));
+    case "opportunity":
+      /* A withheld posting cannot be saved. Otherwise a student could keep a
+         moderated-out job on their list and reach it from Saved forever. */
+      return Boolean(
+        await findOne(
+          "opportunities",
+          (row) => row.id === targetId && row.moderation === "published",
+        ),
+      );
   }
 }
 

@@ -1,5 +1,6 @@
 import {
   Bookmark,
+  Briefcase,
   CalendarCheck,
   CalendarDays,
   Compass,
@@ -35,7 +36,8 @@ export type Destination = {
 export const MORE_DESTINATIONS: readonly Destination[] = [
   { href: "/discover", label: "Discover", detail: "Map, cheap food, study spots, what is on right now", icon: Compass },
   { href: "/events", label: "Event radar", detail: "Tonight, free, under €10, campus, trending", icon: CalendarDays },
-  { href: "/budget", label: "Budget", detail: "Safe today, can I afford this, survival mode", icon: Wallet },
+  { href: "/budget", label: "Budget", detail: "Safe to spend today, can I afford this, survival mode", icon: Wallet },
+  { href: "/work", label: "Work", detail: "Part-time jobs, gigs and paid projects that fit your week", icon: Briefcase },
   { href: "/missions", label: "Smart Missions", detail: "A weekend under budget, meet three people", icon: Target },
   { href: "/exchange", label: "Student Exchange", detail: "Buy, borrow, help, share a ride, free stuff", icon: Package },
   { href: "/anyone-down", label: "Anyone down?", detail: "Turn anything into a group", icon: UsersRound },

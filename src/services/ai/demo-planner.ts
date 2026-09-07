@@ -552,8 +552,8 @@ export function askAnswer(query: string, citySlug: string): AskAnswer {
         kind: "budget",
         lead: `${check.headline} ${check.detail}`,
         rows: [
-          { label: "Safe today", price: check.safeToday },
-          { label: "Safe this week", price: check.safeWeek },
+          { label: "Safe to spend today", price: check.safeToday },
+          { label: "Safe to spend this week", price: check.safeWeek },
           { label: "This spend", price: check.amount },
           check.alternative
             ? { label: check.alternative.label, detail: check.alternative.note, price: check.alternative.price, meta: `saves ${price(check.alternative.saves)}` }
@@ -615,7 +615,7 @@ export function askAnswer(query: string, citySlug: string): AskAnswer {
         kind: "event",
         lead: "Three free things, all inside 20 minutes.",
         rows: plan.items.map((item) => ({ label: item.title, detail: item.detail, price: item.price, meta: item.time })),
-        budgetLine: `Costs nothing, so today's safe ${price(safeToday())} stays where it is.`,
+        budgetLine: `Costs nothing, so the ${price(safeToday())} you can safely spend today stays where it is.`,
         sources: "Museum hours from official listings, door policy from the venues",
         mascotSays: mascotLine("found", 2),
       };

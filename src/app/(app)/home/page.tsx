@@ -39,7 +39,7 @@ export const metadata: Metadata = {
  *
  *   PRIMARY    what matters today
  *     1. who and where            greeting, city, university
- *     2. what can I afford        safe today · safe this week · one sentence
+ *     2. what can I afford        safe to spend today · safe to spend this week · one sentence
  *     3. today for you            three to five things, one of each kind
  *
  *   SECONDARY  what should I do

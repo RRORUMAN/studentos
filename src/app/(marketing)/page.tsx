@@ -15,6 +15,7 @@ import { PricingTable } from "@/components/marketing/pricing-table";
 import { PulseSection } from "@/components/marketing/pulse-section";
 import { RightNow } from "@/components/marketing/right-now";
 import { ShareSection } from "@/components/marketing/share-section";
+import { WorkSection } from "@/components/marketing/work-section";
 import { SurvivalMode } from "@/components/marketing/survival-mode";
 import { Testimonials } from "@/components/marketing/testimonials";
 import { TodaySection } from "@/components/marketing/today-section";
@@ -68,6 +69,7 @@ export default function HomePage() {
       <EventRadar />
       <BudgetSection />
       <SurvivalMode />
+      <WorkSection />
       <LifeOpsSection />
       <MissionsSection />
       <ArrivalSection />

@@ -64,7 +64,7 @@ export const productSurfaces: readonly ProductSurface[] = [
   {
     key: "budget",
     label: brand.surfaces.budget,
-    blurb: "Safe today, safe this week, and whether tonight's plan actually fits.",
+    blurb: "Safe to spend today, safe to spend this week, and whether tonight's plan actually fits.",
     href: "/#budget",
     icon: Banknote,
     accent: "flow",

@@ -71,6 +71,8 @@ export type Feature =
   | "subscriptionDetection"
   | "multiCurrency"
   | "spendBenchmarks"
+  /* --- work -------------------------------------------------------------- */
+  | "incomeGoal"
   /* --- planning ---------------------------------------------------------- */
   | "weeklyPlanner"
   | "groupPlanner"
@@ -106,6 +108,12 @@ export type Feature =
  * in Pulse, chat, friends, basic groups, seeing events and deals, joining and
  * hosting Anyone Down? plans, the basic budget, the basic Arrival checklist,
  * the first-week plan, the core map layers, the daily brief.
+ *
+ * And, deliberately, the whole of Work: browsing, the Student Fit score,
+ * saving, applying, the application tracker, and posting or answering a
+ * student gig. A marketplace behind a paywall has no liquidity, and a student
+ * who cannot afford €7.99 is exactly the student who needs to find a shift.
+ * Only `incomeGoal` — the planning layer on top of it — is paid.
  */
 export const featureTier: Record<Feature, PlanKey> = {
   /* --- Plus: the product starts saving money and time -------------------- */
@@ -127,6 +135,7 @@ export const featureTier: Record<Feature, PlanKey> = {
   smartCollections: "plus",
   loopCatchUp: "plus",
   aiArrivalPlan: "plus",
+  incomeGoal: "plus",
 
   /* --- Pro: other people, and the future ---------------------------------- */
   advancedCityBrain: "pro",
@@ -184,6 +193,7 @@ export const featureCopy: Record<Feature, { label: string; promise: string }> = 
   subscriptionDetection: { label: "Subscription detection", promise: "Recurring charges surfaced from your own history." },
   multiCurrency: { label: "Multi-currency", promise: "Home and host currency side by side for a year abroad." },
   spendBenchmarks: { label: "Spend benchmarks", promise: "How your spend compares with students in the same city." },
+  incomeGoal: { label: "Income goal", promise: "Set what you need to earn, see the gap against your budget, and get the specific work that would close it." },
   weeklyPlanner: { label: "Weekly planner", promise: "Two to four things across the week, inside your budget, from what is actually on." },
   groupPlanner: { label: "Group planner", promise: "Plans your friends vote on, inside everyone's budget, with the split worked out." },
   collaborativePlans: { label: "Shared plans", promise: "Everyone edits the same itinerary instead of five screenshots." },

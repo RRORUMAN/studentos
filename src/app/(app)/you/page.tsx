@@ -7,6 +7,7 @@ import {
   Download,
   GraduationCap,
   Heart,
+  Home,
   LogOut,
   MapPin,
   MessagesSquare,
@@ -18,6 +19,7 @@ import {
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { neighbourhoodsForCity } from "@/data/neighbourhoods";
 import { MORE_DESTINATIONS } from "@/config/destinations";
 import { MascotArt } from "@/components/mascot/mascot-art";
 import { planByKey } from "@/config/pricing";
@@ -55,6 +57,7 @@ export default async function YouPage() {
   ]);
 
   const asks = viewer.entitlements.quotas.aiAsksPerWeek;
+  const cityAreas = neighbourhoodsForCity(viewer.profile.citySlug);
 
   const sections: { title: string; items: { href: string; label: string; detail?: string; icon: typeof Bell; badge?: number }[] }[] = [
     {
@@ -67,6 +70,14 @@ export default async function YouPage() {
         { href: "/you/friends", label: "Friends", detail: `${friendIds.size} ${friendIds.size === 1 ? "friend" : "friends"}`, icon: Users, badge: pendingRequests.length },
         { href: "/pulse/chat", label: "Groups and chats", detail: `${groups.length} ${groups.length === 1 ? "group" : "groups"} you are in`, icon: MessagesSquare },
         { href: "/you/city", label: "My city", detail: `${viewer.city.name}${viewer.profile.homeArea ? ` · ${viewer.profile.homeArea}` : ""}`, icon: MapPin },
+        {
+          href: "/neighbourhoods",
+          label: "Where should I live?",
+          detail: cityAreas.length > 0
+            ? `${cityAreas.length} areas, ranked against your budget and commute`
+            : "No areas written up in your city yet",
+          icon: Home,
+        },
         {
           href: "/arrival",
           label: viewer.stage.stage === "leaving" ? "Leaving Mode" : "Arrival Mode",

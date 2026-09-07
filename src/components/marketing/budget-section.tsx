@@ -44,7 +44,7 @@ const VERDICT_TONE = {
  * Every other budgeting app explains a month that already happened. This one
  * answers the only question a student asks it: can I do this thing tonight?
  *
- * Two numbers do the work — safe today and safe this week — and both are
+ * Two numbers do the work — safe to spend today and safe to spend this week — and both are
  * derived in `data/budget.ts` from the same seeded month the rest of the page
  * uses, so the figure here can never disagree with the figure in Today or in
  * an Ask answer. The afford check is real arithmetic on the amount you pick.
@@ -80,7 +80,7 @@ export function BudgetSection() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <p className="font-mono text-micro uppercase tracking-[0.12em] text-white/40">
-                    Safe today
+                    Safe to spend today
                   </p>
                   <p className="tnum mt-1 font-mono text-[2.5rem] leading-none font-semibold text-mint">
                     {money(today)}
@@ -88,7 +88,7 @@ export function BudgetSection() {
                 </div>
                 <div>
                   <p className="font-mono text-micro uppercase tracking-[0.12em] text-white/40">
-                    Safe this week
+                    Safe to spend this week
                   </p>
                   <p className="tnum mt-1 font-mono text-[2.5rem] leading-none font-semibold text-white">
                     {money(week)}
@@ -208,7 +208,7 @@ export function BudgetSection() {
                 <div className="mt-3 flex items-center gap-2">
                   <MascotStill state={tone.mascot} size="xs" />
                   <span className="text-xs text-ink-500">
-                    Safe today {money(check.safeToday)} · safe this week {money(check.safeWeek)}
+                    Safe to spend: {money(check.safeToday)} today · {money(check.safeWeek)} this week
                   </span>
                 </div>
               </motion.div>

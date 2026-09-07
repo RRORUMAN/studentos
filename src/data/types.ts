@@ -213,3 +213,107 @@ export type ArrivalTask = {
   legal?: boolean;
   cost?: string;
 };
+
+/* -------------------------------------------------------------------------- */
+/* Neighbourhoods                                                              */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * How a neighbourhood scores on one liveability trait, as a coarse band.
+ *
+ * Five bands rather than a percentage, and that is a deliberate refusal. The
+ * honest resolution of "how good are the groceries in Neukölln" is "fine, not
+ * amazing" — rendering that as 63% invents three digits of precision nobody
+ * measured, and a student who compares 63% against 67% is comparing noise.
+ * A band survives being wrong by a little; a percentage does not.
+ */
+export type TraitBand = 0 | 1 | 2 | 3 | 4;
+
+export const traitBandLabel: Record<TraitBand, string> = {
+  0: "Barely",
+  1: "A little",
+  2: "Some",
+  3: "Good",
+  4: "Strong",
+};
+
+export type NeighbourhoodTrait =
+  /** Bars, clubs and things that are still open at 01:00. */
+  | "nightlife"
+  /** How likely you are to sleep through a Saturday night. */
+  | "quiet"
+  /** Cheap supermarkets and a market, within walking distance. */
+  | "groceries"
+  /** Frequency and coverage of transport, not distance to one stop. */
+  | "transport"
+  /** How many students already live here. Drives everything social. */
+  | "studentDensity"
+  /** Parks big enough to sit in. */
+  | "green"
+  /** Eating out at a student price, not the number of restaurants. */
+  | "eatingOut";
+
+/**
+ * Where a rent band came from.
+ *
+ * This exists because a rent figure is the single number in this product a
+ * student will make an eight-hundred-euro-a-month decision on. Carrying the
+ * basis on the row means a surface cannot render the number without being able
+ * to render where it came from, and `seed-estimate` is displayed as exactly
+ * that — an estimate to sanity-check listings against, never a market reading.
+ */
+export type RentBasis =
+  /** Written from public listing ranges when the city was seeded. An estimate. */
+  | "seed-estimate"
+  /** A published municipal or university figure, with a URL. */
+  | "official"
+  /** Derived from verified `price` claims students submitted. */
+  | "students";
+
+/**
+ * Typical monthly rent, as a band, in whole units of the city's currency.
+ *
+ * A band, not an average: the average rent in a neighbourhood is a number no
+ * student can act on, because nobody rents the average flat. The two numbers
+ * are roughly what the cheaper and dearer ends of what students actually take
+ * look like, and a listing outside them is the interesting case either way.
+ */
+export type RentBand = {
+  /** A room in a shared flat — what most students are actually looking at. */
+  room: readonly [number, number];
+  /** A studio or one-bed. Null where they effectively do not exist for students. */
+  studio: readonly [number, number] | null;
+  basis: RentBasis;
+  /** Required when `basis` is "official". */
+  sourceUrl?: string;
+  /** ISO date. When someone last looked at this, not when the row was written. */
+  checkedOn: string;
+};
+
+/**
+ * A place a student could live, as a row rather than a string.
+ *
+ * `City.neighbourhoods` used to be a bare `string[]`, which meant the product
+ * could name a neighbourhood and could do nothing else with it: not compare
+ * two, not say what a commute costs, not tell someone their budget rules one
+ * out. Everything downstream of "where should I live" — the match engine, the
+ * housing comparison, the graph edge from a place to the area it sits in —
+ * needs this to be an entity. That is what phase 2 of the moat plan means by
+ * promoting them.
+ */
+export type Neighbourhood = {
+  slug: string;
+  citySlug: string;
+  name: string;
+  /** One line a student who lives there would say. Not a tourism blurb. */
+  character: string;
+  /**
+   * Door-to-door minutes to each campus in the city, keyed by campus slug, by
+   * whatever students there actually use — metro in Madrid, a bike in
+   * Amsterdam. One number per campus, because a range here would be a range of
+   * a range and mean nothing.
+   */
+  commuteMinutes: Readonly<Record<string, number>>;
+  rent: RentBand;
+  traits: Readonly<Record<NeighbourhoodTrait, TraitBand>>;
+};

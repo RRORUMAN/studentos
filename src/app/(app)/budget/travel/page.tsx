@@ -83,7 +83,7 @@ export default async function TravelBudgetPage() {
               <p className="font-mono text-micro uppercase tracking-[0.1em] text-ink-400">Your month right now</p>
               <dl className="mt-3 grid grid-cols-2 gap-4">
                 <div>
-                  <dt className="text-[0.8125rem] text-ink-500">Safe today</dt>
+                  <dt className="text-[0.8125rem] text-ink-500">Safe to spend today</dt>
                   <dd className="tnum mt-0.5 font-mono text-[1.25rem] font-semibold text-ink-950">
                     {fmt(money$.reading.safeTodayCents)}
                   </dd>
@@ -106,7 +106,7 @@ export default async function TravelBudgetPage() {
               line="A trip gets its own envelope with dates. Until it starts, the money is held out of safe-to-spend — so the daily figure stays true and the trip is still funded when you get there."
               preview={[
                 { label: "Barcelona · 12–15 Sep", hint: "Set aside, not spendable yet" },
-                { label: "Safe today, with the trip held back" },
+                { label: "Safe to spend today, with the trip held back" },
                 { label: "What is left of the trip while you are on it" },
               ]}
             />

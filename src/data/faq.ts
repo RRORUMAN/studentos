@@ -43,7 +43,7 @@ export const faq: readonly FaqItem[] = [
   {
     topic: "money",
     q: "What do I actually get for free?",
-    a: `${brand.surfaces.pulse}, chat, events and deals, Discover, ${brand.surfaces.anyoneDown}, ${brand.surfaces.arrival}, LifeOps, Smart Missions, the basic budget with Safe today, ${quotas.free.savedItems} saved places and ${quotas.free.aiAsksPerWeek} smart asks a week. Paying buys depth on top of that: more asks, the budget coach, Survival Mode, forecasting and group plans.`,
+    a: `${brand.surfaces.pulse}, chat, events and deals, Discover, ${brand.surfaces.anyoneDown}, ${brand.surfaces.arrival}, LifeOps, Smart Missions, the basic budget with what is safe to spend today, ${quotas.free.savedItems} saved places and ${quotas.free.aiAsksPerWeek} smart asks a week. Paying buys depth on top of that: more asks, the budget coach, Survival Mode, forecasting and group plans.`,
   },
   {
     topic: "privacy",

@@ -24,10 +24,10 @@ test("Home leads with money, then a ranked handful of things, then the timeline"
   await signUpAndOnboard(page, "760");
 
   /* 1. What can I afford. */
-  const safeToday = page.getByText("Safe today", { exact: true }).locator("..");
+  const safeToday = page.getByText("Safe to spend today", { exact: true }).locator("..");
   await expect(safeToday).toBeVisible();
   expect(toCents(await safeToday.innerText())).toBeGreaterThan(0);
-  await expect(page.getByText("Safe this week", { exact: true })).toBeVisible();
+  await expect(page.getByText("Safe to spend this week", { exact: true })).toBeVisible();
 
   /* 2. Today for you: at most five, each with the reason it is there. */
   const today = page.getByRole("region", { name: "Today for you" });
@@ -147,7 +147,7 @@ test("a mission can be shared and the public page shows no private figures", asy
   await page.goto(`/m/${token}`);
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
   /* A shared mission never carries the owner's budget or safe-to-spend. */
-  await expect(page.getByText("Safe today")).toHaveCount(0);
+  await expect(page.getByText("Safe to spend today")).toHaveCount(0);
 });
 
 /* -------------------------------------------------------------------------- */

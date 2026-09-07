@@ -203,6 +203,14 @@
     -webkit-text-size-adjust: 100%;
     scroll-behavior: smooth;
     scroll-padding-top: calc(var(--nav-height) + 1.5rem);
+    /* Must sit on `html`, not only on `body`. A clip declared on the body
+       propagates to the viewport, and Chrome then resolves `position: fixed;
+       inset-x-0` against the *scrollable* width rather than the viewport —
+       so any clipped-but-wide box (the pricing comparison table's
+       `min-w-[36rem]`, a horizontal card rail) silently pushed the fixed
+       header's right-hand controls off a 375px screen. Clipping here keeps
+       the header exactly one viewport wide. */
+    overflow-x: clip;
   }
 
   body {

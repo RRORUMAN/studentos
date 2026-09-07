@@ -4,7 +4,7 @@
  * ----------------------------------------------------------------------------
  * The month behind every money number on the landing page: Today, Ask,
  * Budget, LifeOps. Every headline figure is derived from these rows, so the
- * page cannot show "Safe today €18" in one section and €19 in another.
+ * page cannot show "Safe to spend today €18" in one section and €19 in another.
  *
  * Nothing here is a live account. Every panel that renders it carries a
  * sample marker.
@@ -70,7 +70,7 @@ export function upcomingTotal(): number {
 }
 
 /**
- * SAFE TODAY: remaining balance minus the charges already known about, spread
+ * SAFE TO SPEND TODAY: remaining balance minus the charges already known about, spread
  * over the days left, rounded down to a whole unit so it is never optimistic.
  */
 export function safeToday(): number {
@@ -78,7 +78,7 @@ export function safeToday(): number {
   return Math.floor(spendable / budgetMonth.daysLeft);
 }
 
-/** SAFE THIS WEEK: what the weekly target still allows. */
+/** SAFE TO SPEND THIS WEEK: what the weekly target still allows. */
 export function safeThisWeek(): number {
   return Math.max(0, budgetMonth.weeklyTarget - budgetMonth.weekSoFar);
 }
@@ -166,7 +166,7 @@ export function affordCheck(amount: number): AffordCheck {
       ...base,
       verdict: "easy",
       headline: "Easily.",
-      detail: `It sits inside today's safe ${eur(today)}, and this week still has ${eur(leftThisWeek)} after it.`,
+      detail: `It sits inside the ${eur(today)} you can safely spend today, and this week still has ${eur(leftThisWeek)} after it.`,
     };
   }
   if (amount <= untilMonday) {

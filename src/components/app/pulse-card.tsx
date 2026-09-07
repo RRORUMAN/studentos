@@ -2,6 +2,7 @@
 
 import {
   ArrowBigUp,
+  Briefcase,
   CalendarDays,
   Check,
   Flag,
@@ -228,6 +229,7 @@ const ATTACHMENT_ICON = {
   listing: Package,
   poll: MessageSquare,
   mission: Check,
+  opportunity: Briefcase,
 } as const;
 
 /** The thing a post or message points at, rendered from its live row. */

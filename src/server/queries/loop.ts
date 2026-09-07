@@ -356,6 +356,23 @@ export async function resolveAttachment(
         ? { kind: "mission", id, title: `${mission.emoji} ${mission.title}`, meta: mission.status, href: `/missions/${id}` }
         : null;
     }
+    case "opportunity": {
+      const opportunity = await findOne("opportunities", (row) => row.id === id);
+      if (!opportunity || opportunity.moderation !== "published") return null;
+      /* Pay is printed only where the posting stated it. "Pay not stated" is
+         the honest meta line, and a chip is exactly where a guessed figure
+         would be most convincing and least checkable. */
+      const pay = opportunity.pay
+        ? `${money(opportunity.pay.minCents / 100, where)} ${opportunity.pay.period === "fixed" ? "for the job" : `per ${opportunity.pay.period}`}`
+        : "Pay not stated";
+      return {
+        kind: "opportunity",
+        id,
+        title: opportunity.title,
+        meta: `${pay} · ${opportunity.area ?? opportunity.citySlug}`,
+        href: `/work/${id}`,
+      };
+    }
   }
 }
 

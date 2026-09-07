@@ -312,6 +312,7 @@ function attachmentNoun(attachment: ChatAttachment): string {
     listing: "a listing",
     poll: "a poll",
     mission: "a mission",
+    opportunity: "a job",
   };
   return nouns[attachment.kind];
 }

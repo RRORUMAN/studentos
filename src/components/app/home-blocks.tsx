@@ -80,13 +80,13 @@ export function MoneySummary({
     <section aria-label="Money" className="rounded-2xl bg-ink-950 p-5 text-paper sm:p-6">
       <div className="grid grid-cols-2 gap-6">
         <Link href="/budget" className="group min-w-0">
-          <p className="font-mono text-micro uppercase tracking-[0.12em] text-paper/55">Safe today</p>
+          <p className="font-mono text-micro uppercase tracking-[0.12em] text-paper/55">Safe to spend today</p>
           <p className="tnum mt-1.5 font-display text-[2.25rem] leading-none font-semibold tracking-tight text-signal sm:text-[2.75rem]">
             {money(reading.safeTodayCents / 100, where)}
           </p>
         </Link>
         <Link href="/budget" className="group min-w-0">
-          <p className="font-mono text-micro uppercase tracking-[0.12em] text-paper/55">Safe this week</p>
+          <p className="font-mono text-micro uppercase tracking-[0.12em] text-paper/55">Safe to spend this week</p>
           <p className="tnum mt-1.5 font-display text-[2.25rem] leading-none font-semibold tracking-tight text-paper sm:text-[2.75rem]">
             {money(weekLeft / 100, where)}
           </p>

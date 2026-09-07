@@ -42,7 +42,7 @@ const ALWAYS_FREE = [
   "Events, deals and the core map",
   "Anyone Down? — join and host",
   "Arrival Mode, LifeOps and Smart Missions",
-  "The basic budget with Safe today",
+  "The basic budget, with what is safe to spend today",
 ];
 
 /**

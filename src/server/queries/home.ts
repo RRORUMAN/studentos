@@ -38,7 +38,7 @@ import { currencySymbol, money } from "@/lib/utils";
  *
  * The hierarchy the screen renders, and this query serves, in order:
  *
- *   1. money        safe today, safe this week, one sentence
+ *   1. money        safe to spend today, safe to spend this week, one sentence
  *   2. today        three to five things, one of each kind, ranked
  *   3. brief        the counts that matter, each a link
  *   4. right now    only when something is on
