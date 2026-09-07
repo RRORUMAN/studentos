@@ -24,7 +24,8 @@ import { MascotArt } from "@/components/mascot/mascot-art";
 import { Badge } from "@/components/ui/primitives";
 import { useToast } from "@/components/ui/toast";
 import { affordVerdictMeta } from "@/server/engines/afford";
-import { askCampus, askStudentOS, clearAskHistory, type AskResult } from "@/server/actions/ask";
+import { askStudentOS, clearAskHistory, type AskResult } from "@/server/actions/ask";
+import { askStudents } from "@/server/actions/questions";
 import { savePlanFromAnswer } from "@/server/actions/plans";
 import type { ToolCard, ToolResult } from "@/server/ai/tools";
 import { brand } from "@/brand/brand.config";
@@ -442,10 +443,21 @@ function Actions({
             disabled={posting}
             onClick={() =>
               startPosting(async () => {
-                const outcome = await askCampus(result.query);
+                /* The structured Ask Students loop, not a forum post: this
+                   routes to the smallest audience that plausibly knows,
+                   notifies the asker when somebody answers, and — once two
+                   students agree — becomes a claim the next person who asks
+                   gets straight away. See `domain/questions.ts`. */
+                const outcome = await askStudents({
+                  title: result.query,
+                  originQuery: result.query,
+                });
                 if (outcome.ok) {
-                  toast({ title: "Posted to your campus.", description: "Students there can answer it now." });
-                  router.push(`/pulse/${outcome.postId}`);
+                  toast({
+                    title: "Asked your campus.",
+                    description: "We'll tell you as soon as somebody answers.",
+                  });
+                  router.push(`/ask/questions/${outcome.questionId}`);
                 } else {
                   toast({ title: outcome.message, tone: "warning" });
                 }

@@ -8,9 +8,11 @@ import { defineConfig, devices } from "@playwright/test";
  * database.
  *
  * `STUDENTOS_DATA_DIR` points the JSON store at a throwaway directory, so a
- * test run never touches development data and every run starts from a freshly
- * seeded database. That is the whole reason the store reads its location from
- * the environment.
+ * test run never touches development data. That is the whole reason the store
+ * reads its location from the environment. `globalSetup` then deletes that
+ * directory, which is what actually makes every run start from a freshly
+ * seeded database — see the note in `tests/e2e/global-setup.ts` for why
+ * pointing it elsewhere was not enough on its own.
  *
  * Mobile-first is not a slogan here: the default project is an iPhone viewport,
  * because that is where this product is used and where the bottom navigation,
@@ -23,6 +25,7 @@ const BASE_URL = `http://127.0.0.1:${PORT}`;
 
 export default defineConfig({
   testDir: "./tests/e2e",
+  globalSetup: "./tests/e2e/global-setup.ts",
   fullyParallel: false, // one JSON store, one writer
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,

@@ -213,6 +213,7 @@ export async function seedDemoAccount(db: Database): Promise<number> {
       "friends-plans": true,
       plans: true,
       campus: true,
+      answers: true,
       pulse: false,
       arrival: true,
       "weekend-ideas": true,

@@ -1,9 +1,12 @@
+import { UsersRound } from "lucide-react";
 import type { Metadata } from "next";
+import Link from "next/link";
 
 import { AskConsole } from "@/components/app/ask-console";
 import { MascotArt } from "@/components/mascot/mascot-art";
 import { toolMeta, type ToolName } from "@/server/ai/tools";
 import { askStudentOS, recentAsks } from "@/server/actions/ask";
+import { audienceOf, countAnswerable } from "@/server/queries/questions";
 import { askSuggestions } from "@/server/engines/suggestions";
 import { loadMoney } from "@/server/queries/money";
 import { requestDate } from "@/server/now";
@@ -50,7 +53,11 @@ export default async function AskPage(props: PageProps<"/ask">) {
   const raw = Array.isArray(params.q) ? params.q[0] : params.q;
   const query = raw?.trim() ?? "";
 
-  const [money$, history] = await Promise.all([loadMoney(viewer.user.id, now), recentAsks(6)]);
+  const [money$, history, answerable] = await Promise.all([
+    loadMoney(viewer.user.id, now),
+    recentAsks(6),
+    countAnswerable(viewer.user.id, audienceOf(viewer.profile, [])),
+  ]);
 
   const suggestions = askSuggestions({
     stage: viewer.stage.stage,
@@ -73,7 +80,7 @@ export default async function AskPage(props: PageProps<"/ask">) {
         <div className="min-w-0">
           <p className="font-mono text-micro uppercase tracking-[0.12em] text-ink-400">
             {viewer.city.name}
-            {money$.unset ? "" : ` · ${money(money$.reading.safeTodayCents / 100, where)} safe today`}
+            {money$.unset ? "" : ` · ${money(money$.reading.safeTodayCents / 100, where)} safe to spend today`}
           </p>
           <h1 className="mt-1 text-display-xs text-ink-950 sm:text-display-sm">Ask {brand.name}</h1>
           <p className="mt-1 text-[0.9375rem] text-ink-500">Real places, real prices, your own numbers. Never invented.</p>
@@ -87,6 +94,32 @@ export default async function AskPage(props: PageProps<"/ask">) {
         history={history}
         where={where}
       />
+
+      {/* The other half of Ask: what students know that this product does not
+          yet. Placed directly under the console because the honest answer to
+          "how do I get an answer it cannot give" is "another student", and
+          hiding that behind a nav item wastes the moment it is relevant. */}
+      <section className="mt-8 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-ink-200 bg-white p-5">
+        <div className="min-w-0">
+          <h2 className="text-[0.9375rem] font-semibold text-ink-950">
+            {answerable > 0
+              ? `${answerable} ${answerable === 1 ? "student is" : "students are"} waiting on an answer`
+              : "Ask students directly"}
+          </h2>
+          <p className="mt-1 text-[0.8125rem] text-ink-600">
+            {answerable > 0
+              ? "Questions from your campus that you could probably answer in a sentence."
+              : "When nobody has told this app yet, ask the students who would know."}
+          </p>
+        </div>
+        <Link
+          href="/ask/questions"
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-ink-950 px-4 py-2 text-[0.8125rem] font-medium text-signal transition-colors hover:bg-ink-800"
+        >
+          <UsersRound className="size-3.5" aria-hidden />
+          Ask students
+        </Link>
+      </section>
 
       {/* What it can see. Printed rather than implied, because a student
           handing a product their budget deserves to know what it reads. */}

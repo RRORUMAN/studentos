@@ -7,7 +7,7 @@ import { money as formatMoney } from "@/lib/utils";
 import { degradedCopy } from "@/server/ai/config";
 import { BASE_SYSTEM, logTierZero, runAi } from "@/server/ai/gateway";
 import { runTools, type ToolCard, type ToolName, type ToolResult } from "@/server/ai/tools";
-import { findMany, findOne, insert, newId, nowIso, remove } from "@/server/db";
+import { findMany, insert, newId, nowIso, remove } from "@/server/db";
 import { canAfford } from "@/server/engines/afford";
 import {
   assemblePlan,
@@ -571,51 +571,6 @@ async function studentsSay(citySlug: string, parsed: ParsedAsk): Promise<Student
       topAnswer: top?.body ?? null,
     };
   });
-}
-
-/**
- * "Ask this question to my campus." Posts the question into Pulse so students
- * can answer where the AI could not, and returns the new post id.
- */
-export async function askCampus(query: string): Promise<{ ok: true; postId: string } | { ok: false; message: string }> {
-  const viewer = await getViewer();
-  if (!viewer) return { ok: false, message: "Sign in to ask." };
-
-  const gate = rateLimit(`post:${viewer.user.id}`, limits.post.limit, limits.post.windowSeconds);
-  if (!gate.ok) return { ok: false, message: "Slow down a moment." };
-
-  const title = query.trim().slice(0, 160);
-  if (title.length < 4) return { ok: false, message: "Say a bit more than that." };
-
-  const parsed = parseAsk(title);
-  const channel = INTENT_CHANNELS[parsed.intent]?.[0] ?? "questions";
-
-  const existing = await findOne(
-    "posts",
-    (row) => row.authorId === viewer.user.id && row.title.toLowerCase() === title.toLowerCase() && row.hiddenAt === null,
-  );
-  if (existing) return { ok: true, postId: existing.id };
-
-  const id = newId();
-  await insert("posts", {
-    id,
-    citySlug: viewer.profile.citySlug,
-    campusSlug: viewer.profile.campusSlug,
-    channel: viewer.profile.campusSlug ? "campus" : channel,
-    authorId: viewer.user.id,
-    kind: "question",
-    title,
-    body: null,
-    placeId: null,
-    upvotes: 0,
-    commentCount: 0,
-    hiddenAt: null,
-    createdAt: nowIso(),
-  });
-
-  await recordOutcome("community-contribution", "ask-campus");
-  revalidatePath("/pulse");
-  return { ok: true, postId: id };
 }
 
 /* -------------------------------------------------------------------------- */

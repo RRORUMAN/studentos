@@ -11,6 +11,9 @@ import type { Move } from "@/domain/lifecycle";
 import type { LifeOpsTask } from "@/domain/lifeops";
 import type { Mission, MissionStep } from "@/domain/missions";
 import type { DealReport, Guide, OfficialFact, PriceObservation } from "@/domain/knowledge";
+import type { Claim, Verification } from "@/domain/truth";
+import type { Answer, Question } from "@/domain/questions";
+import type { ReputationEvent } from "@/domain/reputation";
 import type {
   Challenge,
   ChallengeEntry,
@@ -172,6 +175,20 @@ export type Database = {
   missions: Mission[];
   missionSteps: MissionStep[];
 
+  /* --- local truth --------------------------------------------------------
+     The moat. `claims` is every assertion a student made about a city and
+     `verifications` is every time someone else checked one. `reputationEvents`
+     is the ledger that decides whose check counts for how much. All three are
+     append-mostly: rows are superseded and retired, never rewritten, because
+     the history of a price IS the product. */
+  claims: Claim[];
+  verifications: Verification[];
+  reputationEvents: ReputationEvent[];
+
+  /* --- ask students ------------------------------------------------------- */
+  questions: Question[];
+  answers: Answer[];
+
   /* --- ask, follows, trust ------------------------------------------------ */
   askHistory: AskHistoryRow[];
   follows: Follow[];
@@ -242,6 +259,11 @@ function emptyDatabase(): Database {
     lifeopsTasks: [],
     missions: [],
     missionSteps: [],
+    claims: [],
+    verifications: [],
+    reputationEvents: [],
+    questions: [],
+    answers: [],
     askHistory: [],
     follows: [],
     contentReports: [],

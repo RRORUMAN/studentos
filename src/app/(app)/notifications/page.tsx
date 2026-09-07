@@ -26,6 +26,7 @@ const CATEGORY: Record<NotificationTopic, { label: string; accent: string }> = {
   pulse: { label: "Pulse", accent: "bg-ink-100 text-ink-600" },
   arrival: { label: "Arrival", accent: "bg-amber-soft text-amber-deep" },
   "weekend-ideas": { label: "StudentOS", accent: "bg-ink-100 text-ink-600" },
+  answers: { label: "Answers", accent: "bg-mint-soft text-mint-deep" },
 };
 
 /**

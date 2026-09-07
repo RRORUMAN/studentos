@@ -596,7 +596,14 @@ export type NotificationTopic =
   | "pulse"
   | "weekend-ideas"
   | "arrival"
-  | "plans";
+  | "plans"
+  /**
+   * Somebody answered a question you asked, or a claim you rely on changed.
+   * The only topic that is a *reply* rather than a broadcast, which is why
+   * `deliveryFor` defaults it on for prefs rows written before it existed —
+   * silence after you asked a question reads as a broken product.
+   */
+  | "answers";
 
 export const notificationTopics: readonly NotificationTopic[] = [
   "budget-warnings",
@@ -608,6 +615,7 @@ export const notificationTopics: readonly NotificationTopic[] = [
   "pulse",
   "arrival",
   "weekend-ideas",
+  "answers",
 ];
 
 /** How a topic reaches the student. "digest" batches into one daily note. */
@@ -635,11 +643,19 @@ export type NotificationPrefs = {
  * Off is off regardless of the delivery field; a topic that is on with no
  * delivery entry is instant.
  */
+const defaultOn = new Set<NotificationTopic>(["budget-warnings", "answers"]);
+
 export function deliveryFor(
   prefs: Pick<NotificationPrefs, "topics" | "delivery"> | null,
   topic: NotificationTopic,
 ): NotificationDelivery {
-  if (!prefs) return topic === "budget-warnings" ? "instant" : "off";
+  if (!prefs) return defaultOn.has(topic) ? "instant" : "off";
+  /* A topic added after this row was written is absent, not off. Treating
+     absent as off would silently mute every existing account for any new
+     topic, which is the same bug as ignoring the switch — in the other
+     direction and harder to notice. Only topics the student would expect
+     without asking are defaulted on. */
+  if (prefs.topics[topic] === undefined) return defaultOn.has(topic) ? "instant" : "off";
   if (!prefs.topics[topic]) return "off";
   return prefs.delivery?.[topic] ?? "instant";
 }

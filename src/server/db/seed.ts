@@ -6,6 +6,7 @@ import { campuses, cities } from "@/data/cities";
 import { places } from "@/data/places";
 import { defaultPrivacy } from "@/domain/types";
 import { seedDemoAccount } from "@/server/db/seed-demo";
+import { seedTruth } from "@/server/db/seed-truth";
 import type { Database } from "@/server/db/store";
 import {
   loopChannels,
@@ -511,6 +512,7 @@ export async function seedDatabase(db: Database): Promise<void> {
   seedListings(db);
   seedPrices(db);
   seedChallengeRows(db, now);
+  seedTruth(db, { seedId, iso, daysAgo });
 
   /* Only when an operator set STUDENTOS_DEMO_PASSWORD. See seed-demo.ts. */
   await seedDemoAccount(db);
