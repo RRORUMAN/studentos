@@ -388,7 +388,23 @@ class JsonStore {
        one. The temp name carries a uuid so two writers cannot collide. */
     const temp = `${file}.${randomUUID()}.tmp`;
     const payload = JSON.stringify(db, null, 2);
-    await writeFile(temp, payload, "utf8");
+
+    try {
+      await writeFile(temp, payload, "utf8");
+    } catch (error) {
+      /* The directory was proved writable once, at startup. It can still go
+         away underneath a long-running process: an ephemeral volume, a cleanup
+         job, a mount that blips. Without this, the first such write throws
+         ENOENT and *every* write after it throws too, so the product silently
+         stops saving anything until someone restarts it.
+
+         Recreate the directory and try once more. If that fails as well, the
+         error propagates — a write that genuinely cannot happen must not be
+         reported as success. */
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      await mkdir(await this.resolveDir(), { recursive: true });
+      await writeFile(temp, payload, "utf8");
+    }
 
     /* Windows refuses `rename` over a file that another process still has open
        — antivirus and file indexers both do this routinely, and it surfaces as
