@@ -21,8 +21,21 @@ spelling would split the history and orphan the CI runs for no gain, so the
 decision is to keep this repository and change its visibility to private. It has
 no forks, stars or watchers, so nothing downstream notices.
 
-Visibility is outward facing, so the flip itself is a founder task rather than
-something done unasked.
+Visibility is outward facing, so the flip itself was put to Raul rather than
+done unasked. **Decision on 2026-09-08: the repository stays public for now.**
+Nothing in this work depends on it being private; the only consequence is that
+`.env.example`, the migrations and the architecture are readable by anyone, none
+of which is a credential. The flip is a one-line command whenever it is wanted:
+
+```
+gh repo edit RRORUMAN/studentos --visibility private --accept-visibility-change-consequences
+```
+
+One thing to watch while it is public: GitHub Actions artefacts on a public
+repository are downloadable by anyone with the run URL. The weekly backup is
+encrypted with `BACKUP_PASSPHRASE` for exactly this reason, so the passphrase is
+the only thing protecting it and it must be a real random value. Make the
+repository private before the first real student account exists.
 
 ### 2. The JSON file store stays, as the development path only
 
@@ -156,3 +169,23 @@ schedule that works on any plan. The odd minutes (`17 4` for the Vercel job,
 jobs are.
 
 On a Pro plan, tighten the expression in `vercel.json` and nothing else changes.
+
+### 14. No queue and no storage buckets were added
+
+Both were considered and rejected on 2026-09-08, with Raul agreeing.
+
+Upstash QStash is the right answer for work that cannot finish inside one
+function. There is no such work in the product today: no batch AI generation, no
+large scan, nothing that outruns a request. Setting it up now would add an
+account, two environment variables and a callback route for a path nothing
+takes.
+
+Supabase Storage is the right answer for user files. There are none. Receipt
+scanning is gated and priced but has no OCR provider and refuses honestly; share
+cards are rendered rather than written; the calendar export is streamed. There is
+no runtime file write anywhere except the development JSON store, so there is
+nothing to move into a bucket.
+
+The rule both follow is the one in [[no-fake-integrations]]: infrastructure that
+exists for a feature that does not is scaffolding that reads as a capability.
+When the feature arrives, so does its queue or its bucket.
