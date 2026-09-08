@@ -1,0 +1,64 @@
+{
+  "$schema": "https://raw.githubusercontent.com/devcontainers/spec/main/schemas/devContainer.schema.json",
+  "name": "StudentOS",
+
+  // Node 24, matching .nvmrc, CI and the Vercel runtime. Pinned to a major
+  // rather than "latest" so a Codespace opened next year still builds.
+  "image": "mcr.microsoft.com/devcontainers/typescript-node:24-bookworm",
+
+  "features": {
+    // The GitHub CLI arrives pre-authenticated in a Codespace, which is what
+    // makes `gh` useful here without a login step.
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+
+  // pnpm comes from corepack at the version package.json pins, so it cannot
+  // drift from what CI and the lockfile expect. The Vercel and Supabase CLIs
+  // are global installs because they are tools, not dependencies of the app.
+  "onCreateCommand": "corepack enable && npm install -g vercel supabase --no-fund --no-audit",
+
+  // The same script a laptop runs. One path, so a failure here is a failure
+  // everywhere and gets fixed once.
+  "postCreateCommand": "bash scripts/bootstrap.sh",
+
+  "forwardPorts": [3000],
+  "portsAttributes": {
+    "3000": {
+      "label": "StudentOS dev server",
+      "onAutoForward": "notify"
+    }
+  },
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "bradlc.vscode-tailwindcss",
+        "ms-playwright.playwright",
+        "supabase.postgrestools",
+        "github.vscode-github-actions",
+        "anthropic.claude-code"
+      ],
+      "settings": {
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+          "source.fixAll.eslint": "explicit"
+        },
+        "typescript.tsdk": "node_modules/typescript/lib",
+        // Windows checkouts and this container must agree, or every file shows
+        // as fully changed. .gitattributes already normalises to LF on commit.
+        "files.eol": "\n",
+        "search.exclude": {
+          "**/.next": true,
+          "**/.data": true,
+          "**/pnpm-lock.yaml": true
+        }
+      }
+    }
+  },
+
+  // The container user owns the checkout, so pnpm's store and node_modules do
+  // not end up root-owned and unwritable.
+  "remoteUser": "node"
+}
