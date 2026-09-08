@@ -48,12 +48,25 @@ STUDENTOS_STORE=supabase
 2. Save the database password somewhere durable. You will not be shown it again.
 3. SQL Editor → New query → paste the **entire** contents of
    `supabase/migrations/0005_row_store.sql` → Run.
-   With the Supabase CLI linked, `supabase db push` does the same thing.
-4. Do **not** apply `0001`–`0004` yet. They describe the relational schema the
-   product is heading for; nothing reads them, and applying them creates empty
-   tables that will confuse you later. `docs/data-layer.md` explains why.
-5. Settings → API → copy the three values into the variables above.
-6. Database → Backups → enable Point-in-time recovery.
+4. Same again with `supabase/migrations/0006_scheduled_cleanup.sql`. It enables
+   `pg_cron` and schedules a daily prune of expired sessions, spent auth tokens,
+   the Stripe idempotency ledger and the AI usage log. Without it those grow
+   forever, and two of them are hashed credentials with no remaining purpose.
+5. Do **not** apply `0001`–`0004`, and do **not** run a plain `supabase db push`,
+   which would apply all six. `0001`–`0004` describe the relational schema the
+   product is heading for; nothing reads them, they need `postgis` and `vector`,
+   and applying them creates empty tables that will confuse you later.
+   `docs/data-layer.md` explains why. The two files above are the whole schema.
+6. Settings → API → copy the three values into the variables above.
+7. Database → Backups → enable Point-in-time recovery.
+
+**CONFIRM THE SCHEDULE IS RUNNING**
+```sql
+select jobname, schedule, active from cron.job;
+select jobname, status, start_time from cron.job_run_details order by start_time desc limit 5;
+```
+`studentos-prune` should be listed and active. The second query is empty until
+it has run once.
 
 **REDIRECT/CALLBACK URLs**
 None. The store is reached server-side over HTTPS with the service role key.
@@ -296,18 +309,43 @@ Hosting.
    Vercel → Project → Settings → Git → Connect, choose `RRORUMAN/studentos`.
    Until then every deploy is a manual `vercel --prod` from a laptop, and there
    are no preview deployments on pull requests.
+
+   After this, **pushing to `main` is the entire deployment procedure** and
+   nobody runs `vercel --prod` again. A laptop that can deploy is a laptop whose
+   loss, theft or bad afternoon is a production incident.
 2. Settings → Environment Variables → add every variable from `.env.example`
-   marked *required for launch*. Set them for **Production** and **Preview**
-   separately; a preview deployment pointed at the production database is a
-   preview that can delete real accounts.
-3. Point Preview at a **second Supabase project**, not the production one.
+   marked *required for launch*. Each entry there carries an `# env:` line
+   saying which of Production and Preview needs it; `pnpm env:push` reads those
+   annotations and does it for you without printing any values.
+3. Point Preview at a **second Supabase project**, not the production one. A
+   preview deployment pointed at the production database is a preview that can
+   delete real accounts.
+4. Leave `NEXT_PUBLIC_SITE_URL` **unset on Preview**. Unset, the application
+   falls back to `VERCEL_URL` and each preview describes itself correctly; set,
+   every preview emits share links and sitemap entries pointing at the live site.
+5. Set `CRON_SECRET` on Production and Preview (`openssl rand -base64 32`).
+   Vercel sends it to the scheduled routes; without it they refuse everything.
+
+**SCHEDULED JOBS**
+`vercel.json` declares them and Vercel picks them up on deploy. Today there is
+one: `/api/cron/work-sync` at 04:17 UTC daily. Check it under Project → Cron
+Jobs after the first deploy.
 
 **COMMANDS YOU RUN**
 ```bash
-vercel link
-vercel env add SUPABASE_SERVICE_ROLE_KEY production
-vercel --prod
+vercel link                # once per machine
+vercel env pull .env.local # bring the real values down
+pnpm env:push              # push local values up, prompting for each
 ```
+
+**VERIFY**
+```bash
+curl -s https://<domain>/api/health
+curl -s -o /dev/null -w '%{http_code}\n' https://<domain>/api/cron/work-sync
+curl -s -H "Authorization: Bearer $CRON_SECRET" https://<domain>/api/cron/work-sync
+```
+Health returns `{"ok":true,...}` with the commit sha. The unauthenticated cron
+call must return `401`; the authenticated one `200`.
 
 **REQUIRED FOR MVP?** Hosting yes, Git connection no — but do it before you have
 users, because deploying a fix from a laptop at 2am is how mistakes happen.
@@ -420,6 +458,73 @@ there is nobody to apply to.
 
 ---
 
+## 13. Uptime monitoring and backups
+
+**STATUS:** Endpoint and workflow exist; the monitor and the four secrets do not
+
+**PURPOSE**
+Knowing the site is down before a student tells you, and holding a copy of the
+data somewhere Supabase cannot lose it for you.
+
+**UPTIME MONITOR**
+`/api/health` returns `{ ok, version, commit, store, database }` and answers
+**503** when the database does not respond, so a monitor watching the status
+code is watching something real rather than watching a route return 200 because
+it was reachable.
+
+Sign up for any of Better Stack, UptimeRobot or Cronitor and add one HTTP
+monitor:
+
+```
+URL       https://<your-domain>/api/health
+Interval  1 minute
+Expect    HTTP 200
+Alert     email, and SMS if the plan allows it
+```
+
+The endpoint is public and unauthenticated on purpose: a monitor that needs a
+credential is a monitor that silently stops working the day the credential
+rotates.
+
+**BACKUPS**
+Two independent copies:
+
+1. Supabase's own, under Database → Backups. Enable Point-in-time recovery.
+   That protects against a disk failing.
+2. `.github/workflows/backup.yml`, weekly at 04:41 UTC on Sunday. It dumps
+   roles, schema and data, gzips, encrypts with a passphrase, and keeps the file
+   as a private GitHub Actions artefact for 90 days. That protects against the
+   project being deleted, the account being locked, or a migration doing exactly
+   what it was told to do.
+
+The second needs four repository secrets, at
+Settings → Secrets and variables → Actions:
+
+| Secret | Where to get it |
+|---|---|
+| `SUPABASE_ACCESS_TOKEN` | supabase.com/dashboard/account/tokens |
+| `SUPABASE_PROJECT_REF` | the subdomain of your project URL |
+| `SUPABASE_DB_PASSWORD` | the password saved when the project was created |
+| `BACKUP_PASSPHRASE` | `openssl rand -base64 32`, stored in your password manager |
+
+Until all four exist the workflow stops at its first step and names the missing
+one. It never uploads an empty file that looks like a backup.
+
+**VERIFY** Actions → Weekly database backup → Run workflow. Download the
+artefact and decrypt it:
+
+```bash
+gpg --decrypt --batch --passphrase "$BACKUP_PASSPHRASE" studentos-*.sql.gz.gpg > dump.sql.gz
+gunzip -t dump.sql.gz && echo "the archive is intact"
+```
+
+A backup nobody has ever restored is a hypothesis. Do this once now.
+
+**REQUIRED FOR MVP?** **Yes**, both of them, before the first real account
+exists.
+
+---
+
 ## The order to do this in
 
 1. **Supabase** → `pnpm db:verify` passes → deploy → sign up → redeploy → your
@@ -431,4 +536,6 @@ there is nobody to apply to.
    reads Ready or a Degraded you chose.
 5. **Sentry**, because everything after this can fail in public.
 6. **Stripe** in live mode, then one real card charged and refunded end to end.
-7. Everything else, in whatever order you like.
+7. **Uptime monitor and the backup secrets**, then run the backup workflow by
+   hand once and actually decrypt what it produced.
+8. Everything else, in whatever order you like.

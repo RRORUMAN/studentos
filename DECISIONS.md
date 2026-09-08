@@ -94,3 +94,65 @@ declaration now says what is true.
 Installed, typed and imported nowhere in the codebase. Push notifications are
 not implemented. Keeping the dependency implies a capability that does not
 exist, and it costs every install and every CI run.
+
+### 9. An unset `CRON_SECRET` closes the scheduled routes
+
+The common convention is that a missing secret disables the check. That is how a
+preview deployment ends up with endpoints anybody can trigger, and these
+endpoints write rows and will eventually spend money on network calls. So
+`requireCron` refuses when the secret is unset, and both failure modes answer
+the same 401 body: telling an unauthenticated caller that the deployment has no
+secret configured is information nobody outside is entitled to.
+
+### 10. The health check probes, and the store contract grew a method for it
+
+`/api/health` had a choice between answering 200 because it was reached, calling
+`load()`, or asking the store for something cheap. The first is a health check
+that cannot fail, which is worse than none. The second materialises the entire
+database, which is the most expensive thing a cold instance does, and a health
+check that costs a full dump is one somebody turns off the first time it gets
+noisy.
+
+So `StudentOsStore` gained `ping()`, and each implementation picks the smallest
+round trip that would actually fail if the store were gone: a write-and-delete
+for the file store, `studentos_revisions()` for Postgres, which exercises the
+network, the key, the schema and the grants at once.
+
+The response body carries `ok`, `version`, `commit` and a duration. It does not
+carry the store's error text, which goes to the server log instead. The route is
+public and unauthenticated, because a monitor that needs a credential is a
+monitor that silently stops working when the credential rotates, and "is it up"
+is all an anonymous caller should learn.
+
+### 11. CI declares public placeholders and no repository secrets
+
+CI proved the build worked with nothing set. It now runs with the four
+`NEXT_PUBLIC_` values a preview deployment actually has, which is a more useful
+thing to prove. It still references no repository secret anywhere, deliberately:
+the moment CI needs one, a fork's pull request cannot be built, and the property
+that the product runs unconfigured stops being enforced by anything.
+
+The Supabase URL is set there without a service role key on purpose. That
+combination selects the file store, which is exactly the half-configured state a
+preview deployment has.
+
+### 12. The weekly backup is encrypted and stops rather than pretending
+
+Supabase takes its own backups. They protect against a disk failing, not against
+the project being deleted, the account being locked, or a migration doing
+precisely what it was told. So there is a second copy: `pg_dump` weekly, gzipped,
+symmetrically encrypted, kept as a private GitHub Actions artefact for 90 days.
+
+Its first step checks that all four required secrets exist and fails loudly
+naming the missing one. A backup job that runs green while uploading nothing is
+worse than no backup job, because somebody will believe it.
+
+### 13. The Vercel cron schedule is daily, not hourly
+
+Vercel's Hobby plan allows one run a day per cron job, and a schedule the plan
+rejects fails the deployment rather than degrading. Daily is therefore the
+schedule that works on any plan. The odd minutes (`17 4` for the Vercel job,
+`11 3` for `pg_cron`) keep both off the top of the hour, where everybody else's
+jobs are.
+
+On a Pro plan, tighten the expression in `vercel.json` and nothing else changes.
