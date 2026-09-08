@@ -186,6 +186,7 @@ cards are rendered rather than written; the calendar export is streamed. There i
 no runtime file write anywhere except the development JSON store, so there is
 nothing to move into a bucket.
 
-The rule both follow is the one in [[no-fake-integrations]]: infrastructure that
-exists for a feature that does not is scaffolding that reads as a capability.
+The rule both follow is the fourth of the four rules in the README: nothing is
+faked. Infrastructure that exists for a feature that does not is scaffolding
+that reads as a capability.
 When the feature arrives, so does its queue or its bucket.
