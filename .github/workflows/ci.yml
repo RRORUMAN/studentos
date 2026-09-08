@@ -9,6 +9,24 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# Public placeholders only, and deliberately so.
+#
+# Every one of these is a NEXT_PUBLIC_ name, which means it is compiled into the
+# browser bundle and is not a secret in any environment. No repository secret is
+# referenced anywhere in this file, and that is the point: if CI needed one, a
+# fork's pull request could not be built and a preview deployment could not
+# either. The application is written so that every unconfigured integration
+# degrades honestly, and this job is the thing that proves it stayed that way.
+#
+# The Supabase URL is here without a service role key on purpose. That
+# combination selects the JSON file store (see src/server/db/access.ts), so the
+# build exercises the half-configured path a preview deployment actually has.
+env:
+  NEXT_PUBLIC_SITE_URL: https://ci.invalid
+  NEXT_PUBLIC_SUPABASE_URL: https://ci-placeholder.supabase.co
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-anon-key
+  NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: pk_test_ci_placeholder
+
 jobs:
   check:
     name: Typecheck, lint, test, build
@@ -57,3 +75,17 @@ jobs:
           path: test-results/
           retention-days: 7
           if-no-files-found: ignore
+
+  shell:
+    name: Shell scripts parse
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      # bootstrap.sh and env-push.sh are how a new machine and a key rotation
+      # work. A syntax error in either is only discovered by the person least
+      # able to debug it: somebody who has just cloned the repository.
+      - run: bash -n scripts/bootstrap.sh scripts/env-push.sh
+      # Errors only. shellcheck's style and info levels are worth reading but
+      # not worth failing somebody's pull request over.
+      - run: shellcheck --severity=error scripts/*.sh
