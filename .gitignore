@@ -53,3 +53,17 @@ next-env.d.ts
 /playwright-report/
 /blob-report/
 /playwright/.cache/
+
+# Supabase CLI
+/supabase/.temp/
+/supabase/.branches/
+
+# logs
+*.log
+
+# editors and operating systems
+Thumbs.db
+.idea/
+
+# build caches
+.turbo/
