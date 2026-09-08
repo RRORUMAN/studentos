@@ -328,6 +328,30 @@ export interface StudentOsStore {
   /** `disk` when writes outlive the process, `ephemeral` when they do not. */
   persistence(): Promise<Persistence>;
 
+  /**
+   * Prove the store is actually reachable, cheaply enough to be called by an
+   * uptime monitor every minute.
+   *
+   * Deliberately not `load()`. Loading materialises the whole database, which
+   * on a cold instance is the most expensive thing the process does, and a
+   * health check that costs a full dump is a health check somebody turns off.
+   * Each implementation picks the smallest round trip that would fail if the
+   * store were gone, so a green answer means something.
+   */
+  ping(): Promise<StorePing>;
+
   /** Drop any in-memory copy so the next read goes back to the source. */
   reset(): void;
 }
+
+/**
+ * The result of a reachability probe.
+ *
+ * `error` carries the real reason on failure, because "unhealthy" with no
+ * cause is a page somebody has to reproduce by hand at three in the morning.
+ * It is returned to `/api/health`, which is public, so the implementations keep
+ * it to a transport-level description and never echo credentials.
+ */
+export type StorePing =
+  | { ok: true; kind: "file" | "supabase"; ms: number }
+  | { ok: false; kind: "file" | "supabase"; ms: number; error: string };

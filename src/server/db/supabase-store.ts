@@ -10,6 +10,7 @@ import {
   emptyDatabase,
   type Database,
   type Persistence,
+  type StorePing,
   type StudentOsStore,
   type TableName,
 } from "@/server/db/schema";
@@ -353,6 +354,31 @@ export class SupabaseStore implements StudentOsStore {
 
   async persistence(): Promise<Persistence> {
     return "disk";
+  }
+
+  /**
+   * One round trip to `studentos_revisions()`, which is the smallest call that
+   * proves the whole chain: the network, the project, the service role key, the
+   * schema and the security-definer grants. It reads roughly seventy tiny rows
+   * and touches no student data.
+   *
+   * Deliberately not `load()`. A cold instance loading the whole database is
+   * the most expensive thing this process does, and a health check that costs
+   * a full dump is one somebody disables the first time it gets noisy.
+   */
+  async ping(): Promise<StorePing> {
+    const started = Date.now();
+    try {
+      await this.rpc<RevisionMap>("studentos_revisions", {});
+      return { ok: true, kind: "supabase", ms: Date.now() - started };
+    } catch (error) {
+      return {
+        ok: false,
+        kind: "supabase",
+        ms: Date.now() - started,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
   }
 
   /* ---------------------------------------------------------------------- */

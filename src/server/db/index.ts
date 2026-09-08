@@ -100,8 +100,9 @@ export {
   nowIso,
   remove,
   storePersistence,
+  storePing,
   transaction,
   update,
   upsert,
 } from "@/server/db/access";
-export type { Database, Persistence, TableName } from "@/server/db/schema";
+export type { Database, Persistence, StorePing, TableName } from "@/server/db/schema";

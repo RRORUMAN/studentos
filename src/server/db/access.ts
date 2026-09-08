@@ -3,7 +3,13 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 
 import { env } from "@/services/env";
-import type { Database, Persistence, StudentOsStore, TableName } from "@/server/db/schema";
+import type {
+  Database,
+  Persistence,
+  StorePing,
+  StudentOsStore,
+  TableName,
+} from "@/server/db/schema";
 import { store as jsonStore } from "@/server/db/store";
 import { SupabaseStore } from "@/server/db/supabase-store";
 import { transferKey } from "@/server/db/rows";
@@ -83,6 +89,15 @@ export function nowIso(): string {
 /** `disk` when writes outlive the process, `ephemeral` on a serverless host. */
 export async function storePersistence(): Promise<Persistence> {
   return store.persistence();
+}
+
+/**
+ * Prove the store is reachable right now. Used by `/api/health`, which an
+ * external uptime monitor pings, so it has to be cheap and it has to actually
+ * touch the store rather than report a cached opinion.
+ */
+export async function storePing(): Promise<StorePing> {
+  return store.ping();
 }
 
 /** `select` a whole table. */

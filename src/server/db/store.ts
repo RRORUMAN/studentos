@@ -12,6 +12,7 @@ import {
   emptyDatabase,
   type Database,
   type Persistence,
+  type StorePing,
   type StudentOsStore,
   type TableName,
 } from "@/server/db/schema";
@@ -171,6 +172,29 @@ class JsonStore implements StudentOsStore {
   async persistence(): Promise<Persistence> {
     await this.resolveDir();
     return this.mode;
+  }
+
+  /**
+   * Reachability for the file store is "can this process still write here".
+   *
+   * The probe writes and deletes a real file, because the interesting failure
+   * is a directory that vanished or turned read-only under a running process,
+   * and `access()` reports success on some read-only mounts. It is one small
+   * write, which is cheap enough for a health check.
+   */
+  async ping(): Promise<StorePing> {
+    const started = Date.now();
+    try {
+      await proveWritable(await this.resolveDir());
+      return { ok: true, kind: "file", ms: Date.now() - started };
+    } catch (error) {
+      return {
+        ok: false,
+        kind: "file",
+        ms: Date.now() - started,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
   }
 
   private async readOrSeed(): Promise<Database> {
