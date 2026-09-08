@@ -52,9 +52,32 @@ function parseFeeds(raw: string | null): readonly { slug: string; url: string }[
     .filter((entry): entry is { slug: string; url: string } => entry !== null);
 }
 
+/**
+ * The origin Vercel gave this particular deployment, as an https origin.
+ *
+ * `VERCEL_URL` is a bare host with no scheme (`studentos-abc123.vercel.app`),
+ * and it is server-only: it is not a `NEXT_PUBLIC_` name, so it exists in a
+ * server component and is undefined in the browser. Nothing in a client bundle
+ * may read this file, which is the reason that is safe.
+ */
+function vercelOrigin(): string | null {
+  const host = optional(process.env.VERCEL_URL);
+  return host ? `https://${host}` : null;
+}
+
 export const env = {
-  /** Set by the host in production; used for canonical URLs and share links. */
-  siteUrl: optional(process.env.NEXT_PUBLIC_SITE_URL),
+  /**
+   * Where this deployment thinks it lives. Canonical URLs, share links, the
+   * sitemap, robots.txt and the calendar export all read it.
+   *
+   * The fallback order matters. An explicit `NEXT_PUBLIC_SITE_URL` always
+   * wins, because it is the only one that can name a custom domain. Failing
+   * that, a preview deployment describes itself with `VERCEL_URL` rather than
+   * inheriting production's domain: without this step every preview emitted
+   * share links, sitemap entries and .ics URLs pointing at the live site,
+   * which is worse than pointing nowhere because it looks like it worked.
+   */
+  siteUrl: optional(process.env.NEXT_PUBLIC_SITE_URL) ?? vercelOrigin(),
 
   /** Overrides where the JSON store keeps its file. Set by the e2e config. */
   dataDir: optional(process.env.STUDENTOS_DATA_DIR),
@@ -100,7 +123,23 @@ export const env = {
     ephemeralFilesystem: Boolean(
       process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.NETLIFY,
     ),
+
+    /** The commit this build came from. Vercel sets it; returned by /api/health. */
+    commit: optional(process.env.VERCEL_GIT_COMMIT_SHA),
+
+    /** Which Vercel environment this is: production, preview or development. */
+    environment: optional(process.env.VERCEL_ENV),
   },
+
+  /**
+   * The shared secret every scheduled route checks before doing any work.
+   *
+   * Vercel Cron sends it as `Authorization: Bearer <value>`. A route with no
+   * secret configured refuses every request rather than running openly: a cron
+   * endpoint that anyone can trigger is a way to make the product spend money
+   * on demand, and "unset" must therefore mean closed, not open.
+   */
+  cronSecret: optional(process.env.CRON_SECRET),
 
   supabase: {
     url: optional(process.env.NEXT_PUBLIC_SUPABASE_URL),
