@@ -26,15 +26,23 @@ pnpm version pinned in `package.json`; otherwise `npm install -g pnpm` works.
 corepack enable                       # once per machine
 git clone https://github.com/RRORUMAN/studentos.git
 cd studentos
-pnpm install                          # honours pnpm-lock.yaml
-cp .env.example .env.local            # optional: everything runs with no keys
+pnpm setup                            # installs, writes .env.local, gets browsers
 pnpm dev                              # http://localhost:3000
 ```
 
+`pnpm setup` is idempotent and ends by listing which services are connected and
+what each one being absent actually costs, so a fresh clone tells you where it
+stands instead of leaving you to infer it. To use the deployed configuration
+instead of the local defaults:
+
+```bash
+vercel link                           # once per machine
+vercel env pull .env.local
+pnpm db:verify                        # proves writes survive
+```
+
 A production build is `pnpm build` followed by `pnpm start`. `pnpm check`
-runs typecheck, lint, unit tests and the build in one go. The Playwright
-browsers for `pnpm test:e2e` are installed once with
-`pnpm exec playwright install`.
+runs typecheck, lint, unit tests and the build in one go.
 
 Nothing personal travels with the repo: `.env*` files (except the template),
 the JSON data store in `.data/`, `node_modules/` and `.next/` are ignored, so a
