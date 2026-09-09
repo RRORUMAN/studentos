@@ -2,6 +2,7 @@ import { Bell } from "lucide-react";
 import Link from "next/link";
 
 import { AppMark, DesktopAsk, DesktopNav, MobileNav } from "@/components/app/app-nav";
+import { QuickCommand } from "@/components/app/quick-command";
 import { SeededDataNotice } from "@/components/app/seeded-notice";
 import { findMany, isSeededData } from "@/server/db";
 import { requireViewer } from "@/server/viewer";
@@ -37,6 +38,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
           </div>
 
           <div className="flex items-center gap-1.5">
+            <QuickCommand />
             <DesktopAsk />
 
             <Link

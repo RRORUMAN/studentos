@@ -112,8 +112,18 @@ A daily app that answers, for a student in a new city:
 | Who wants to join? | **Anyone Down?**, event and plan chats, friends |
 | What do I need to sort out? | **Arrival Mode** timeline and the **first-week plan** |
 
-Navigation is five destinations on mobile — Home · Discover · Ask · Pulse · You —
-and six on desktop with Ask as a standing control.
+Navigation is five destinations on mobile — Home · Today · Ask · Pulse · You,
+with Ask raised in the middle — and seven on desktop with Ask as a standing
+control beside them.
+
+Five is the most a phone bar can hold and the product has forty screens, so the
+other thirty-five are reached three ways: from Home, from the grid on **You**
+(`src/config/destinations.ts`), and by typing — **Quick Command**, the search
+control in the header and <kbd>⌘K</kbd> / <kbd>Ctrl K</kbd> anywhere. It is
+keyed on what a student would actually say, so "NIE", "empadronamiento" and
+"padrón" all find the arrival checklist and "broke" finds survival mode
+(`src/config/search.ts`). Anything it does not recognise becomes a question for
+Ask rather than a guess at a screen, so nothing typed into it dead-ends.
 
 ---
 
