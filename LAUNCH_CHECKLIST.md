@@ -172,6 +172,23 @@ it says. What remains here is everything a provider cannot supply.
 
 ## 7. Operations
 
+- [ ] **BLOCKER** Connect the GitHub→Vercel integration: Vercel dashboard →
+      Project → Settings → Git. **It is not connected today.** A push to `main`
+      runs CI and deploys nothing; every production release so far has been a
+      laptop running `vercel --prod`. That is survivable for one person and is
+      not a launch pipeline: there is no record on the repository of what was
+      deployed or by whom, a preview per pull request does not exist, and the
+      thing that reaches students is whatever happened to be in one working
+      directory. Connecting it needs dashboard access and cannot be done from a
+      shell.
+- [ ] Confirm what production is actually serving, rather than assuming the last
+      push arrived: `curl -s https://studentos-sooty.vercel.app/api/health`
+      returns the commit, the environment and which store is live. `"store":
+      "file"` means Supabase is not configured and every account is on an
+      ephemeral disk — see section 1.
+- [ ] A custom domain assigned to the project. It is on
+      `studentos-sooty.vercel.app` today, which is fine for a preview and is not
+      a thing to put on a poster.
 - [ ] `/admin` → Services reviewed: every line Ready, or a Degraded you chose
 - [ ] `NEXT_PUBLIC_SENTRY_DSN` and `SENTRY_ENVIRONMENT` set
 - [ ] PostHog set, or a deliberate decision not to

@@ -32,10 +32,36 @@ pnpm env:push         # push .env.local values into Vercel, one prompt each
 
 ## Deploying
 
-Push to `main`. That is the whole procedure. GitHub deploys to Vercel, pull
-requests get previews, and **nobody runs `vercel --prod` from a laptop**. If you
-find yourself wanting to, something is broken and the fix is in the pipeline,
-not around it.
+**Read this before you believe a push went live.** This section used to say
+"Push to `main`. That is the whole procedure. GitHub deploys to Vercel" and
+"nobody runs `vercel --prod` from a laptop". Neither was true. The
+GitHub→Vercel integration has never been connected: there are no deployment
+records on the repository, and every production release has been a laptop
+running the command this file forbade. A push to `main` builds nothing on
+Vercel and changes nothing in production.
+
+So, as things actually stand:
+
+```bash
+git push origin main     # runs CI. Does NOT deploy.
+vercel --prod            # deploys. This is currently the only thing that does.
+```
+
+`GET /api/health` on the deployment returns the commit it is serving, which is
+the only way to know what production is actually running:
+
+```bash
+curl -s https://studentos-sooty.vercel.app/api/health
+```
+
+**The fix is to connect the integration**, in the Vercel dashboard under
+Project → Settings → Git. It needs someone with dashboard access; it cannot be
+done from a shell. Once it is connected, `main` deploys on push, pull requests
+get previews, the two commands above collapse back into one, and this section
+should go back to what it used to say — at which point it will be true.
+
+Until then, treat "I pushed" and "it is live" as separate claims, because they
+are, and check the health endpoint rather than assuming.
 
 ## Cloud sessions
 
