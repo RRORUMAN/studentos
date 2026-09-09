@@ -153,8 +153,16 @@ test("the daily phrase reaches Home, and links to the feature", async ({ page })
 test("a place carries the phrase you will need there", async ({ page }) => {
   await signUpAndOnboard(page);
 
-  await page.goto("/discover");
-  await page.getByRole("link", { name: /Menú del día/ }).first().click();
+  /* Any real place in the food category. It used to be "Menú del día", one of
+     the twenty-five invented ones; there is no fixed name to click for any
+     more, because the list comes from a provider. */
+  await page.goto("/discover?tab=food");
+  const place = page
+    .getByRole("main")
+    .getByRole("link", { name: /Casa Toni|El Brillante|Mercadona/ })
+    .first();
+  await expect(place).toBeVisible({ timeout: 25_000 });
+  await place.click();
 
   const hint = page.getByRole("region", { name: /Useful Spanish/ });
   await expect(hint).toBeVisible();

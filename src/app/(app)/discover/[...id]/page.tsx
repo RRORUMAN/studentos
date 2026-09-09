@@ -54,7 +54,24 @@ export const metadata: Metadata = {
 export default async function PlacePage(props: PageProps<"/discover/[...id]">) {
   const viewer = await requireViewer();
   const { id: segments } = await props.params;
-  const id = (Array.isArray(segments) ? segments : [segments]).join("/");
+
+  /**
+   * The segments arrive PERCENT-ENCODED and have to be decoded one by one.
+   *
+   * `<Link href="/discover/osm:node/123">` is sent by the browser as
+   * `/discover/osm%3Anode/123`, and Next hands the catch-all
+   * `["osm%3Anode", "123"]` rather than decoding it. Joining without decoding
+   * produced the id `osm%3Anode/123`, which matches nothing, so every place
+   * page 404ed — and the 404 looked exactly like the provider having lost the
+   * place, which is why it took three test runs to see.
+   *
+   * Decoding per segment rather than after the join is deliberate: a `%2F`
+   * inside one segment is part of that segment's value, not a new segment, and
+   * decoding afterwards would silently promote it to a separator.
+   */
+  const id = (Array.isArray(segments) ? segments : [segments])
+    .map((segment) => decodeURIComponent(segment))
+    .join("/");
 
   /* One lookup against the provider, by the id in the URL. A place that no
      longer exists is a 404 rather than a page rendered from a cached name. */
@@ -254,7 +271,10 @@ export default async function PlacePage(props: PageProps<"/discover/[...id]">) {
       {/* ---- what to say there ---------------------------------------------
            Rendered only when the category has an obvious sentence attached; a
            gym gets nothing rather than something generic. */}
-      <PhraseHint viewer={viewer} context={{ kind: "place", category: place.category }} />
+      {/* The category KEY, not the display label: `cheap-eat` rather than
+          "Cheap eat". The label is written for a person and changes when
+          somebody improves the copy; the key is the taxonomy. */}
+      <PhraseHint viewer={viewer} context={{ kind: "place", category: place.categoryKey }} />
 
       {/* ---- better option -------------------------------------------------- */}
       {better ? (

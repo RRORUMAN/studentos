@@ -181,14 +181,28 @@ export default async function EventPage(props: PageProps<"/events/[id]">) {
           <Users className="size-4.5 text-ink-400" />
           Who is around
         </h2>
-        <ul className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Stat value={interestedCount} label="interested" />
-          <Stat value={energy.going} label="going" />
-          {viewer.profile.campusSlug ? (
-            <Stat value={energy.fromCampus} label={`from ${viewer.campusName ?? "campus"}`} accent />
-          ) : null}
-          <Stat value={energy.lookingForCompany} label="looking for people" />
-        </ul>
+        {/* Four zeroes is an honest answer and a useless one. Since the seeded
+            events stopped carrying invented confirmations, most events legitimately
+            have nobody on them yet, and a grid of noughts says "this is dead"
+            rather than "you are early". The counts appear the moment there is
+            one to show. */}
+        {interestedCount + energy.going + energy.fromCampus + energy.lookingForCompany > 0 ? (
+          <ul className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {interestedCount > 0 ? <Stat value={interestedCount} label="interested" /> : null}
+            {energy.going > 0 ? <Stat value={energy.going} label="going" /> : null}
+            {viewer.profile.campusSlug && energy.fromCampus > 0 ? (
+              <Stat value={energy.fromCampus} label={`from ${viewer.campusName ?? "campus"}`} accent />
+            ) : null}
+            {energy.lookingForCompany > 0 ? (
+              <Stat value={energy.lookingForCompany} label="looking for people" />
+            ) : null}
+          </ul>
+        ) : (
+          <p className="mt-3 text-[0.9375rem] leading-relaxed text-ink-600">
+            Nobody has said they are going yet. Being first is how one of these turns into a
+            group — say you are interested and other students see it.
+          </p>
+        )}
 
         {energy.friends.length > 0 ? (
           <p className="mt-4 flex flex-wrap items-center gap-2 text-[0.9375rem] text-ink-800">

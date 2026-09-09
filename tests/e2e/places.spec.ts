@@ -70,7 +70,10 @@ test.describe("real places", () => {
     await expect(link).toBeVisible({ timeout: 25_000 });
     await link.click();
 
-    await page.waitForURL(/\/discover\/osm/);
+    /* The id contains a slash — `osm:node/26472667` — which is why the route is
+       a catch-all. Percent-encoding it into one dynamic segment 404ed every
+       place page, and looked like the provider having lost them. */
+    await page.waitForURL(/\/discover\/osm(:|%3A)node\//);
 
     /* A band, never a percentage out of a hundred. */
     await expect(page.getByText("Price band")).toBeVisible();

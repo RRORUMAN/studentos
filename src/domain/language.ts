@@ -416,10 +416,21 @@ export type PhraseContext =
  * clutter.
  */
 const PLACE_SITUATIONS: readonly { match: RegExp; situation: SituationKey }[] = [
-  { match: /supermarket|grocer|market/i, situation: "groceries" },
-  { match: /restaurant|cafe|café|bar|canteen|lunch|ramen|food|bakery|club/i, situation: "eating-out" },
+  { match: /supermarket|grocer|market|convenience/i, situation: "groceries" },
+  {
+    /* `cheap-eat` is the category KEY, and it is why this list is matched
+       against the key rather than the label. The place page used to pass
+       `place.category`, which is the display label — "Cheap eat" — and no
+       pattern here contained the word "eat", so the phrase for the one place a
+       student most needs a sentence at rendered nothing at all. */
+    match: /restaurant|cafe|café|cheap-eat|bar|nightclub|canteen|lunch|food|bakery|club/i,
+    situation: "eating-out",
+  },
   { match: /pharmac|clinic|hospital|doctor/i, situation: "emergency" },
   { match: /station|transport|metro|bus/i, situation: "getting-around" },
+  /* `coworking` is deliberately absent, and `tests/unit/language.test.ts`
+     pins that: a desk you rent has no sentence that is obviously the one you
+     need, and filling the slot anyway is how a good idea becomes clutter. */
   { match: /librar|campus|study/i, situation: "university" },
   /* A museum, a gym, a cinema: places where the useful sentence is not about
      the place at all, it is "is there a student discount". */

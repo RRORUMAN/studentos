@@ -79,6 +79,19 @@ export default defineConfig({
       /* Production build, so the tests exercise what actually ships. */
       command: `pnpm build && pnpm start --port ${PORT}`,
       url: BASE_URL,
+      /**
+       * REUSED LOCALLY, AND THAT HAS A SHARP EDGE.
+       *
+       * Playwright only checks whether the port answers. A server left running
+       * from an earlier run is reused as-is, so a change to application code —
+       * or to the environment a run needs — does not reach the tests, and the
+       * report describes a build that no longer exists. That cost two full
+       * runs and a wrong diagnosis while the place route was being fixed.
+       *
+       * The trade is still worth it: a rebuild is two minutes on every
+       * iteration. When a run's results look impossible, kill whatever is on
+       * this port first. CI never reuses.
+       */
       reuseExistingServer: !process.env.CI,
       timeout: 180_000,
       env: {
