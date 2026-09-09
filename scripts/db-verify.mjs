@@ -137,9 +137,11 @@ async function main() {
     fail(
       "the row store functions are not in this database",
       `${error.message}\n\n` +
-        "Apply supabase/migrations/0005_row_store.sql:\n" +
-        "  Supabase dashboard → SQL Editor → paste the file → Run\n" +
-        "  or, with the Supabase CLI linked:  supabase db push",
+        "Get the SQL, in the right order and without the four migrations that\n" +
+        "must NOT be applied:\n\n" +
+        "  pnpm db:sql              # or --core if pg_cron is unavailable\n\n" +
+        "Then: Supabase dashboard → SQL Editor → New query → paste → Run,\n" +
+        "and run this command again.",
     );
     return finish();
   }

@@ -46,17 +46,37 @@ STUDENTOS_STORE=supabase
    Create it as a **production** project, separate from anything you have been
    experimenting with.
 2. Save the database password somewhere durable. You will not be shown it again.
-3. SQL Editor → New query → paste the **entire** contents of
-   `supabase/migrations/0005_row_store.sql` → Run.
-4. Same again with `supabase/migrations/0006_scheduled_cleanup.sql`. It enables
-   `pg_cron` and schedules a daily prune of expired sessions, spent auth tokens,
-   the Stripe idempotency ledger and the AI usage log. Without it those grow
-   forever, and two of them are hashed credentials with no remaining purpose.
-5. Do **not** apply `0001`–`0004`, and do **not** run a plain `supabase db push`,
-   which would apply all six. `0001`–`0004` describe the relational schema the
-   product is heading for; nothing reads them, they need `postgis` and `vector`,
-   and applying them creates empty tables that will confuse you later.
-   `docs/data-layer.md` explains why. The two files above are the whole schema.
+3. Get the SQL — **one command, and do not go looking in the migrations folder
+   yourself**:
+
+   ```bash
+   pnpm db:sql              # or: pnpm db:sql --core   (see below)
+   pnpm db:sql > setup.sql  # if you would rather have a file
+   ```
+
+   It emits `0005_row_store.sql` then `0006_scheduled_cleanup.sql`, in that
+   order, with a header saying what each does. SQL goes to stdout and the
+   commentary to stderr, so redirecting gives you a file that is only SQL.
+
+4. SQL Editor → New query → paste the whole thing → Run. It is idempotent
+   (`create table if not exists`, `create or replace function`), so running it
+   twice is safe.
+
+   `0006` enables `pg_cron` and schedules a daily prune of expired sessions,
+   spent auth tokens, the Stripe idempotency ledger and the AI usage log.
+   Without it those grow forever, and two of them are hashed credentials with no
+   remaining purpose. If your plan has no `pg_cron`, use `pnpm db:sql --core`,
+   which omits it — the product runs correctly, those rows just accumulate.
+
+5. **There are six migrations and four of them must never be applied.** Do not
+   run a plain `supabase db push`, which applies all six. `0001`–`0004` describe
+   the relational schema the product is heading for; nothing reads them, they
+   need `postgis` and `vector`, and applying them creates empty tables that look
+   authoritative and will mislead you later. `docs/data-layer.md` explains why.
+
+   `pnpm db:sql` exists precisely so this step is not something you have to
+   remember: it emits the two that are wanted and names the four that are not.
+
 6. Settings → API → copy the three values into the variables above.
 7. Database → Backups → enable Point-in-time recovery.
 
