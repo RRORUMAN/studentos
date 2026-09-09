@@ -10,6 +10,7 @@ import {
   formatDistance,
   freshnessLabel,
   layersFor,
+  layersForInterests,
   mercator,
   openStateFrom,
   positionIn,
@@ -621,5 +622,43 @@ describe("cache key", () => {
   it("snaps a radius so a slider cannot create hundreds of keys", () => {
     assert.equal(snapRadius(410), snapRadius(790));
     assert.notEqual(snapRadius(410), snapRadius(1_100));
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Interests                                                                   */
+/* -------------------------------------------------------------------------- */
+
+describe("layersForInterests", () => {
+  it("joins the two vocabularies that used to be compared directly", () => {
+    /* Of twenty-three onboarding interests, three happened to share a name
+       with a place layer. The other twenty matched nothing, so the interests
+       step of onboarding changed no ranking at all. */
+    assert.deepEqual(layersForInterests(["coffee"]), ["cheap-food"]);
+    assert.deepEqual(layersForInterests(["cooking"]), ["groceries"]);
+    assert.deepEqual(layersForInterests(["study-groups"]), ["study"]);
+    assert.deepEqual(layersForInterests(["football"]), ["fitness"]);
+  });
+
+  it("collapses several interests onto one rail without duplicating it", () => {
+    assert.deepEqual(layersForInterests(["gym", "running", "football"]), ["fitness"]);
+  });
+
+  it("maps one interest onto several rails where it genuinely spans them", () => {
+    const layers = layersForInterests(["music"]);
+    assert.ok(layers.includes("nightlife"));
+    assert.ok(layers.includes("culture"));
+  });
+
+  it("REFUSES to invent a rail for an interest no category serves", () => {
+    /* No kind of place is where networking happens. Mapping it to cafés would
+       rank coffee shops at somebody who asked for people. */
+    assert.deepEqual(layersForInterests(["networking"]), []);
+    assert.deepEqual(layersForInterests(["meet-friends"]), []);
+    assert.deepEqual(layersForInterests(["language-exchange"]), []);
+  });
+
+  it("ignores an interest it does not know rather than throwing", () => {
+    assert.deepEqual(layersForInterests(["astrophysics"]), []);
   });
 });

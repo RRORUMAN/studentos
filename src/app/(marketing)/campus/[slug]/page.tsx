@@ -10,14 +10,13 @@ import { ButtonLink } from "@/components/ui/button";
 import { Eyebrow, ProductPanel, SampleTag, Section } from "@/components/ui/primitives";
 import { Reveal } from "@/components/ui/reveal";
 import { brand } from "@/brand/brand.config";
-import { campuses, getCampus, getCity } from "@/data/cities";
+import { getCampus, getCity } from "@/data/cities";
 import { requestDate } from "@/server/now";
 import { loadCityPlaces } from "@/server/queries/places";
 import { loopForCity } from "@/data/loop";
 
-export function generateStaticParams() {
-  return campuses.map((campus) => ({ slug: campus.slug }));
-}
+/** Rendered on first request, cached six hours. See city/[slug]/cheap-food. */
+export const revalidate = 21600;
 
 export async function generateMetadata(props: PageProps<"/campus/[slug]">): Promise<Metadata> {
   const { slug } = await props.params;

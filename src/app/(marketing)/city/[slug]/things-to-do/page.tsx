@@ -2,14 +2,13 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { CityCollection } from "@/components/marketing/city-collection";
-import { cities, getCity } from "@/data/cities";
+import { getCity } from "@/data/cities";
 import { requestDate } from "@/server/now";
 import { loadCityPlaces } from "@/server/queries/places";
 import { loopForCity } from "@/data/loop";
 
-export function generateStaticParams() {
-  return cities.map((city) => ({ slug: city.slug }));
-}
+/** Rendered on first request, cached six hours. See cheap-food/page.tsx. */
+export const revalidate = 21600;
 
 export async function generateMetadata(
   props: PageProps<"/city/[slug]/things-to-do">,

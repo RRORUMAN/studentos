@@ -1,5 +1,5 @@
 import type { Place } from "@/data/types";
-import { type ValueBand, describeProximity } from "@/domain/places";
+import { type ValueBand, describeProximity, layersForInterests } from "@/domain/places";
 import type { Memory } from "@/domain/social";
 import type { Cents, CityEvent, Invite, Profile } from "@/domain/types";
 
@@ -378,7 +378,15 @@ export function recommendPlaces(
           profile.priceSensitivity,
           budgetCents !== null && budgetCents < 1_500,
         ),
-        interestFit: scoreInterestFit(place.layers, profile.interests, memory),
+        /* The student's interests, translated into rails first. Comparing the
+           two vocabularies directly matched three of twenty-three interests,
+           so for almost every place this returned its no-opinion constant and
+           the interests step of onboarding did nothing. */
+        interestFit: scoreInterestFit(
+          place.layers,
+          layersForInterests(profile.interests),
+          memory,
+        ),
         distanceFit: scoreProximityFit(place.proximity.metres, reachMetres),
         studentValue: scoreValueBand(place.value.band),
         communityFit: scoreCommunityFit({
@@ -433,7 +441,10 @@ function placeReasons(
 
   if (place.priceLevel !== null && place.priceLevel <= 1) reasons.push("Cheap for the category");
 
-  const matched = place.layers.filter((layer) => context.profile.interests.includes(layer));
+  /* Through the same translation the score uses, so the sentence and the
+     number can never disagree about whether an interest matched. */
+  const wanted = layersForInterests(context.profile.interests);
+  const matched = place.layers.filter((layer) => wanted.includes(layer));
   if (matched.length === 1) reasons.push(`Matches ${matched[0].replace(/-/g, " ")}`);
   else if (matched.length > 1) reasons.push(`Matches ${matched.length} of your interests`);
 

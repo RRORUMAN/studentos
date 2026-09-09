@@ -14,8 +14,10 @@ import { cn } from "@/lib/utils";
  * CITY SWITCHER
  * ----------------------------------------------------------------------------
  * Move home city. Every city in the directory is offered, with its status said
- * plainly — "Coming soon" means budget, planner and Arrival Mode work from
- * official data and the local layer fills in as students add to it.
+ * plainly — "Open" means the map, real places, budget, planner and Arrival Mode
+ * all work there today, and the student layer fills in as people arrive. It
+ * used to say "Coming soon", which stopped being true the day places came from
+ * a provider: understating what is there is the same failure as overstating it.
  *
  * A relocation is free at every tier. Holding several cities at once is Max,
  * and is a different control.

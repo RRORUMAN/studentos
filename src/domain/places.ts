@@ -909,3 +909,75 @@ export function positionIn(point: Coords, viewport: Viewport): { left: number; t
 
   return { left, top };
 }
+
+/* -------------------------------------------------------------------------- */
+/* Interests                                                                   */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * What a student ticked at onboarding, translated into rails.
+ *
+ * THE BUG THIS FIXES. The recommender scored interest fit by intersecting the
+ * student's interests with the place's layers — two vocabularies that were
+ * never joined. Of twenty-three interests, exactly three happened to share a
+ * name with a layer, so for almost every place the intersection was empty and
+ * `interestFit` returned its no-opinion constant. A student who ticked
+ * "coffee", "cooking" and "study groups" got the same ranking as one who
+ * ticked nothing, and the interests step of onboarding was decoration.
+ *
+ * The mapping is one-way and deliberately loose: an interest may point at
+ * several rails, and a rail may serve several interests. What it must not do
+ * is invent a connection — "networking" maps to nothing, because no category
+ * of place is where networking happens, and pretending otherwise would rank
+ * cafés for somebody who asked for people.
+ */
+const INTEREST_LAYERS: Record<string, readonly PlaceLayer[]> = {
+  food: ["cheap-food"],
+  "cheap-food": ["cheap-food"],
+  coffee: ["cheap-food"],
+  cooking: ["groceries"],
+  nightlife: ["nightlife"],
+  clubbing: ["nightlife"],
+  music: ["nightlife", "culture"],
+  concerts: ["culture"],
+  festivals: ["culture"],
+  museums: ["culture"],
+  art: ["culture"],
+  film: ["culture"],
+  football: ["fitness"],
+  gym: ["fitness"],
+  running: ["fitness"],
+  cycling: ["fitness"],
+  fitness: ["fitness"],
+  sports: ["fitness"],
+  swimming: ["fitness"],
+  "study-groups": ["study"],
+  study: ["study"],
+  reading: ["study"],
+  "go-out": ["nightlife", "culture"],
+  outdoors: ["fitness", "free"],
+  budget: ["deals", "cheap-food"],
+  deals: ["deals"],
+  /* No rail. Nothing here is where you meet people or find a job, and
+     inventing one would rank cafés at somebody who asked for company. */
+  "meet-friends": [],
+  networking: [],
+  "travel-buddies": [],
+  "language-exchange": [],
+  "campus-events": [],
+  private: [],
+};
+
+/**
+ * The rails a student's interests point at.
+ *
+ * Returns a plain array so the recommender can intersect it with a place's
+ * layers — the same shape as before, over vocabularies that now meet.
+ */
+export function layersForInterests(interests: readonly string[]): PlaceLayer[] {
+  const layers = new Set<PlaceLayer>();
+  for (const interest of interests) {
+    for (const layer of INTEREST_LAYERS[interest] ?? []) layers.add(layer);
+  }
+  return [...layers];
+}

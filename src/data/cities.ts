@@ -22,15 +22,24 @@ import type { Campus, City, CityContext, CityStatus } from "./types";
  * ============================================================================
  */
 
+/**
+ * What a city's status is called.
+ *
+ * "Coming soon" was the old label for the long tail, and it stopped being true
+ * the day places came from a provider: a student in Kraków opens Explore and
+ * gets real supermarkets, real pharmacies and a real map. Understating what is
+ * there is the same failure as overstating it — the label now says what the
+ * city actually is, which is open with no student layer yet.
+ */
 export const cityStatusLabel: Record<CityStatus, string> = {
-  "coming-soon": "Coming soon",
+  "coming-soon": "Open",
   beta: "Beta",
   live: "Live",
   "high-density": "High density",
 };
 
 export const cityStatusNote: Record<CityStatus, string> = {
-  "coming-soon": "Budget, planner and Arrival Mode work from official data. Pulse opens with the first post; local places and events fill in as students add them.",
+  "coming-soon": "Real places, the map, budget, planner and Arrival Mode all work here from day one. What is not here yet is the student layer: Pulse opens with the first post, and local events and deals arrive as students add them.",
   beta: "Full local data. The community is still filling up.",
   live: "Full local data and an active community.",
   "high-density": "Live, with enough students that friends-of-friends and campus signals are meaningful.",

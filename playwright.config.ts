@@ -23,6 +23,19 @@ import { defineConfig, devices } from "@playwright/test";
 const PORT = 3311;
 const BASE_URL = `http://127.0.0.1:${PORT}`;
 
+/**
+ * A local Overpass, so the suite does not depend on a volunteer service.
+ *
+ * The first run against the real API made several hundred requests to
+ * overpass-api.de — every page that shows a place, on two browser profiles —
+ * and timed out on most of them. `tests/e2e/overpass-server.mjs` answers the
+ * same protocol with real objects copied from that API, so the product runs
+ * exactly the code it runs in production and only the host changes. A break in
+ * the query builder, the content-type check or the element parser still fails
+ * the suite.
+ */
+const OVERPASS_PORT = 3312;
+
 export default defineConfig({
   testDir: "./tests/e2e",
   globalSetup: "./tests/e2e/global-setup.ts",
@@ -53,15 +66,26 @@ export default defineConfig({
     { name: "desktop", use: { ...devices["Desktop Chrome"] } },
   ],
 
-  webServer: {
-    /* Production build, so the tests exercise what actually ships. */
-    command: `pnpm build && pnpm start --port ${PORT}`,
-    url: BASE_URL,
-    reuseExistingServer: !process.env.CI,
-    timeout: 180_000,
-    env: {
-      STUDENTOS_DATA_DIR: ".data/e2e",
-      NODE_ENV: "production",
+  webServer: [
+    {
+      /* Started first, because the build itself renders pages that ask for
+         places and would otherwise reach for the public API. */
+      command: `node tests/e2e/overpass-server.mjs ${OVERPASS_PORT}`,
+      url: `http://127.0.0.1:${OVERPASS_PORT}/api/interpreter`,
+      reuseExistingServer: !process.env.CI,
+      timeout: 20_000,
     },
-  },
+    {
+      /* Production build, so the tests exercise what actually ships. */
+      command: `pnpm build && pnpm start --port ${PORT}`,
+      url: BASE_URL,
+      reuseExistingServer: !process.env.CI,
+      timeout: 180_000,
+      env: {
+        STUDENTOS_DATA_DIR: ".data/e2e",
+        NODE_ENV: "production",
+        OVERPASS_URL: `http://127.0.0.1:${OVERPASS_PORT}/api/interpreter`,
+      },
+    },
+  ],
 });

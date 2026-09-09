@@ -15,7 +15,6 @@ import { Reveal, RevealGroup, RevealItem } from "@/components/ui/reveal";
 import { brand } from "@/brand/brand.config";
 import {
   campusesForCity,
-  cities,
   cityStatusLabel,
   cityStatusNote,
   getCity,
@@ -26,9 +25,8 @@ import { requestDate } from "@/server/now";
 import { loadCityPlaces } from "@/server/queries/places";
 import { cn } from "@/lib/utils";
 
-export function generateStaticParams() {
-  return cities.map((city) => ({ slug: city.slug }));
-}
+/** Rendered on first request, cached six hours. See city/[slug]/cheap-food. */
+export const revalidate = 21600;
 
 export async function generateMetadata(props: PageProps<"/city/[slug]">): Promise<Metadata> {
   const { slug } = await props.params;

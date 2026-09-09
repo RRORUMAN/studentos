@@ -24,6 +24,7 @@ import {
   travelLimits,
 } from "@/config/onboarding";
 import { cityDirectory, cityStatusLabel, resolveCity } from "@/data/cities";
+import { searchCities } from "@/domain/cities";
 import { UniversityPicker } from "@/components/onboarding/university-picker";
 import { interfaceLanguages } from "@/config/regions";
 import { completeOnboarding, type OnboardingInput } from "@/server/actions/onboarding";
@@ -410,13 +411,12 @@ function CityStep({ answers, update }: StepProps) {
   const [query, setQuery] = useState("");
   const deep = cityDirectory.filter((city) => city.deep);
   const rest = cityDirectory.filter((city) => !city.deep);
-  const needle = query.trim().toLowerCase();
-  const matches = needle
-    ? rest.filter(
-        (city) =>
-          city.name.toLowerCase().includes(needle) || city.country.toLowerCase().includes(needle),
-      )
-    : [];
+  /* Accent-insensitive and ranked. A plain `includes` on a lowercased name
+     found none of Málaga, Kraków, São Paulo, Bogotá or Zürich, which meant a
+     student in Málaga typing "malaga" was told their city was not on the list
+     — the product lying about its own coverage. */
+  const matches = useMemo(() => searchCities(rest, query, 30), [rest, query]);
+  const needle = query.trim();
   const chosen = answers.citySlug ? resolveCity(answers.citySlug) : null;
 
   return (
@@ -449,7 +449,7 @@ function CityStep({ answers, update }: StepProps) {
         ) : null}
         {matches.length > 0 ? (
           <ul className="mt-2 max-h-56 overflow-y-auto rounded-lg border border-ink-200 bg-white">
-            {matches.slice(0, 30).map((city) => (
+            {matches.map(({ city }) => (
               <li key={city.slug}>
                 <button
                   type="button"

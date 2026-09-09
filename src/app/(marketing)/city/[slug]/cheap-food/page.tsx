@@ -2,14 +2,22 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { CityCollection } from "@/components/marketing/city-collection";
-import { cities, getCity } from "@/data/cities";
+import { getCity } from "@/data/cities";
 import { requestDate } from "@/server/now";
 import { loadCityPlaces } from "@/server/queries/places";
 import { loopForCity } from "@/data/loop";
 
-export function generateStaticParams() {
-  return cities.map((city) => ({ slug: city.slug }));
-}
+/**
+ * NOT PRERENDERED, deliberately.
+ *
+ * This page reads real places from a provider. Generating it at build time
+ * called that provider once per city on every deploy — twenty requests to a
+ * volunteer-run service per build — and baked whatever came back, including a
+ * timeout, into the page until the next deploy. It is rendered on first request
+ * and cached for six hours instead: the same result for a crawler, with no
+ * build-time dependency on somebody else's API.
+ */
+export const revalidate = 21600;
 
 export async function generateMetadata(
   props: PageProps<"/city/[slug]/cheap-food">,

@@ -95,7 +95,7 @@ export function TripPicker({
               <li key={city.slug}>
                 <button type="button" onClick={() => go(city)} className={cn("flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left hover:bg-paper-2", currentSlug === city.slug && "bg-signal-soft")}>
                   <span className="min-w-0 truncate text-[0.9375rem] text-ink-900">{city.name} <span className="text-ink-500">· {city.country}</span></span>
-                  <span className={cn("shrink-0 text-[0.6875rem] font-semibold", city.deep ? "text-mint-deep" : "text-ink-400")}>{city.deep ? "Local data" : "Coming soon"}</span>
+                  <span className={cn("shrink-0 text-[0.6875rem] font-semibold", city.deep ? "text-mint-deep" : "text-ink-400")}>{city.deep ? "Local data" : "Open"}</span>
                 </button>
               </li>
             ))}
