@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { allInterests } from "../../src/config/onboarding.ts";
+
 import {
   MIN_VALUE_SIGNALS,
   categoriesFor,
@@ -11,6 +13,7 @@ import {
   freshnessLabel,
   layersFor,
   layersForInterests,
+  MAPPED_INTERESTS,
   mercator,
   openStateFrom,
   positionIn,
@@ -660,5 +663,61 @@ describe("layersForInterests", () => {
 
   it("ignores an interest it does not know rather than throwing", () => {
     assert.deepEqual(layersForInterests(["astrophysics"]), []);
+  });
+});
+
+/**
+ * ============================================================================
+ * THE INTEREST VOCABULARY
+ * ----------------------------------------------------------------------------
+ * Step 7 of onboarding makes a student pick at least three interests and tells
+ * them it is what personalises their recommendations. That promise is only
+ * true if the words on those chips are words the ranking layer knows.
+ *
+ * They drifted. Onboarding offered "Cinema" while the table keyed on `film`,
+ * and "Local culture" while the table had no `culture` key at all, so fourteen
+ * of the thirty-one options changed nothing about the places shown. Nothing
+ * failed; the chips just did not do anything.
+ * ============================================================================
+ */
+describe("what a student ticks and what the ranking reads", () => {
+  it("has an opinion about every interest onboarding offers", () => {
+    /* Empty is a decision and is fine — "networking" is not a kind of place.
+       ABSENT is the bug, because absent is indistinguishable from forgotten. */
+    const missing = allInterests
+      .map((choice) => choice.value)
+      .filter((value) => !MAPPED_INTERESTS.includes(value));
+
+    assert.deepEqual(
+      missing,
+      [],
+      `onboarding offers ${missing.join(", ")}, which the place ranking has never heard of`,
+    );
+  });
+
+  it("actually ranks something for the interests that name a kind of place", () => {
+    /* The specific regressions. Each of these is a venue you can stand in, so
+       each must produce a rail. */
+    for (const [interest, layer] of [
+      ["culture", "culture"],
+      ["cinema", "culture"],
+      ["museums", "culture"],
+      ["nature", "free"],
+      ["food", "cheap-food"],
+      ["gym", "fitness"],
+    ] as const) {
+      assert.ok(
+        layersForInterests([interest]).includes(layer),
+        `"${interest}" should rank the ${layer} rail and ranks nothing`,
+      );
+    }
+  });
+
+  it("still refuses to invent a rail for the ones that are not places", () => {
+    /* Mapping these would rank cafes at somebody who asked about finding a job
+       or meeting people. Empty is the honest answer. */
+    for (const interest of ["networking", "meet-friends", "startups", "gaming", "private"]) {
+      assert.deepEqual(layersForInterests([interest]), []);
+    }
   });
 });

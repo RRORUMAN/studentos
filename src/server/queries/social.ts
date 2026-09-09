@@ -1,4 +1,5 @@
 import "server-only";
+import { termsInCity } from "@/domain/lifecycle";
 
 import { cache } from "react";
 
@@ -268,7 +269,8 @@ export type PublicProfile = {
   campusSlug: string | null;
   interests: readonly string[];
   verified: boolean;
-  termsInCity: number;
+  /** Terms behind them, from their own arrival date. Null when unknown. */
+  termsInCity: number | null;
 };
 
 /**
@@ -320,7 +322,7 @@ function project(
     campusSlug: showCampus ? profile.campusSlug : null,
     interests: showInterests ? profile.interests : [],
     verified: profile.studentVerifiedAt !== null,
-    termsInCity: profile.termsInCity,
+    termsInCity: termsInCity(profile.arrivingOn, new Date()),
   };
 }
 

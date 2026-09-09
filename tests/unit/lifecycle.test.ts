@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { daysBetween, resolveStage, stageMeta } from "../../src/domain/lifecycle.ts";
+import { daysBetween, resolveStage, stageMeta,
+  termsInCity,
+} from "../../src/domain/lifecycle.ts";
 
 /**
  * ============================================================================
@@ -122,5 +124,55 @@ describe("stageMeta", () => {
 
   it("leads a leaving student with the leaving list", () => {
     assert.equal(stageMeta.leaving.blocks[0], "leaving-tasks");
+  });
+});
+
+/**
+ * ============================================================================
+ * TENURE
+ * ----------------------------------------------------------------------------
+ * "3 terms here" beside a student's name is a credibility signal, so it has to
+ * be true.
+ *
+ * It was not. `Profile.termsInCity` was the literal 1, written at the end of
+ * onboarding, reset to 1 on any city change, and incremented by nothing ever.
+ * It was rendered in five places. Every account in the product carried the
+ * same fabricated credential whether it was an hour or a year old.
+ * ============================================================================
+ */
+describe("terms in the city", () => {
+  const now = new Date("2026-09-09T12:00:00.000Z");
+
+  it("says nothing when the student never gave an arrival date", () => {
+    /* Null, not zero. "0 terms here" is a claim; silence is the truth. */
+    assert.equal(termsInCity(null, now), null);
+    assert.equal(termsInCity("", now), null);
+    assert.equal(termsInCity("not-a-date", now), null);
+  });
+
+  it("says nothing for someone who has not been here a term yet", () => {
+    /* Arrived three weeks ago. They are here, and they have no tenure, and
+       claiming any would be the original bug in a new coat. */
+    assert.equal(termsInCity("2026-08-20", now), null);
+    /* Arriving next month. */
+    assert.equal(termsInCity("2026-10-01", now), null);
+  });
+
+  it("counts terms from the date they actually gave", () => {
+    /* Four months to a term, coarse on purpose: this is a rough "have they
+       been around" signal, and a figure to the nearest month would imply a
+       precision the question does not have. */
+    assert.equal(termsInCity("2026-05-01", now), 1);
+    assert.equal(termsInCity("2025-09-01", now), 3);
+    assert.equal(termsInCity("2024-09-01", now), 6);
+  });
+
+  it("grows with time rather than being stamped once", () => {
+    /* The property the old column could not have: the same student, later, has
+       been here longer. */
+    const arrived = "2025-09-01";
+    const earlier = termsInCity(arrived, new Date("2026-01-01T00:00:00.000Z"));
+    const later = termsInCity(arrived, new Date("2027-01-01T00:00:00.000Z"));
+    assert.ok(later !== null && earlier !== null && later > earlier);
   });
 });

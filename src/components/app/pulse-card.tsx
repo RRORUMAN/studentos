@@ -547,9 +547,11 @@ export function PulseCard({ entry }: { entry: FeedPost }) {
             <span className="font-medium text-ink-700">{author.displayName}</span>
             {author.verified ? <VerifiedMark /> : null}
             {author.campusName ? <span className="text-ink-400">· {author.campusName}</span> : null}
-            <span className="text-ink-400">
-              · {author.termsInCity} {author.termsInCity === 1 ? "term" : "terms"} here
-            </span>
+            {author.termsInCity !== null ? (
+              <span className="text-ink-400">
+                · {author.termsInCity} {author.termsInCity === 1 ? "term" : "terms"} here
+              </span>
+            ) : null}
           </>
         ) : (
           <span className="text-ink-400">Someone</span>

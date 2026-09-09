@@ -1,4 +1,5 @@
 import { ArrowLeft } from "lucide-react";
+import { termsInCity } from "@/domain/lifecycle";
 import type { Metadata } from "next";
 import Link from "next/link";
 
@@ -71,7 +72,7 @@ export default async function FriendsPage() {
         campusSlug: null,
         interests: [],
         verified: false,
-        termsInCity: profile.termsInCity,
+        termsInCity: termsInCity(profile.arrivingOn, new Date()),
       };
       out.push({ profile: visible, state: await friendshipWith(viewer.user.id, id) });
     }

@@ -29,7 +29,7 @@ export type CommentView = {
   minutesAgo: number;
   voted: boolean;
   mine: boolean;
-  author: { userId: string; displayName: string; avatarEmoji: string; termsInCity: number } | null;
+  author: { userId: string; displayName: string; avatarEmoji: string; termsInCity: number | null } | null;
   replies: CommentView[];
 };
 
@@ -82,7 +82,7 @@ function CommentRow({
         <p className="flex flex-wrap items-center gap-x-1.5 text-[0.8125rem] text-ink-500">
           <span aria-hidden>{comment.author?.avatarEmoji ?? "🙂"}</span>
           <span className="font-medium text-ink-700">{comment.author?.displayName ?? "Someone"}</span>
-          {comment.author ? (
+          {comment.author && comment.author.termsInCity !== null ? (
             <span className="text-ink-400">
               · {comment.author.termsInCity} {comment.author.termsInCity === 1 ? "term" : "terms"} here
             </span>

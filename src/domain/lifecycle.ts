@@ -266,3 +266,46 @@ export function showsArrivalMode(stage: LifeStage): boolean {
 export function showsLeavingMode(stage: LifeStage): boolean {
   return stage === "leaving";
 }
+
+/* -------------------------------------------------------------------------- */
+/* How long they have actually been here                                       */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Terms in the city, counted from the arrival date the student gave.
+ *
+ * WHY THIS IS A FUNCTION AND NOT A COLUMN. `Profile.termsInCity` was written as
+ * the literal `1` at the end of onboarding, reset to `1` whenever anybody
+ * changed city, and never incremented by anything, ever. It was then rendered
+ * beside a student's name in five places -- Pulse posts, Pulse comments,
+ * exchange listings, the people rail, the friends list -- as "1 term here",
+ * which reads as tenure and therefore as credibility.
+ *
+ * So every account in the product carried an identical fabricated credential,
+ * whether it was made an hour ago or a year ago. That is precisely the thing
+ * this codebase says it does not do.
+ *
+ * The honest version is arithmetic on a date the student actually supplied. A
+ * term is treated as four months, which is the length of a semester across the
+ * countries the product covers and is coarse on purpose: this is a rough
+ * "have they been around" signal and a figure to the nearest month would imply
+ * a precision the underlying answer does not have.
+ *
+ * NULL WHEN UNKNOWN, and callers must render nothing rather than a zero. A
+ * student who skipped the arrival date has not told us how long they have been
+ * here, and "0 terms here" is a claim we cannot make.
+ */
+export function termsInCity(arrivingOn: string | null, now: Date): number | null {
+  if (!arrivingOn) return null;
+
+  const arrived = Date.parse(arrivingOn);
+  if (Number.isNaN(arrived)) return null;
+
+  /* Not here yet, or here for less than a term. Both are "no terms behind
+     them", which is information, but it is not tenure and must not be
+     rendered as though it were. */
+  const months = (now.getTime() - arrived) / (1000 * 60 * 60 * 24 * 30.44);
+  if (months < 4) return null;
+
+  return Math.floor(months / 4);
+}

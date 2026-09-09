@@ -1,4 +1,5 @@
 import { ArrowLeft, MessagesSquare, ShieldCheck } from "lucide-react";
+import { termsInCity } from "@/domain/lifecycle";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -66,7 +67,7 @@ export default async function PostPage(props: PageProps<"/pulse/[id]">) {
             userId: commenter.userId,
             displayName: commenter.displayName,
             avatarEmoji: commenter.avatarEmoji,
-            termsInCity: commenter.termsInCity,
+            termsInCity: termsInCity(commenter.arrivingOn, new Date()),
           }
         : null,
       replies: comments
@@ -131,9 +132,11 @@ export default async function PostPage(props: PageProps<"/pulse/[id]">) {
                 <ShieldCheck className="size-3.5 text-mint-deep" aria-label="Student verified" />
               ) : null}
               {author.campusName ? <span className="text-ink-400">· {author.campusName}</span> : null}
-              <span className="text-ink-400">
-                · {author.termsInCity} {author.termsInCity === 1 ? "term" : "terms"} here
-              </span>
+              {author.termsInCity !== null ? (
+                <span className="text-ink-400">
+                  · {author.termsInCity} {author.termsInCity === 1 ? "term" : "terms"} here
+                </span>
+              ) : null}
             </>
           ) : null}
           <span className="text-ink-400">· {ago(minutesSince(post.createdAt))}</span>

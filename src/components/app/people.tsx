@@ -118,7 +118,10 @@ export function PersonRow({
         </p>
         <p className="mt-0.5 truncate text-[0.8125rem] text-ink-500">
           {reason ??
-            [profile.campusSlug?.toUpperCase(), `${profile.termsInCity} terms here`]
+            [
+              profile.campusSlug?.toUpperCase(),
+              profile.termsInCity === null ? null : `${profile.termsInCity} terms here`,
+            ]
               .filter(Boolean)
               .join(" · ")}
         </p>

@@ -988,15 +988,59 @@ const INTEREST_LAYERS: Record<string, readonly PlaceLayer[]> = {
   outdoors: ["fitness", "free"],
   budget: ["deals", "cheap-food"],
   deals: ["deals"],
-  /* No rail. Nothing here is where you meet people or find a job, and
-     inventing one would rank cafés at somebody who asked for company. */
+  /* ---- the onboarding vocabulary ----------------------------------------
+     THESE DRIFTED, and the drift was silent. Step 7 makes a student pick at
+     least three interests and sells it as what personalises their
+     recommendations; the table above was written against a different, older
+     word list. "Local culture" produced no culture rail because the key here
+     was never `culture`, and "Cinema" produced none because the key was
+     `film`. Fourteen of the thirty-one options a student can tick changed
+     nothing about the places they were shown.
+
+     Every value in `allInterests` now appears here, and a test asserts that,
+     so adding an option to onboarding without deciding what it means fails
+     rather than quietly ranking nothing. -------------------------------- */
+  cinema: ["culture"],
+  culture: ["culture"],
+  photography: ["culture"],
+  /* A park is free to walk into and somewhere to run, which is both of the
+     rails this actually corresponds to. */
+  nature: ["free", "fitness"],
+
+  /* ---- deliberately no rail ---------------------------------------------
+     Nothing below is a KIND OF PLACE. Some are what a student wants from
+     other people, some are a subject rather than a venue. Mapping them
+     anyway is how "startups" starts ranking cafés at someone who asked
+     about work, so each one is listed with an empty rail rather than left
+     out — absent means forgotten, empty means decided.
+
+     Several still do real work elsewhere: `recommendEvents` matches raw
+     interests against event tags, so "gaming" and "travel" can surface an
+     event even though no place category corresponds to them.
+     ---------------------------------------------------------------------- */
   "meet-friends": [],
   networking: [],
   "travel-buddies": [],
   "language-exchange": [],
   "campus-events": [],
   private: [],
+  technology: [],
+  startups: [],
+  business: [],
+  volunteering: [],
+  fashion: [],
+  travel: [],
+  gaming: [],
+  "dating-activities": [],
 };
+
+/**
+ * The interests this table has an opinion about.
+ *
+ * Exported so a test can assert that onboarding cannot offer an interest the
+ * ranking layer has never heard of.
+ */
+export const MAPPED_INTERESTS: readonly string[] = Object.keys(INTEREST_LAYERS);
 
 /**
  * The rails a student's interests point at.

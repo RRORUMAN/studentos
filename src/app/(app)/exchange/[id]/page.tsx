@@ -99,7 +99,9 @@ export default async function ListingPage(props: PageProps<"/exchange/[id]">) {
           </p>
           <p className="mt-0.5 flex flex-wrap gap-x-2 text-[0.8125rem] text-ink-500">
             {seller.campusName ? <span>{seller.campusName}</span> : null}
-            <span>{seller.termsInCity} {seller.termsInCity === 1 ? "term" : "terms"} in {viewer.city.name}</span>
+            {seller.termsInCity !== null ? (
+              <span>{seller.termsInCity} {seller.termsInCity === 1 ? "term" : "terms"} in {viewer.city.name}</span>
+            ) : null}
             <span>{seller.completed} {seller.completed === 1 ? "exchange" : "exchanges"} done</span>
             {seller.accountDays < 7 ? <span className="text-amber-deep">New account</span> : null}
           </p>
