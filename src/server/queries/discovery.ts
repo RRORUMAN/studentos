@@ -2,17 +2,19 @@ import "server-only";
 
 import { cache } from "react";
 
-import { places as seededPlaces } from "@/data/places";
 import type { Place } from "@/data/types";
+import type { PlaceCategory, PlaceLayer } from "@/domain/places";
 import { dealConfidence, type Confidence } from "@/domain/knowledge";
 import type { Cents, CityEvent, Deal, Profile, SavedKind } from "@/domain/types";
 import { ensureFreshSeedData, findMany } from "@/server/db";
 import {
+  WALK_METRES_PER_MINUTE,
   recommendEvents,
   recommendPlaces,
   type RecommendContext,
   type Scored,
 } from "@/server/engines/recommend";
+import { loadCityPlaces } from "@/server/queries/places";
 import { readHomePoint } from "@/server/viewer";
 
 /**
@@ -129,15 +131,17 @@ export const loadRecommendContext = cache(
     budgetCents: Cents | null;
     now?: Date;
   }): Promise<RecommendContext> => {
-    const [memory, signals] = await Promise.all([
+    const [memory, signals, homePoint] = await Promise.all([
       findMany("memories", (row) => row.userId === input.userId).then((rows) => rows[0] ?? null),
       loadCommunitySignals(input.userId, input.profile.campusSlug),
+      readHomePoint(input.userId),
     ]);
 
     return {
       profile: input.profile,
       memory,
       budgetCents: input.budgetCents,
+      homePoint,
       now: input.now ?? new Date(),
       communitySignals: {
         savedByCampus: signals.savedByCampus,
@@ -152,49 +156,96 @@ export const loadRecommendContext = cache(
 /* -------------------------------------------------------------------------- */
 
 export type PlaceFilter = {
-  layers?: readonly string[];
-  maxPriceCents?: Cents | null;
+  layers?: readonly PlaceLayer[];
+  categories?: readonly PlaceCategory[];
+  /** Only places whose provider price band is at the cheap end. */
+  cheapOnly?: boolean;
+  /** Only places that are free to walk into: parks, public libraries. */
   freeOnly?: boolean;
+  /** Ten independent student confirmations, the same bar an event is held to. */
   verifiedOnly?: boolean;
-  maxWalkMinutes?: number;
+  /** Metres. The student's own tolerance, converted by the caller. */
+  maxMetres?: number;
   query?: string;
   /** An extra predicate for views the named filters cannot express. */
   test?: (place: Place) => boolean;
 };
 
-/** Score and rank the places in a student's city. */
+/**
+ * The result of a place search: rows, or the reason there are none.
+ *
+ * `unavailable` exists so that no caller can render "nothing nearby" over a
+ * provider outage. Every surface that shows places destructures this and
+ * handles both, and there is deliberately no helper that flattens it to an
+ * array — one would be used, and the distinction would be lost on the first
+ * screen somebody was in a hurry on.
+ */
+export type PlaceResults = {
+  places: Scored<Place>[];
+  /** Set when no provider answered. The message is written for a student. */
+  unavailable: { message: string } | null;
+  /** Licence line to render wherever these rows appear. */
+  attribution: string | null;
+  /** True when these came from a cache entry past its lifetime. */
+  stale: boolean;
+};
+
+/**
+ * Score and rank the real places in a student's city.
+ *
+ * The filters that used to be applied here — a euro ceiling, a "free" flag
+ * meaning price zero — were applied to hand-written prices. What is left are
+ * the ones a provider can actually answer: a category, a price band, a
+ * distance, and StudentOS's own confirmation count.
+ */
 export async function loadPlaces(
   context: RecommendContext,
   filter: PlaceFilter = {},
-): Promise<Scored<Place>[]> {
-  let candidates = seededPlaces.filter((place) => place.citySlug === context.profile.citySlug);
+): Promise<PlaceResults> {
+  const maxMetres =
+    filter.maxMetres ??
+    Math.max(400, context.profile.maxTravelMinutes * WALK_METRES_PER_MINUTE * 1.6);
 
-  if (filter.layers?.length) {
-    candidates = candidates.filter((place) =>
-      place.layers.some((layer) => filter.layers?.includes(layer)),
-    );
+  const result = await loadCityPlaces({
+    citySlug: context.profile.citySlug,
+    layers: filter.layers,
+    categories: filter.categories,
+    near: context.homePoint ?? null,
+    radiusMetres: Math.min(5_000, Math.round(maxMetres)),
+    limit: 60,
+    text: filter.query,
+  });
+
+  if (!result.ok) {
+    return {
+      places: [],
+      /* A city with no coordinate is a different problem from a provider that
+         did not answer, and the student is told which. */
+      unavailable: { message: result.message },
+      attribution: null,
+      stale: false,
+    };
   }
-  if (filter.freeOnly) candidates = candidates.filter((place) => place.price === 0);
-  if (filter.maxPriceCents != null) {
-    const cap = filter.maxPriceCents;
-    candidates = candidates.filter((place) => place.price !== null && place.price * 100 <= cap);
+
+  let candidates = result.places;
+
+  if (filter.freeOnly) {
+    candidates = candidates.filter((place) => place.layers.includes("free"));
   }
-  if (filter.verifiedOnly) candidates = candidates.filter((place) => place.verifiedBy >= 10);
-  if (filter.maxWalkMinutes) {
-    candidates = candidates.filter((place) => place.walkMinutes <= filter.maxWalkMinutes!);
+  if (filter.cheapOnly) {
+    candidates = candidates.filter((place) => place.priceLevel !== null && place.priceLevel <= 1);
   }
-  if (filter.query) {
-    const needle = filter.query.toLowerCase();
-    candidates = candidates.filter(
-      (place) =>
-        place.name.toLowerCase().includes(needle) ||
-        place.category.toLowerCase().includes(needle) ||
-        place.why.toLowerCase().includes(needle),
-    );
+  if (filter.verifiedOnly) {
+    candidates = candidates.filter((place) => place.confirmations >= 10);
   }
   if (filter.test) candidates = candidates.filter(filter.test);
 
-  return recommendPlaces(candidates, context);
+  return {
+    places: recommendPlaces(candidates, context),
+    unavailable: null,
+    attribution: result.attribution,
+    stale: result.stale,
+  };
 }
 
 /* -------------------------------------------------------------------------- */

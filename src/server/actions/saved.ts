@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
-import { placesForCity } from "@/data/places";
+import { placeExists } from "@/server/queries/places";
 import type { SavedKind } from "@/domain/types";
 import { findOne, insert, newId, nowIso, remove } from "@/server/db";
 import { QuotaError, assertQuota } from "@/server/entitlements";
@@ -35,10 +35,10 @@ const schema = z.object({
 });
 
 /** True when a row of that kind with that id exists and the student may save it. */
-async function targetExists(kind: SavedKind, targetId: string, citySlug: string): Promise<boolean> {
+async function targetExists(kind: SavedKind, targetId: string): Promise<boolean> {
   switch (kind) {
     case "place":
-      return placesForCity(citySlug).some((row) => row.id === targetId);
+      return placeExists(targetId);
     case "event":
       return Boolean(await findOne("events", (row) => row.id === targetId));
     case "deal":
@@ -85,7 +85,7 @@ export async function toggleSaved(kind: SavedKind, targetId: string): Promise<Sa
 
   const profile = await findOne("profiles", (row) => row.userId === userId);
   if (!profile) return { ok: false, reason: "error", message: "Finish setting up your account first." };
-  if (!(await targetExists(parsed.data.kind, parsed.data.targetId, profile.citySlug))) {
+  if (!(await targetExists(parsed.data.kind, parsed.data.targetId))) {
     return { ok: false, reason: "error", message: "That is not listed any more." };
   }
 

@@ -73,23 +73,44 @@ function event(overrides: Partial<CityEvent> = {}): CityEvent {
   };
 }
 
-function place(overrides: Partial<Place> = {}): Place {
+/**
+ * A place fixture.
+ *
+ * `metres` and `band` are the two knobs the tests actually turn, so they are
+ * arguments rather than something a caller has to build a `Proximity` and a
+ * `StudentValue` for by hand.
+ */
+function place(
+  overrides: Partial<Place> & { metres?: number; band?: Place["value"]["band"] } = {},
+): Place {
+  const { metres = 600, band = "good", ...rest } = overrides;
   return {
-    id: overrides.id ?? "p1",
+    id: "p1",
     citySlug: "madrid",
-    name: "Menú del día",
-    category: "Lunch menu",
+    name: "Casa Paco",
+    category: "Cheap eat",
+    categoryKey: "cheap-eat",
     layers: ["cheap-food"],
-    price: 9,
-    priceLabel: "€9",
-    walkMinutes: 8,
-    studentValue: 88,
-    verifiedBy: 20,
-    why: "Three courses.",
-    source: "students",
-    x: 10,
-    y: 10,
-    ...overrides,
+    priceLevel: 2,
+    proximity: { kind: "straight-line", metres, minutes: null },
+    value: { band, reasons: [] },
+    confirmations: 20,
+    saves: 3,
+    lat: 40.4168,
+    lng: -3.7038,
+    address: null,
+    brand: null,
+    website: null,
+    phone: null,
+    openingHours: null,
+    rating: null,
+    ratingCount: null,
+    provider: "osm",
+    sourceUrl: "https://www.openstreetmap.org/node/1",
+    attribution: "© OpenStreetMap contributors",
+    confidence: "recent",
+    fetchedAt: NOW.toISOString(),
+    ...rest,
   };
 }
 
@@ -152,25 +173,80 @@ describe("canAfford", () => {
 /* -------------------------------------------------------------------------- */
 
 describe("betterOption", () => {
+  const reported = (cents: number) => ({
+    medianCents: cents,
+    sampleSize: 4,
+    lastObservedAt: NOW.toISOString(),
+  });
+
   it("finds a cheaper place doing the same job about as well", () => {
-    const current = place({ id: "a", price: 19, studentValue: 80 });
-    const cheaper = place({ id: "b", price: 11, studentValue: 78, walkMinutes: 12 });
-    const result = betterOption({ current, candidates: [current, cheaper], maxWalkMinutes: 30 });
+    const current = place({ id: "a", priceLevel: 3, band: "good" });
+    const cheaper = place({ id: "b", priceLevel: 1, band: "good", metres: 900 });
+    const result = betterOption({
+      current,
+      candidates: [current, cheaper],
+      maxMetres: 2_000,
+    });
     assert.ok(result);
     assert.equal(result.place.id, "b");
-    assert.equal(result.savingCents, 800);
+  });
+
+  it("states a saving ONLY when students reported a price at both ends", () => {
+    const current = place({ id: "a", priceLevel: 3 });
+    const cheaper = place({ id: "b", priceLevel: 1, metres: 700 });
+
+    const withoutReports = betterOption({
+      current,
+      candidates: [current, cheaper],
+      maxMetres: 2_000,
+    });
+    assert.ok(withoutReports);
+    assert.equal(
+      withoutReports.savingCents,
+      null,
+      "no student has reported a price, so there is no figure to state",
+    );
+    assert.equal(withoutReports.savingBasis, null);
+
+    const withReports = betterOption({
+      current,
+      candidates: [current, cheaper],
+      maxMetres: 2_000,
+      observed: new Map([
+        ["a", reported(1_900)],
+        ["b", reported(1_100)],
+      ]),
+    });
+    assert.ok(withReports);
+    assert.equal(withReports.savingCents, 800);
+    assert.equal(withReports.savingBasis, "student-reports");
   });
 
   it("does not suggest a much worse place just because it is cheap", () => {
-    const current = place({ id: "a", price: 19, studentValue: 90 });
-    const grim = place({ id: "b", price: 4, studentValue: 50 });
-    assert.equal(betterOption({ current, candidates: [grim], maxWalkMinutes: 30 }), null);
+    const current = place({ id: "a", priceLevel: 3, band: "strong" });
+    const grim = place({ id: "b", priceLevel: 1, band: "mixed" });
+    assert.equal(betterOption({ current, candidates: [grim], maxMetres: 2_000 }), null);
   });
 
-  it("does not suggest a swap that is barely cheaper", () => {
-    const current = place({ id: "a", price: 10 });
-    const almost = place({ id: "b", price: 9 });
-    assert.equal(betterOption({ current, candidates: [almost], maxWalkMinutes: 30 }), null);
+  it("does not suggest a swap that is in the same price band", () => {
+    const current = place({ id: "a", priceLevel: 2 });
+    const same = place({ id: "b", priceLevel: 2 });
+    assert.equal(betterOption({ current, candidates: [same], maxMetres: 2_000 }), null);
+  });
+
+  it("does not turn a barely cheaper reported price into a saving", () => {
+    const current = place({ id: "a", priceLevel: 2 });
+    const almost = place({ id: "b", priceLevel: 2 });
+    const result = betterOption({
+      current,
+      candidates: [almost],
+      maxMetres: 2_000,
+      observed: new Map([
+        ["a", reported(1_000)],
+        ["b", reported(900)],
+      ]),
+    });
+    assert.equal(result, null, "a euro off ten is not worth a recommendation");
   });
 });
 
@@ -372,7 +448,7 @@ describe("planWeek", () => {
     const plan = planWeek({
       now: NOW,
       events,
-      places: [scored(place({ price: 0 }), 70, ["Free"])],
+      places: [scored(place({ layers: ["free"] }), 70, ["Free"])],
       weekBudgetCents: null,
       dials: ["free"],
       formatMoney: fmt,

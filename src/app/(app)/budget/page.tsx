@@ -40,6 +40,7 @@ import {
   loadSpendHistory,
   loadSpendLess,
 } from "@/server/queries/money";
+import { formatDistance, priceLevelLabel } from "@/domain/places";
 import { requestDate } from "@/server/now";
 import { requireViewer } from "@/server/viewer";
 import { fmtDay } from "@/lib/dates";
@@ -428,12 +429,12 @@ export default async function BudgetPage() {
                       <span className="min-w-0 flex-1">
                         <span className="block text-[0.9375rem] font-medium text-ink-900">{option.name}</span>
                         <span className="block text-[0.8125rem] text-ink-500">
-                          {option.walkMinutes} min walk
+                          {formatDistance(option.metres)} away
                           {option.verifiedBy >= 10 ? ` · ${option.verifiedBy} confirmed` : ""}
                         </span>
                       </span>
                       <span className="tnum shrink-0 font-mono text-[0.9375rem] font-semibold text-mint-deep">
-                        {fmt(option.priceCents)}
+                        {option.priceCents === null ? priceLevelLabel(option.priceLevel) : fmt(option.priceCents)}
                       </span>
                     </Link>
                   </li>

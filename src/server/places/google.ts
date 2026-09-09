@@ -7,7 +7,6 @@ import {
   ProviderRefused,
   type PlaceProvider,
   type PlaceProviderResult,
-  type PlaceQuery,
 } from "@/server/places/types";
 
 /**
@@ -206,6 +205,48 @@ export function googlePlacesProvider(): PlaceProvider {
           },
 
     supports: (category) => Boolean(key) && GOOGLE_TYPES[category].length > 0,
+
+    /**
+     * One request per place, because Google's Place Details endpoint takes one
+     * id. That is the reason a saved place is looked up rather than searched
+     * for on this provider, and the reason the cache in front matters: a Saved
+     * screen with twenty places is twenty billable calls without it.
+     */
+    async lookup(providerPlaceIds, signal) {
+      if (!key || providerPlaceIds.length === 0) return [];
+
+      const rows = await Promise.all(
+        providerPlaceIds.map(async (id) => {
+          const response = await fetch(
+            `https://places.googleapis.com/v1/places/${encodeURIComponent(id)}`,
+            {
+              headers: {
+                "x-goog-api-key": key,
+                /* The per-place mask has no "places." prefix: this endpoint
+                   returns one place rather than a list. */
+                "x-goog-fieldmask": FIELD_MASK.replaceAll("places.", ""),
+              },
+              signal,
+              cache: "no-store",
+            },
+          );
+          /* A place that has been removed answers 404. That is an answer, not
+             an error: the caller renders "this place is no longer listed". */
+          if (response.status === 404) return null;
+          if (!response.ok) {
+            throw new Error(`Google Places lookup returned ${response.status} for ${id}`);
+          }
+          return (await response.json()) as GooglePlace;
+        }),
+      );
+
+      return parseGooglePlaces(
+        rows.filter((row): row is GooglePlace => row !== null),
+        "restaurant",
+        new Date().toISOString(),
+        "Places data © Google",
+      );
+    },
 
     async search(query, signal): Promise<PlaceProviderResult> {
       if (!key) throw new Error("GOOGLE_PLACES_API_KEY is not set");

@@ -280,16 +280,56 @@ export function describeParse(parsed: ParsedAsk, formatMoney: (cents: Cents) => 
 /* Answer shapes                                                               */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * One stop on a plan.
+ *
+ * MONEY IS NULLABLE, and that is the whole design. An event published a price
+ * and a transport fare comes from the city's own transport authority, so those
+ * are known. A restaurant did not: no place provider publishes an amount, only
+ * a band. The old version turned that gap into a number by reading a
+ * hand-written `price` off an invented place, which is how a plan came to say
+ * "€23 total" about an evening nobody had priced.
+ *
+ * So a line either KNOWS what it costs, or it carries an ESTIMATE that names
+ * its basis, or it says neither. The three states are separate fields rather
+ * than one nullable number, because a caller must not be able to add an
+ * estimate into a total by forgetting to check.
+ */
 export type AskLine = {
   kind: "food" | "event" | "drink" | "transport" | "culture" | "activity";
   title: string;
   detail: string;
-  priceCents: Cents;
-  walkMinutes: number | null;
+  /** What it costs, when a source published it. Null means nobody said. */
+  priceCents: Cents | null;
+  /**
+   * A range from the city's own price anchors, for a line whose source has no
+   * price. Never summed into `totalCents`; reported beside it.
+   */
+  estimateCents: [Cents, Cents] | null;
+  /** What the estimate is based on. Never set without an estimate. */
+  estimateBasis: "city-anchor" | null;
+  /** How far, in metres. Distances, not fabricated walking times. */
+  metres: number | null;
   /** What the line was built from, so the UI can link back to the real row. */
   refKind: "place" | "event" | null;
   refId: string | null;
-  source: "students" | "official" | "venue";
+  source: "students" | "official" | "venue" | "provider";
+};
+
+/**
+ * What a plan costs: what is known, and what is only estimated, kept apart.
+ *
+ * `totalCents` is the sum of prices somebody published. `estimateLowCents` and
+ * `estimateHighCents` are the sum of the anchor ranges for the lines nobody
+ * priced, and `unpricedLines` counts the lines that had neither. A caller that
+ * wants one number must decide for itself which of the three to show; there is
+ * deliberately no field that quietly merges them.
+ */
+export type PlanCost = {
+  totalCents: Cents;
+  estimateLowCents: Cents;
+  estimateHighCents: Cents;
+  unpricedLines: number;
 };
 
 export type AskAnswer = {
@@ -299,7 +339,8 @@ export type AskAnswer = {
   /** One paragraph. Model-written where available, deterministic otherwise. */
   summary: string;
   lines: AskLine[];
-  totalCents: Cents;
+  /** Known money and estimated money, kept apart. See `PlanCost`. */
+  cost: PlanCost;
   /** What the student asked for, parsed. Shown so they can correct it. */
   parsed: ParsedAsk;
   /** Where the answer's facts came from. Never empty for a non-empty answer. */
@@ -330,27 +371,50 @@ export function assemblePlan(input: {
   places: readonly Scored<Place>[];
   /** Single-journey fare, so transport can be costed honestly or omitted. */
   fareCents: number;
+  /**
+   * The city's own price anchors, in whole currency units, used ONLY to
+   * estimate a line the provider could not price. Null for a city with no
+   * anchors, and then a food line simply carries no figure at all.
+   */
+  anchors: { lunch: [number, number]; pint: [number, number] } | null;
   wantsFood: boolean;
   /** Prefer the cheapest fill at every step. */
   cheaper?: boolean;
-}): { lines: AskLine[]; totalCents: Cents } {
+}): { lines: AskLine[]; cost: PlanCost } {
   const budget = input.budgetCents ?? Number.POSITIVE_INFINITY;
   const lines: AskLine[] = [];
   let total = 0;
 
   const fits = (cents: number) => total + cents <= budget;
 
+  /* An anchor range in cents, or null when the city has none. */
+  const anchor = (key: "lunch" | "pint"): [Cents, Cents] | null => {
+    const range = input.anchors?.[key];
+    if (!range) return null;
+    return [Math.round(range[0] * 100), Math.round(range[1] * 100)];
+  };
+
+  /* Whether an estimated line can plausibly fit what is left. The LOW end is
+     used, because rejecting a €8-13 lunch from a €10 budget would be deciding
+     against the student on a figure we admit we do not know. */
+  const mightFit = (estimate: [Cents, Cents] | null) =>
+    estimate === null || total + estimate[0] <= budget;
+
   /* 1. An event. Free ones first, then the cheapest that still fits. */
-  const events = [...input.events].sort((a, b) => a.item.priceCents - b.item.priceCents || b.match - a.match);
+  const events = [...input.events].sort(
+    (a, b) => a.item.priceCents - b.item.priceCents || b.match - a.match,
+  );
   const event = events.find((entry) => fits(entry.item.priceCents));
 
   if (event) {
     lines.push({
-      kind: event.item.priceCents === 0 ? "culture" : "event",
+      kind: event.item.kind === "culture" ? "culture" : "event",
       title: event.item.title,
-      detail: `${event.item.venue} · ${new Date(event.item.startsAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`,
+      detail: event.item.blurb,
       priceCents: event.item.priceCents,
-      walkMinutes: null,
+      estimateCents: null,
+      estimateBasis: null,
+      metres: null,
       refKind: "event",
       refId: event.item.id,
       source: event.item.source,
@@ -358,26 +422,33 @@ export function assemblePlan(input: {
     total += event.item.priceCents;
   }
 
-  /* 2. Food, if the question implies it. */
+  /* 2. Food, if the question implies it.
+        Ordered by price BAND then by match, because there is no amount to sort
+        on. A band of 1 is the cheap end; a null band sorts after both, since
+        an unknown is not a claim to be cheap. */
   if (input.wantsFood) {
+    const lunch = anchor("lunch");
     const food = input.places
       .filter((entry) => entry.item.layers.some((layer) => layer === "cheap-food"))
-      .sort((a, b) => (a.item.price ?? 0) - (b.item.price ?? 0) || b.match - a.match)
-      .find((entry) => fits(Math.round((entry.item.price ?? 0) * 100)));
+      .sort(
+        (a, b) =>
+          (a.item.priceLevel ?? 3) - (b.item.priceLevel ?? 3) || b.match - a.match,
+      )
+      .find(() => mightFit(lunch));
 
     if (food) {
-      const cents = Math.round((food.item.price ?? 0) * 100);
       lines.push({
         kind: "food",
         title: food.item.name,
-        detail: food.item.why,
-        priceCents: cents,
-        walkMinutes: food.item.walkMinutes,
+        detail: food.item.value.reasons.join(" · ") || food.item.category,
+        priceCents: null,
+        estimateCents: lunch,
+        estimateBasis: lunch ? "city-anchor" : null,
+        metres: food.item.proximity.metres,
         refKind: "place",
         refId: food.item.id,
-        source: food.item.source === "mixed" ? "students" : food.item.source,
+        source: "provider",
       });
-      total += cents;
     }
   }
 
@@ -386,36 +457,44 @@ export function assemblePlan(input: {
         explicitly asked for cheaper. */
   const headroom = budget - total;
   if (!input.cheaper && Number.isFinite(headroom) && headroom > budget * 0.2) {
-    const extra = input.places
-      .filter((entry) => !lines.some((line) => line.refId === entry.item.id))
-      .find((entry) => fits(Math.round((entry.item.price ?? 0) * 100)));
+    const extra = input.places.find(
+      (entry) => !lines.some((line) => line.refId === entry.item.id),
+    );
 
     if (extra) {
-      const cents = Math.round((extra.item.price ?? 0) * 100);
-      lines.push({
-        kind: extra.item.layers.includes("nightlife") ? "drink" : "activity",
-        title: extra.item.name,
-        detail: extra.item.why,
-        priceCents: cents,
-        walkMinutes: extra.item.walkMinutes,
-        refKind: "place",
-        refId: extra.item.id,
-        source: extra.item.source === "mixed" ? "students" : extra.item.source,
-      });
-      total += cents;
+      const nightlife = extra.item.layers.includes("nightlife");
+      const estimate = nightlife ? anchor("pint") : null;
+      if (mightFit(estimate)) {
+        lines.push({
+          kind: nightlife ? "drink" : "activity",
+          title: extra.item.name,
+          detail: extra.item.value.reasons.join(" · ") || extra.item.category,
+          priceCents: null,
+          estimateCents: estimate,
+          estimateBasis: estimate ? "city-anchor" : null,
+          metres: extra.item.proximity.metres,
+          refKind: "place",
+          refId: extra.item.id,
+          source: "provider",
+        });
+      }
     }
   }
 
   /* 4. Transport, only when the plan actually spans a distance worth paying
-        for and the fare fits. A €1.50 line on a plan you can walk is padding. */
-  const furthest = Math.max(0, ...lines.map((line) => line.walkMinutes ?? 0));
-  if (furthest > 25 && input.fareCents > 0 && fits(input.fareCents)) {
+        for and the fare fits. A fare line on a plan you can walk is padding.
+        The threshold is in metres now: two kilometres is about the point where
+        a student stops walking it without thinking. */
+  const furthest = Math.max(0, ...lines.map((line) => line.metres ?? 0));
+  if (furthest > 2_000 && input.fareCents > 0 && fits(input.fareCents)) {
     lines.push({
       kind: "transport",
       title: "Transport",
       detail: "One journey each way. Covered already if you hold a monthly pass.",
       priceCents: input.fareCents,
-      walkMinutes: null,
+      estimateCents: null,
+      estimateBasis: null,
+      metres: null,
       refKind: null,
       refId: null,
       source: "official",
@@ -423,7 +502,25 @@ export function assemblePlan(input: {
     total += input.fareCents;
   }
 
-  return { lines, totalCents: total };
+  return { lines, cost: costOf(lines) };
+}
+
+/** Add a plan up, keeping known money and estimated money apart. */
+export function costOf(lines: readonly AskLine[]): PlanCost {
+  let totalCents = 0;
+  let estimateLowCents = 0;
+  let estimateHighCents = 0;
+  let unpricedLines = 0;
+
+  for (const line of lines) {
+    if (line.priceCents !== null) totalCents += line.priceCents;
+    else if (line.estimateCents) {
+      estimateLowCents += line.estimateCents[0];
+      estimateHighCents += line.estimateCents[1];
+    } else unpricedLines += 1;
+  }
+
+  return { totalCents, estimateLowCents, estimateHighCents, unpricedLines };
 }
 
 /* -------------------------------------------------------------------------- */
@@ -440,34 +537,57 @@ export function assemblePlan(input: {
  */
 export function describePlan(input: {
   lines: readonly AskLine[];
-  totalCents: Cents;
+  cost: PlanCost;
   budgetCents: Cents | null;
   formatMoney: (cents: Cents) => string;
 }): string {
-  const { lines, totalCents, budgetCents, formatMoney } = input;
+  const { lines, cost, budgetCents, formatMoney } = input;
 
   if (lines.length === 0) return "Nothing in your city matches that yet.";
 
   const freeCount = lines.filter((line) => line.priceCents === 0).length;
   /* Derived from the lines, never from the total. A total that happens to be
      zero because nothing was costed is not a free plan, and announcing "all of
-     this is free" over a list of priced rows is exactly the sort of confident
+     this is free" over a list of unpriced rows is exactly the sort of confident
      wrongness that loses a student's trust in every other number on screen. */
   const allFree = lines.every((line) => line.priceCents === 0);
+  const estimated = cost.estimateHighCents > 0;
   const parts: string[] = [];
 
-  parts.push(
-    allFree
-      ? "All of this is free."
-      : `${lines.length} ${lines.length === 1 ? "stop" : "stops"}, ${formatMoney(totalCents)} in total.`,
-  );
+  const stops = `${lines.length} ${lines.length === 1 ? "stop" : "stops"}`;
+
+  if (allFree && !estimated && cost.unpricedLines === 0) {
+    parts.push("All of this is free.");
+  } else if (estimated) {
+    /* The known money and the estimate are stated separately, in that order,
+       and the estimate says it is one. Merging them into a single figure is
+       the thing this whole shape exists to prevent. */
+    const range =
+      cost.estimateLowCents === cost.estimateHighCents
+        ? formatMoney(cost.estimateLowCents)
+        : `${formatMoney(cost.estimateLowCents)}–${formatMoney(cost.estimateHighCents)}`;
+    parts.push(
+      cost.totalCents > 0
+        ? `${stops}: ${formatMoney(cost.totalCents)} booked, plus about ${range} for food and drink.`
+        : `${stops}, and about ${range} for food and drink.`,
+    );
+    parts.push("The estimate is this city's typical student prices, not a menu.");
+  } else {
+    parts.push(`${stops}, ${formatMoney(cost.totalCents)} in total.`);
+  }
 
   if (freeCount > 0 && !allFree) {
     parts.push(`${freeCount} of them ${freeCount === 1 ? "costs" : "cost"} nothing.`);
   }
 
-  if (budgetCents !== null && totalCents < budgetCents && !allFree) {
-    parts.push(`${formatMoney(budgetCents - totalCents)} left over.`);
+  if (cost.unpricedLines > 0) {
+    parts.push(
+      `${cost.unpricedLines} ${cost.unpricedLines === 1 ? "stop has" : "stops have"} no published price.`,
+    );
+  }
+
+  if (budgetCents !== null && cost.totalCents < budgetCents && !allFree && !estimated) {
+    parts.push(`${formatMoney(budgetCents - cost.totalCents)} left over.`);
   }
 
   return parts.join(" ");
@@ -487,10 +607,20 @@ export function describeList(input: {
   const { lines, formatMoney, cityName } = input;
   if (lines.length === 0) return `Nothing in ${cityName} matches that yet.`;
 
-  const priced = lines.filter((line) => line.priceCents > 0).map((line) => line.priceCents);
-  const freeCount = lines.length - priced.length;
+  const priced = lines
+    .map((line) => line.priceCents)
+    .filter((cents): cents is Cents => cents !== null && cents > 0);
+  const freeCount = lines.filter((line) => line.priceCents === 0).length;
+  const unpriced = lines.filter((line) => line.priceCents === null).length;
 
-  if (priced.length === 0) return `${lines.length} of these, and every one is free.`;
+  /* "Every one is free" may only be said when every one was actually priced at
+     zero. A list where nobody published a price is not a free list. */
+  if (priced.length === 0 && unpriced === 0) {
+    return `${lines.length} of these, and every one is free.`;
+  }
+  if (priced.length === 0) {
+    return `${lines.length} of these. ${unpriced === lines.length ? "None" : "Some"} of them publish a price.`;
+  }
 
   const low = Math.min(...priced);
   const high = Math.max(...priced);

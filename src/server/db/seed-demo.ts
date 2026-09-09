@@ -4,7 +4,6 @@ import { createHash } from "node:crypto";
 
 import { missionTemplate } from "@/config/missions";
 import { getCampus, getCity } from "@/data/cities";
-import { placesForCity } from "@/data/places";
 import { defaultPrivacy, type Profile } from "@/domain/types";
 import { suggestEnvelopes } from "@/server/engines/budget";
 import { hashPassword } from "@/server/auth/crypto";
@@ -262,11 +261,12 @@ export async function seedDemoAccount(db: Database): Promise<number> {
   rows += 5;
 
   /* ---- saved, events, plans --------------------------------------------- */
-  const places = placesForCity("madrid");
-  for (const place of places.slice(0, 3)) {
-    db.saved.push({ id: demoId("saved", place.id), userId, kind: "place", targetId: place.id, collectionId: null, note: null, createdAt: iso(daysAgo(9)) });
-    rows += 1;
-  }
+  /* NO SAVED PLACES. The demo account used to open with three, taken from the
+     hand-written place list. There is no such list: places come from a
+     provider at request time, and seeding a save would mean either inventing
+     an id or making a network call from the seeder. Both are worse than the
+     honest state, which is that a demo account has saved nothing until
+     somebody saves something. */
   const upcoming = db.events
     .filter((event) => event.citySlug === "madrid" && Date.parse(event.startsAt) > now.getTime())
     .sort((a, b) => a.startsAt.localeCompare(b.startsAt));

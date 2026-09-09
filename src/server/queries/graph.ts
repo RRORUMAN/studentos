@@ -4,7 +4,7 @@ import { cache } from "react";
 
 import { campusesForCity } from "@/data/cities";
 import { findNeighbourhood, neighbourhoodsForCity } from "@/data/neighbourhoods";
-import { placesForCity } from "@/data/places";
+import { loadCityPlaces } from "@/server/queries/places";
 import type { Place } from "@/data/types";
 import {
   buildCityGraph,
@@ -103,10 +103,16 @@ export const loadCityGraph = cache(async (citySlug: string): Promise<CityGraph> 
       targetId: row.targetId,
     }));
 
+  /* Which neighbourhood each place sits in, so the graph can relate a place to
+     an area. Provider-backed now, so a provider outage means the graph simply
+     has no place-to-area edges this request rather than a stale set of them. */
   const areaOf = new Map<NodeKey, string>();
-  for (const place of placesForCity(citySlug)) {
-    const slug = areaSlugForPlace(place);
-    if (slug) areaOf.set(key("place", place.id), slug);
+  const nearby = await loadCityPlaces({ citySlug, radiusMetres: 5_000, limit: 300 });
+  if (nearby.ok) {
+    for (const place of nearby.places) {
+      const slug = areaSlugForPlace(place);
+      if (slug) areaOf.set(key("place", place.id), slug);
+    }
   }
 
   const claims: GraphClaim[] = claimViews.map((view) => ({

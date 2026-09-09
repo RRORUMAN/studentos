@@ -1,4 +1,5 @@
 import type { Place } from "@/data/types";
+import { type ValueBand, describeProximity } from "@/domain/places";
 import type { Memory } from "@/domain/social";
 import type { Cents, CityEvent, Invite, Profile } from "@/domain/types";
 
@@ -75,6 +76,14 @@ export type RecommendContext = {
   memory: Memory | null;
   /** What the student can spend on this, in cents. Null means no ceiling. */
   budgetCents: Cents | null;
+  /**
+   * Where the student lives, when they told us.
+   *
+   * Null is common and is handled everywhere: with no home point the search
+   * runs from the city centre, and every distance is honestly a distance from
+   * the centre rather than from them. Nothing substitutes a campus or a guess.
+   */
+  homePoint?: { lat: number; lng: number } | null;
   now: Date;
   /** Places friends or campusmates saved, for the community signal. */
   communitySignals?: {
@@ -196,9 +205,79 @@ export function scoreDistanceFit(walkMinutes: number, maxMinutes: number): numbe
   return 1 - Math.pow(walkMinutes / maxMinutes, 1.8);
 }
 
-/** Student value, as rated by students. Already 0-100 on the row. */
-export function scoreStudentValue(value: number): number {
-  return Math.max(0, Math.min(1, value / 100));
+/**
+ * Metres a student covers in a minute on foot.
+ *
+ * Used ONLY to turn a stated tolerance in minutes into a radius in metres, so
+ * that "twenty minutes is my limit" can be compared against a measured
+ * distance. It never produces a number shown to anybody: a duration on a
+ * screen comes from a routing provider or it does not appear. Same constant as
+ * the old walk-time fabrication, used in the opposite direction, and the
+ * direction is the entire distinction.
+ */
+export const WALK_METRES_PER_MINUTE = 78;
+
+/**
+ * Distance against the student's stated tolerance, in metres.
+ *
+ * Same curve and the same reasoning as the minutes version: flat near the
+ * origin, steep near the limit, because 300 m and 600 m are both "round the
+ * corner" while 1.8 km and 2.1 km against a 2 km ceiling are not.
+ */
+export function scoreProximityFit(metres: number, maxMetres: number): number {
+  if (metres <= 0) return 1;
+  if (metres >= maxMetres) return 0;
+  return 1 - Math.pow(metres / maxMetres, 1.8);
+}
+
+/**
+ * Value for money, from the band the domain computed.
+ *
+ * There is no 0-100 number on a place any more, and this is where that shows
+ * up hardest: `insufficient` scores 0.5, not 0. A place nobody has rated is
+ * unknown, not bad, and scoring an unknown as zero would bury every place in a
+ * new city under the handful somebody happened to confirm. It is the same rule
+ * the Work engine already runs on.
+ */
+export function scoreValueBand(band: ValueBand): number {
+  switch (band) {
+    case "strong":
+      return 1;
+    case "good":
+      return 0.75;
+    case "mixed":
+      return 0.35;
+    default:
+      return 0.5;
+  }
+}
+
+/**
+ * The provider's price band against how price-sensitive the student is.
+ *
+ * Null is 0.5 for the same reason as above. Most rows have no price level,
+ * because OpenStreetMap publishes none, and treating "did not say" as
+ * "expensive" would hide most of the product from anybody on a budget.
+ */
+export function scorePriceLevel(
+  level: number | null,
+  sensitivity: Profile["priceSensitivity"],
+  /** True when today's remaining budget is nearly gone, whatever the profile says. */
+  broke = false,
+): number {
+  if (level === null) return 0.5;
+
+  const cheapness = 1 - (Math.max(1, Math.min(4, level)) - 1) / 3;
+
+  /* How far the price band is allowed to move the score. A student who said
+     "cheapest possible" is dominated by it; one happy to splurge is nudged.
+     Being nearly out of money today overrides the standing preference, because
+     it is a fact about tonight rather than a taste. */
+  const weight = broke
+    ? 1
+    : { cheapest: 1, value: 0.8, balanced: 0.6, "occasional-splurge": 0.4 }[sensitivity];
+
+  return Math.max(0, Math.min(1, 0.5 + (cheapness - 0.5) * weight));
 }
 
 /**
@@ -271,38 +350,47 @@ export function recommendPlaces(
   const disliked = new Set(memory?.dislikedPlaceIds ?? []);
 
   /* Someone who walks and takes transit will travel further than the stated
-     walking limit; someone who only walks will not. */
-  const reach = profile.transport.some((mode) => mode !== "walk")
+     walking limit; someone who only walks will not. The tolerance is stated in
+     minutes and the measurement is in metres, so it is converted once, here,
+     and the converted figure is never rendered. */
+  const reachMinutes = profile.transport.some((mode) => mode !== "walk")
     ? profile.maxTravelMinutes * 1.6
     : profile.maxTravelMinutes;
+  const reachMetres = Math.max(400, reachMinutes * WALK_METRES_PER_MINUTE);
 
   const candidates = places.filter(
     (place) =>
       place.citySlug === profile.citySlug &&
       !disliked.has(place.id) &&
-      place.walkMinutes <= reach &&
+      place.proximity.metres <= reachMetres &&
       passesDiet(place, profile.diets),
   );
 
   return candidates
     .map((place) => {
-      const priceCents = place.price === null ? null : Math.round(place.price * 100);
-
       const components: Record<ScoreComponent, number> = {
-        budgetFit: scoreBudgetFit(priceCents, budgetCents, profile.priceSensitivity),
+        /* Budget fit is the provider's price band rather than a euro figure,
+           because no provider gives us a euro figure. `budgetCents` still
+           matters: a student with almost nothing left today is pushed harder
+           towards the cheap end than their standing preference would. */
+        budgetFit: scorePriceLevel(
+          place.priceLevel,
+          profile.priceSensitivity,
+          budgetCents !== null && budgetCents < 1_500,
+        ),
         interestFit: scoreInterestFit(place.layers, profile.interests, memory),
-        distanceFit: scoreDistanceFit(place.walkMinutes, reach),
-        studentValue: scoreStudentValue(place.studentValue),
+        distanceFit: scoreProximityFit(place.proximity.metres, reachMetres),
+        studentValue: scoreValueBand(place.value.band),
         communityFit: scoreCommunityFit({
           id: place.id,
-          confirmations: place.verifiedBy,
+          confirmations: place.confirmations,
           savedByCampus: context.communitySignals?.savedByCampus,
           savedByFriends: context.communitySignals?.savedByFriends,
         }),
-        quality: scoreStudentValue(place.studentValue),
-        /* Seeded places carry no observation date; treat as moderately fresh
-           rather than inventing one. */
-        freshness: scoreFreshness(null, now),
+        quality: scoreValueBand(place.value.band),
+        /* When the row was retrieved, which is a real date on every place now
+           rather than the null the seeded rows used to pass. */
+        freshness: scoreFreshness(place.fetchedAt, now),
       };
 
       return {
@@ -310,7 +398,6 @@ export function recommendPlaces(
         match: toMatch(components),
         components,
         reasons: placeReasons(place, components, context),
-        walkMinutes: place.walkMinutes,
       };
     })
     .sort((a, b) => b.match - a.match);
@@ -340,10 +427,11 @@ function placeReasons(
 ): string[] {
   const reasons: string[] = [];
 
-  if (place.walkMinutes <= 12) reasons.push(`${place.walkMinutes}-minute walk`);
+  /* Distance in the words the card uses. A routed proximity says minutes; a
+     measured one says metres. Never one dressed as the other. */
+  if (place.proximity.metres <= 900) reasons.push(describeProximity(place.proximity));
 
-  if (place.price === 0) reasons.push("Free");
-  else if (components.budgetFit >= 0.9 && context.budgetCents) reasons.push("Within your budget");
+  if (place.priceLevel !== null && place.priceLevel <= 1) reasons.push("Cheap for the category");
 
   const matched = place.layers.filter((layer) => context.profile.interests.includes(layer));
   if (matched.length === 1) reasons.push(`Matches ${matched[0].replace(/-/g, " ")}`);
@@ -352,9 +440,11 @@ function placeReasons(
   if (context.communitySignals?.savedByFriends.has(place.id)) reasons.push("Friends saved this");
   else if (context.communitySignals?.savedByCampus.has(place.id))
     reasons.push("Students from your campus go here");
-  else if (place.verifiedBy >= 10) reasons.push(`Confirmed by ${place.verifiedBy} students`);
+  else if (place.confirmations >= 10) reasons.push(`Confirmed by ${place.confirmations} students`);
 
-  if (place.studentValue >= 85) reasons.push("Strong student value");
+  /* The band's own reasons, each already traceable to one signal. Added only
+     when nothing above found anything to say, so they never duplicate. */
+  if (reasons.length === 0) reasons.push(...place.value.reasons);
 
   return reasons.slice(0, 4);
 }
@@ -386,7 +476,11 @@ export function recommendEvents(
         /* No home point: the distance is unknown, so it neither helps nor hurts. */
         distanceFit:
           walkMinutes === null ? 0.6 : scoreDistanceFit(walkMinutes, profile.maxTravelMinutes * 1.6),
-        studentValue: event.priceCents === 0 ? 1 : scoreStudentValue(70),
+        /* Free is unambiguously good value. A paid event is an unknown, and an
+           unknown scores neutral rather than well — the old code passed a
+           hardcoded 70 here, which quietly ranked every paid event as if
+           somebody had assessed it. */
+        studentValue: event.priceCents === 0 ? 1 : scoreValueBand("insufficient"),
         communityFit: scoreCommunityFit({
           id: event.id,
           confirmations: event.confirmations,

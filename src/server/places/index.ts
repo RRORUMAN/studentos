@@ -287,4 +287,78 @@ function rank(
   };
 }
 
+/* -------------------------------------------------------------------------- */
+/* Lookup                                                                      */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Resolve stored place references back into rows.
+ *
+ * A saved place, a place on a plan and a place in a chat message are all just
+ * an id in our table — `osm:node/26472667` and nothing else. That is the
+ * correct thing to store: we do not keep a copy of somebody else's database,
+ * and a name cached last term is a name that may since have changed. So the
+ * rows are fetched again here, every time.
+ *
+ * Ids are grouped by provider, so a student whose saved list spans both
+ * providers makes one Overpass query and one Google request per place rather
+ * than a request per row per provider.
+ *
+ * An id that no longer resolves comes back MISSING rather than as a row with
+ * blanks in it. The caller is expected to say "this place is no longer
+ * listed", which is true and useful; a card with a name and no address is
+ * neither.
+ */
+export async function lookupPlaces(
+  ids: readonly string[],
+): Promise<{ places: RealPlace[]; missing: string[]; errors: string[] }> {
+  const wanted = [...new Set(ids)];
+  if (wanted.length === 0) return { places: [], missing: [], errors: [] };
+
+  const byProvider = new Map<string, string[]>();
+  const malformed: string[] = [];
+
+  for (const id of wanted) {
+    const split = id.indexOf(":");
+    if (split <= 0) {
+      malformed.push(id);
+      continue;
+    }
+    const provider = id.slice(0, split);
+    const providerPlaceId = id.slice(split + 1);
+    const held = byProvider.get(provider);
+    if (held) held.push(providerPlaceId);
+    else byProvider.set(provider, [providerPlaceId]);
+  }
+
+  const found: RealPlace[] = [];
+  const errors: string[] = [];
+
+  await Promise.all(
+    placeProviders().map(async (provider) => {
+      const mine = byProvider.get(provider.id);
+      if (!mine?.length || !provider.status().configured) return;
+
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), PROVIDER_TIMEOUT_MS);
+      try {
+        found.push(...(await provider.lookup(mine, controller.signal)));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        errors.push(`${provider.label}: ${message}`);
+        captureError(error, { scope: "places.lookup", provider: provider.id });
+      } finally {
+        clearTimeout(timer);
+      }
+    }),
+  );
+
+  const resolved = new Set(found.map((place) => place.id));
+  return {
+    places: found,
+    missing: [...wanted.filter((id) => !resolved.has(id)), ...malformed],
+    errors,
+  };
+}
+
 export { placeProviders as providersForHealth };

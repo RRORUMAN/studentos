@@ -88,7 +88,7 @@ export default async function AffordPage(props: PageProps<"/budget/afford">) {
           defaultCategory={category}
           categories={categories.length > 0 ? categories : [{ key: "eating-out", label: "Eating out" }]}
           reading={reading}
-          places={placesFor(viewer.profile.citySlug)}
+          places={await placesFor(viewer.profile.citySlug)}
           citySlug={viewer.profile.citySlug}
           maxWalkMinutes={Math.round(viewer.profile.maxTravelMinutes * 1.6)}
           nowIso={now.toISOString()}

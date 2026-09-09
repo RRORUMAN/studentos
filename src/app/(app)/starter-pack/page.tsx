@@ -4,11 +4,12 @@ import Link from "next/link";
 
 import { MascotArt } from "@/components/mascot/mascot-art";
 import { summarisePrices } from "@/domain/knowledge";
+import { describeProximity, priceLevelLabel } from "@/domain/places";
 import { findMany } from "@/server/db";
 import { loadDeals, loadPlaces, loadRecommendContext, loadScoredEvents } from "@/server/queries/discovery";
 import { loadMoney } from "@/server/queries/money";
 import { requireViewer } from "@/server/viewer";
-import { money, walk } from "@/lib/utils";
+import { money } from "@/lib/utils";
 
 export const metadata: Metadata = {
   title: "Starter pack",
@@ -48,7 +49,8 @@ export default async function StarterPackPage() {
   ]);
 
   /** Best scoring place carrying a given layer. */
-  const best = (layer: string) => all.find((entry) => entry.item.layers.includes(layer as never));
+  const best = (layer: string) =>
+    all.places.find((entry) => entry.item.layers.includes(layer as never));
 
   const picks = [
     { key: "groceries", label: "Your supermarket", scored: best("groceries") },
@@ -128,13 +130,11 @@ export default async function StarterPackPage() {
                   {pick.scored!.item.name}
                 </p>
                 <p className="mt-1 text-[0.8125rem] text-ink-500">
-                  {walk(pick.scored!.item.walkMinutes)} walk ·{" "}
-                  {pick.scored!.item.price === null
-                    ? pick.scored!.item.priceLabel
-                    : money(pick.scored!.item.price, where)}
+                  {describeProximity(pick.scored!.item.proximity)} ·{" "}
+                  {priceLevelLabel(pick.scored!.item.priceLevel)}
                 </p>
                 <p className="mt-1.5 text-[0.8125rem] leading-snug text-ink-600">
-                  {pick.scored!.item.why}
+                  {pick.scored!.item.value.reasons.join(" · ") || pick.scored!.item.category}
                 </p>
               </div>
               <ArrowRight className="mt-1 size-4 shrink-0 text-ink-400" />

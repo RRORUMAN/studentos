@@ -3,7 +3,8 @@ import { notFound } from "next/navigation";
 
 import { CityCollection } from "@/components/marketing/city-collection";
 import { cities, getCity } from "@/data/cities";
-import { placesForCity } from "@/data/places";
+import { requestDate } from "@/server/now";
+import { loadCityPlaces } from "@/server/queries/places";
 import { loopForCity } from "@/data/loop";
 
 export function generateStaticParams() {
@@ -29,9 +30,22 @@ export default async function CheapFoodPage(props: PageProps<"/city/[slug]/cheap
   const city = getCity(slug);
   if (!city) notFound();
 
-  const places = placesForCity(city.slug)
-    .filter((place) => place.layers.includes("cheap-food") || place.layers.includes("groceries"))
-    .sort((a, b) => (a.price ?? 0) - (b.price ?? 0));
+  const now = requestDate();
+
+  /* Real places, from a provider, at request time. This page is revalidated
+     rather than built once, because a shop that closed should stop appearing
+     without a deploy. */
+  const found = await loadCityPlaces({
+    citySlug: city.slug,
+    layers: ["cheap-food", "groceries"],
+    radiusMetres: 2_500,
+    limit: 24,
+  });
+  const places = found.ok
+    ? [...found.places].sort(
+        (a, b) => (a.priceLevel ?? 3) - (b.priceLevel ?? 3) || a.proximity.metres - b.proximity.metres,
+      )
+    : [];
 
   const posts = loopForCity(city.slug).filter((post) =>
     post.tags.some((tag) => ["Lunch", "Groceries", "Budget"].includes(tag)),
@@ -45,6 +59,9 @@ export default async function CheapFoodPage(props: PageProps<"/city/[slug]/cheap
       title={`Eating in ${city.name} without thinking about it`}
       lead={`Most students overspend on food for a month before someone tells them the two or three rules that matter here. This is that conversation, with prices.`}
       places={places}
+      placesUnavailable={found.ok ? null : { message: found.message }}
+      attribution={found.ok ? found.attribution : null}
+      now={now}
       posts={posts}
       emptyTitle={`No food listings for ${city.name} yet`}
       emptyBody="Food is the first thing a new community fills in, because everyone has an opinion and everyone eats every day."

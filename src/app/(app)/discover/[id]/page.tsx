@@ -6,13 +6,16 @@ import { notFound } from "next/navigation";
 import { AnyoneDownButton } from "@/components/app/anyone-down-button";
 import { AddToPlanButton } from "@/components/app/event-actions";
 import { FeedbackMenu } from "@/components/app/feedback-menu";
-import { valueWord } from "@/components/app/place-card";
 import { SaveButton } from "@/components/app/save-button";
 import { ShareButton } from "@/components/app/share-button";
 import { MascotArt } from "@/components/mascot/mascot-art";
 import { PhraseHint } from "@/components/app/phrase-hint";
 import { Badge } from "@/components/ui/primitives";
-import { placesForCity, sourceLabel } from "@/data/places";
+import { PlaceSource, ProviderRating, OpenState } from "@/components/product/place-meta";
+import { valueLabel, valueTone } from "@/config/places";
+import { describeProximity, priceLevelLabel, priceLevelNote } from "@/domain/places";
+import { WALK_METRES_PER_MINUTE } from "@/server/engines/recommend";
+import { loadPlace } from "@/server/queries/places";
 import { describe as describeRelation, relate } from "@/domain/graph";
 import { isStudentVerified } from "@/services/db/schema";
 import { betterOption } from "@/server/engines/better-option";
@@ -23,7 +26,7 @@ import { loadPlanChoices } from "@/server/queries/plans";
 import { findMany, findOne } from "@/server/db";
 import { requestDate } from "@/server/now";
 import { requireViewer } from "@/server/viewer";
-import { money, walk } from "@/lib/utils";
+import { money } from "@/lib/utils";
 
 export const metadata: Metadata = {
   title: "Place",
@@ -43,8 +46,9 @@ export default async function PlacePage(props: PageProps<"/discover/[id]">) {
   const viewer = await requireViewer();
   const { id } = await props.params;
 
-  const all = placesForCity(viewer.profile.citySlug);
-  const place = all.find((entry) => entry.id === id);
+  /* One lookup against the provider, by the id in the URL. A place that no
+     longer exists is a 404 rather than a page rendered from a cached name. */
+  const place = await loadPlace(id, viewer.profile.citySlug);
   if (!place) notFound();
 
   const where = viewer.currency;
@@ -58,7 +62,7 @@ export default async function PlacePage(props: PageProps<"/discover/[id]">) {
     budgetCents: money$.unset ? null : money$.reading.safeTodayCents,
   });
 
-  const [scoredAll, saved, mentions, plans, graph] = await Promise.all([
+  const [scoredAll, saved, mentions, plans, graph, priceReports] = await Promise.all([
     loadPlaces(context),
     findOne("saved", (row) => row.userId === viewer.user.id && row.kind === "place" && row.targetId === id),
     findMany(
@@ -70,6 +74,10 @@ export default async function PlacePage(props: PageProps<"/discover/[id]">) {
     ),
     loadPlanChoices({ userId: viewer.user.id, citySlug: viewer.profile.citySlug, now }),
     loadCityGraph(viewer.profile.citySlug),
+    findMany(
+      "priceObservations",
+      (row) => row.citySlug === viewer.profile.citySlug && row.placeId !== null,
+    ),
   ]);
 
   /* Everything the city graph can honestly say about this student and this
@@ -78,14 +86,22 @@ export default async function PlacePage(props: PageProps<"/discover/[id]">) {
      percentage above is the score, and it does not explain itself. */
   const relations = relate(graph, viewerNode(graph, viewer.user.id), { kind: "place", id: place.id });
 
-  const scored = scoredAll.find((entry) => entry.item.id === id);
+  const scored = scoredAll.places.find((entry) => entry.item.id === id);
   const better = betterOption({
     current: place,
-    candidates: all,
-    maxWalkMinutes: viewer.profile.maxTravelMinutes * 1.6,
+    candidates: scoredAll.places.map((entry) => entry.item),
+    maxMetres: Math.max(400, viewer.profile.maxTravelMinutes * 1.6 * WALK_METRES_PER_MINUTE),
+    /* Student price reports keyed by place, which is the only source in the
+       product for what somewhere actually costs. */
+    observed: new Map(
+      priceReports.map((row) => [
+        row.placeId as string,
+        { medianCents: row.amountCents, sampleSize: 3, lastObservedAt: row.observedAt },
+      ]),
+    ),
   });
-  const value = valueWord(place.studentValue);
-  const priceCents = place.price === null ? null : Math.round(place.price * 100);
+  /* No euro price on a place. The band is the strongest claim available. */
+  const priceCents = null;
   const safe = money$.unset ? null : money$.reading.safeTodayCents;
 
   return (
@@ -101,7 +117,16 @@ export default async function PlacePage(props: PageProps<"/discover/[id]">) {
       <header>
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-mono text-micro uppercase tracking-[0.1em] text-ink-400">{place.category}</span>
-          <Badge accent={value.accent}>{value.label}</Badge>
+          {/* The muted band has no accent in the palette, and forcing one
+              would give "not enough student data" the same visual weight as a
+              finding. It renders as plain text instead. */}
+          {place.value.band === "insufficient" ? (
+            <span className="text-[0.8125rem] text-ink-400">{valueLabel[place.value.band]}</span>
+          ) : (
+            <Badge accent={valueTone[place.value.band] as "signal" | "mint" | "amber"}>
+              {valueLabel[place.value.band]}
+            </Badge>
+          )}
           {scored && scored.match >= 60 ? (
             <span className="tnum rounded-full bg-signal-soft px-2.5 py-1 font-mono text-micro font-semibold text-signal-deep">
               {scored.match}% match
@@ -116,9 +141,15 @@ export default async function PlacePage(props: PageProps<"/discover/[id]">) {
 
       {/* ---- facts ---------------------------------------------------------- */}
       <dl className="mt-5 grid grid-cols-3 gap-3">
-        <Fact label="Typical spend" value={place.price === null ? place.priceLabel : place.price === 0 ? "Free" : money(place.price, where)} />
-        <Fact label="Walk" value={walk(place.walkMinutes)} />
-        <Fact label="Confirmed by" value={place.verifiedBy > 0 ? `${place.verifiedBy} students` : "Not yet"} />
+        {/* Three facts, each of which the provider or our own rows actually
+            state. "Typical spend" was the first casualty of the rewrite: there
+            is no such figure, and there never was — it was written by hand. */}
+        <Fact label="Price band" value={priceLevelLabel(place.priceLevel)} hint={priceLevelNote(place.priceLevel)} />
+        <Fact label="Distance" value={describeProximity(place.proximity)} />
+        <Fact
+          label="Confirmed by"
+          value={place.confirmations > 0 ? `${place.confirmations} students` : "Nobody yet"}
+        />
       </dl>
 
       {/* ---- afford line --------------------------------------------------- */}
@@ -138,20 +169,52 @@ export default async function PlacePage(props: PageProps<"/discover/[id]">) {
 
       {/* ---- why ------------------------------------------------------------ */}
       <section className="mt-5 rounded-2xl bg-white p-5 shadow-[var(--shadow-flat)] ring-1 ring-ink-950/6">
-        <h2 className="text-[1.0625rem] font-semibold text-ink-950">Why students go</h2>
-        <p className="mt-2 text-[0.9375rem] leading-relaxed text-ink-700">{place.why}</p>
+        <h2 className="text-[1.0625rem] font-semibold text-ink-950">What is known</h2>
+        {/* There is no hand-written "why" any more. What is on the row
+            instead: the address, the chain, the reasons the value band was
+            built from, the opening hours if the provider published ones this
+            parser can read, and the rating if enough people are behind it.
+            Every line here is traceable to a field on the row. */}
+        <dl className="mt-2 flex flex-col gap-1.5 text-[0.9375rem] leading-relaxed text-ink-700">
+          {place.address ? <dd>{place.address}</dd> : null}
+          {place.brand && place.brand !== place.name ? <dd>Part of {place.brand}</dd> : null}
+          {place.value.reasons.length > 0 ? <dd>{place.value.reasons.join(" · ")}</dd> : null}
+          {!place.address && place.value.reasons.length === 0 ? (
+            <dd className="text-ink-500">
+              The provider has a name and a location for this and not much else. Nothing more is
+              claimed here than that.
+            </dd>
+          ) : null}
+        </dl>
+        <div className="mt-2.5 flex flex-wrap items-center gap-3">
+          <OpenState place={place} timezone={viewer.city.timezone} now={now} />
+          <ProviderRating place={place} />
+          {place.website ? (
+            <a
+              href={place.website}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-[0.8125rem] text-ink-500 underline underline-offset-4"
+            >
+              Website
+              <ExternalLink className="size-3" aria-hidden />
+            </a>
+          ) : null}
+        </div>
         <p className="mt-3 flex flex-wrap items-center gap-2 text-[0.8125rem]">
-          {isStudentVerified(place.verifiedBy) ? (
+          {isStudentVerified(place.confirmations) ? (
             <span className="inline-flex items-center gap-1.5 rounded-full bg-mint-soft px-3 py-1 font-medium text-mint-deep">
               <ShieldCheck className="size-3.5" />
-              Student verified · {place.verifiedBy} confirmations
+              Student verified · {place.confirmations} confirmations
             </span>
           ) : (
             <span className="text-ink-500">
-              Needs {10 - place.verifiedBy} more independent confirmations to be verified.
+              {place.confirmations === 0
+                ? "No student has confirmed anything here yet. Be the first."
+                : `Needs ${10 - place.confirmations} more independent confirmations to be verified.`}
             </span>
           )}
-          <span className="text-ink-400">{sourceLabel[place.source]}</span>
+          <PlaceSource place={place} now={now} />
         </p>
       </section>
 
@@ -195,10 +258,15 @@ export default async function PlacePage(props: PageProps<"/discover/[id]">) {
               Better value nearby
             </span>
             <span className="mt-0.5 block text-[1rem] font-semibold text-ink-950">
-              {better.place.name} · {money((better.place.price ?? 0), where)}
+              {better.place.name} · {priceLevelLabel(better.place.priceLevel)}
             </span>
             <span className="mt-0.5 block text-[0.8125rem] text-ink-700">
-              Saves {money(better.savingCents / 100, where)} a visit, {better.why}.
+              {/* A saving figure exists only when students reported prices at
+                  both ends. Otherwise the sentence says what is actually
+                  known: a cheaper band, and why it is a fair swap. */}
+              {better.savingCents !== null
+                ? `Saves about ${money(better.savingCents / 100, where)} a visit, from student reports. ${better.why}.`
+                : `A cheaper band, ${better.why}.`}
             </span>
           </span>
           <ArrowRight className="size-4 shrink-0 text-mint-deep" />
@@ -281,9 +349,9 @@ export default async function PlacePage(props: PageProps<"/discover/[id]">) {
   );
 }
 
-function Fact({ label, value }: { label: string; value: string }) {
+function Fact({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
-    <div className="rounded-xl bg-white p-3.5 ring-1 ring-ink-950/6">
+    <div className="rounded-xl bg-white p-3.5 ring-1 ring-ink-950/6" title={hint}>
       <dt className="font-mono text-micro uppercase tracking-[0.08em] text-ink-400">{label}</dt>
       <dd className="mt-1 text-[0.9375rem] font-medium text-ink-900">{value}</dd>
     </div>

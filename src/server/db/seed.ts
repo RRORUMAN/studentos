@@ -3,7 +3,6 @@ import "server-only";
 import { createHash } from "node:crypto";
 
 import { campuses, cities } from "@/data/cities";
-import { places } from "@/data/places";
 import { defaultPrivacy } from "@/domain/types";
 import { seedDemoAccount } from "@/server/db/seed-demo";
 import { rollSeededGigsForward, seedWork } from "@/server/db/seed-work";
@@ -581,5 +580,13 @@ export function rollSeededEventsForward(db: Database): number {
 export { seedId };
 export const seedChannelSlugs = loopChannels.map((channel) => channel.slug);
 export const seedCampusSlugs = campuses.map((campus) => campus.slug);
-export const seedPlaceCount = places.length;
+/**
+ * How many places a fresh install seeds: none, and permanently.
+ *
+ * Places are not seeded any more. They come from a provider at request time —
+ * see `src/server/places`. The constant stays because the setup script and the
+ * admin screen both report it, and it now reports the truth: there is no such
+ * thing as a seeded place, so there is no sample content to disclose here.
+ */
+export const seedPlaceCount = 0;
 export const seedGuideCount = seedGuides.length;

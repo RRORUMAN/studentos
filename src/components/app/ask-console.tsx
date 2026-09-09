@@ -30,6 +30,7 @@ import { askStudents } from "@/server/actions/questions";
 import { savePlanFromAnswer } from "@/server/actions/plans";
 import type { ToolCard, ToolResult } from "@/server/ai/tools";
 import { brand } from "@/brand/brand.config";
+import { formatDistance } from "@/domain/places";
 import { cn, money } from "@/lib/utils";
 
 /**
@@ -269,7 +270,7 @@ function StudentOSSays({
         <Understood text={result.understood} />
         <div className="mt-3 flex items-start gap-4">
           <MascotArt
-            state={afford ? (afford.verdict === "yes" ? "budget" : afford.verdict === "possibly" ? "thinking" : "concerned") : answer.totalCents === 0 ? "excited" : "neutral"}
+            state={afford ? (afford.verdict === "yes" ? "budget" : afford.verdict === "possibly" ? "thinking" : "concerned") : answer.cost.totalCents === 0 && answer.cost.estimateHighCents === 0 ? "excited" : "neutral"}
             className="size-12 shrink-0"
           />
           <div className="min-w-0 flex-1">
@@ -302,7 +303,7 @@ function StudentOSSays({
       {answer.lines.length > 0 ? (
         <ul className="divide-y divide-ink-100 border-t border-ink-100">
           {answer.lines.map((line, index) => {
-            const href = line.refKind === "place" ? `/discover/${line.refId}` : line.refKind === "event" ? `/events/${line.refId}` : null;
+            const href = line.refKind === "place" ? `/discover/${encodeURIComponent(line.refId ?? "")}` : line.refKind === "event" ? `/events/${line.refId}` : null;
             const body = (
               <>
                 <span className="tnum w-6 shrink-0 pt-0.5 font-mono text-[0.75rem] text-ink-400">{index + 1}</span>
@@ -310,11 +311,31 @@ function StudentOSSays({
                   <p className="text-[0.9375rem] font-medium text-ink-900">{line.title}</p>
                   <p className="mt-0.5 text-[0.8125rem] leading-snug text-ink-500">
                     {line.detail}
-                    {line.walkMinutes ? ` · ${line.walkMinutes} min walk` : ""}
+                    {line.metres !== null ? ` · ${formatDistance(line.metres)} away` : ""}
                   </p>
                 </div>
-                <span className={cn("tnum shrink-0 font-mono text-[0.9375rem] font-medium", line.priceCents === 0 ? "text-mint-deep" : "text-ink-900")}>
-                  {line.priceCents === 0 ? "Free" : money(line.priceCents / 100, where)}
+                {/* Three states, and they are different claims. A published
+                    price is money. An estimate is a range with its basis in
+                    the tooltip. Neither means the row says nothing about
+                    price, and it renders as that rather than as "Free". */}
+                <span
+                  className={cn(
+                    "tnum shrink-0 font-mono text-[0.9375rem] font-medium",
+                    line.priceCents === 0 ? "text-mint-deep" : "text-ink-900",
+                  )}
+                  title={
+                    line.estimateBasis === "city-anchor"
+                      ? "Estimated from this city's typical student prices, not from a menu."
+                      : undefined
+                  }
+                >
+                  {line.priceCents !== null
+                    ? line.priceCents === 0
+                      ? "Free"
+                      : money(line.priceCents / 100, where)
+                    : line.estimateCents
+                      ? `≈ ${money(line.estimateCents[0] / 100, where)}–${money(line.estimateCents[1] / 100, where)}`
+                      : "Not listed"}
                 </span>
               </>
             );
@@ -332,10 +353,29 @@ function StudentOSSays({
       ) : null}
 
       {answer.kind === "plan" && answer.lines.length > 0 ? (
-        <div className="flex items-baseline justify-between border-t border-ink-100 bg-paper-2/60 px-5 py-3.5">
-          <span className="font-mono text-micro uppercase tracking-[0.1em] text-ink-500">Total</span>
-          <span className="tnum font-mono text-[1.25rem] font-semibold text-ink-950">
-            {answer.totalCents === 0 ? "Free" : money(answer.totalCents / 100, where)}
+        <div className="flex items-baseline justify-between gap-4 border-t border-ink-100 bg-paper-2/60 px-5 py-3.5">
+          <span className="font-mono text-micro uppercase tracking-[0.1em] text-ink-500">
+            {answer.cost.estimateHighCents > 0 ? "Booked" : "Total"}
+          </span>
+          <span className="text-right">
+            <span className="tnum block font-mono text-[1.25rem] font-semibold text-ink-950">
+              {answer.cost.totalCents === 0 && answer.cost.estimateHighCents === 0
+                ? "Free"
+                : money(answer.cost.totalCents / 100, where)}
+            </span>
+            {/* The estimate is stated separately and always labelled. Adding
+                it into the figure above would make a guess look like a total. */}
+            {answer.cost.estimateHighCents > 0 ? (
+              <span className="tnum mt-0.5 block text-[0.8125rem] text-ink-500">
+                plus about {money(answer.cost.estimateLowCents / 100, where)}–
+                {money(answer.cost.estimateHighCents / 100, where)} estimated
+              </span>
+            ) : null}
+            {answer.cost.unpricedLines > 0 ? (
+              <span className="mt-0.5 block text-[0.8125rem] text-ink-400">
+                {answer.cost.unpricedLines} with no published price
+              </span>
+            ) : null}
           </span>
         </div>
       ) : null}

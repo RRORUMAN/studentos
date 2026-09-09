@@ -537,6 +537,11 @@ export function studentValue(signals: ValueSignals): StudentValue {
 
   if (counted < MIN_VALUE_SIGNALS) return { band: "insufficient", reasons: [] };
 
+  /* Five is deliberately above what two signals can reach even at their
+     maximum (two each). "Strong student value" is a claim that SEVERAL
+     different things agree — close and cheap and confirmed — and two of them
+     agreeing is "good". Without that floor, one nearby shop with a good rating
+     would look like the best place in the city. */
   const band: ValueBand = score >= 5 ? "strong" : score >= 2 ? "good" : "mixed";
   return { band, reasons: reasons.slice(0, 3) };
 }
@@ -683,3 +688,224 @@ export type PlaceCacheRow = {
   fetchedAt: string;
   expiresAt: string;
 };
+
+/* -------------------------------------------------------------------------- */
+/* Layers                                                                      */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The filter rails Explore shows, as a student thinks about them.
+ *
+ * A layer is not a category. "Cheap food" spans three categories and depends
+ * on a price level; "deals" is not a property of the place at all but of
+ * whether somebody verified an offer there. Keeping them apart is what lets
+ * the category taxonomy follow the providers while the filters follow the
+ * student.
+ */
+export type PlaceLayer =
+  | "for-you"
+  | "cheap-food"
+  | "groceries"
+  | "free"
+  | "deals"
+  | "study"
+  | "nightlife"
+  | "fitness"
+  | "culture"
+  | "everyday";
+
+/** Categories that always belong to a layer, whatever else is known. */
+const LAYER_CATEGORIES: Partial<Record<PlaceLayer, readonly PlaceCategory[]>> = {
+  groceries: ["supermarket", "grocery", "convenience", "market"],
+  "cheap-food": ["cheap-eat"],
+  study: ["library", "study-space", "coworking", "bookshop"],
+  nightlife: ["bar", "nightclub"],
+  fitness: ["gym", "pool", "park"],
+  culture: ["museum", "cinema"],
+  everyday: ["pharmacy", "clinic", "laundry", "bank", "atm", "post", "phone-shop", "bicycle"],
+  /* Free means free to walk into, not "cheap". A park and a public library
+     are; a museum charges in most of these cities and is not listed here
+     because the product would then be making a claim about a ticket price it
+     has not checked. */
+  free: ["park", "library"],
+};
+
+/**
+ * Which rails a place belongs on.
+ *
+ * `for-you` is deliberately absent: it is a fact about a student, not about a
+ * place, and it is computed by the recommender rather than stored here.
+ */
+export function layersFor(
+  category: PlaceCategory,
+  signals: { priceLevel: number | null; hasVerifiedDeal: boolean },
+): PlaceLayer[] {
+  const layers = new Set<PlaceLayer>();
+
+  for (const [layer, categories] of Object.entries(LAYER_CATEGORIES) as [
+    PlaceLayer,
+    readonly PlaceCategory[],
+  ][]) {
+    if (categories.includes(category)) layers.add(layer);
+  }
+
+  /* A restaurant or café earns "cheap food" only when the provider said it is
+     at the cheap end. With no price level it stays off the rail rather than
+     being added on the assumption that student food is cheap — that
+     assumption is how a €30 dinner ends up under "Under €10". */
+  if (signals.priceLevel !== null && signals.priceLevel <= 1) {
+    if (category === "restaurant" || category === "cafe") layers.add("cheap-food");
+  }
+
+  if (signals.hasVerifiedDeal) layers.add("deals");
+
+  return [...layers];
+}
+
+/* -------------------------------------------------------------------------- */
+/* Price                                                                       */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * A provider's price band, as a student reads it.
+ *
+ * Bands, not amounts. Google publishes a 1-to-4 level and OpenStreetMap
+ * publishes nothing, so an amount would have to be invented — which is what
+ * the old `priceLabel: "€8.50 bowl"` was, on twenty-five places nobody had
+ * been to. `null` renders as "Price not listed", which is the truth and is
+ * also what a student can act on: they will look at the menu either way.
+ */
+export function priceLevelLabel(level: number | null): string {
+  if (level === null) return "Price not listed";
+  return "€".repeat(Math.max(1, Math.min(4, level)));
+}
+
+export function priceLevelNote(level: number | null): string {
+  switch (level) {
+    case 1:
+      return "Cheap for the category";
+    case 2:
+      return "Mid-priced";
+    case 3:
+      return "Expensive";
+    case 4:
+      return "Very expensive";
+    default:
+      return "The provider did not state a price level";
+  }
+}
+
+/**
+ * How fresh the row is, in words.
+ *
+ * Every place carries `fetchedAt`, and a card that says when it was last
+ * checked is doing something a search result never does. Hours rather than
+ * minutes: a cache is measured in days and false precision on a timestamp is
+ * still false precision.
+ */
+export function freshnessLabel(fetchedAt: string, now: Date): string {
+  const ms = now.getTime() - Date.parse(fetchedAt);
+  if (!Number.isFinite(ms) || ms < 0) return "Checked just now";
+  const hours = Math.floor(ms / 3_600_000);
+  if (hours < 1) return "Checked in the last hour";
+  if (hours < 24) return `Checked ${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return days === 1 ? "Checked yesterday" : `Checked ${days} days ago`;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Projection                                                                  */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Web Mercator, normalised into a box.
+ *
+ * The map used to place a pin using `x` and `y` percentages written by hand
+ * next to each invented place, which meant the picture was a drawing: two
+ * shops on the same street could be at opposite corners and nothing would
+ * notice. Real coordinates need a real projection, and this is the smallest
+ * one that is correct — the same projection every tile server uses, so a
+ * marker computed here lands on the right building if a basemap is ever
+ * configured underneath it.
+ *
+ * `y` is inverted because screen coordinates grow downward and latitude grows
+ * upward, which is the one thing everybody gets wrong once.
+ */
+export function mercator(point: Coords): { x: number; y: number } {
+  const lat = Math.max(-85.05112878, Math.min(85.05112878, point.lat));
+  const sin = Math.sin((lat * Math.PI) / 180);
+  return {
+    x: (point.lng + 180) / 360,
+    y: 0.5 - Math.log((1 + sin) / (1 - sin)) / (4 * Math.PI),
+  };
+}
+
+export type Viewport = { west: number; east: number; north: number; south: number };
+
+/**
+ * A viewport that contains every point, with a margin, and never smaller than
+ * `minSpanMetres`.
+ *
+ * The floor matters: five supermarkets on one street would otherwise produce a
+ * viewport a hundred metres across, and the map would look like a city while
+ * showing a block. Below the floor the box is grown around its own centre.
+ */
+export function viewportFor(
+  points: readonly Coords[],
+  options: { marginFraction?: number; minSpanMetres?: number } = {},
+): Viewport | null {
+  if (points.length === 0) return null;
+
+  const margin = options.marginFraction ?? 0.12;
+  const minSpan = options.minSpanMetres ?? 600;
+
+  let west = Infinity;
+  let east = -Infinity;
+  let north = -Infinity;
+  let south = Infinity;
+
+  for (const point of points) {
+    west = Math.min(west, point.lng);
+    east = Math.max(east, point.lng);
+    south = Math.min(south, point.lat);
+    north = Math.max(north, point.lat);
+  }
+
+  const centre = { lat: (north + south) / 2, lng: (west + east) / 2 };
+  const minLatSpan = (minSpan / EARTH_RADIUS_M) * (180 / Math.PI);
+  const minLngSpan = minLatSpan / Math.max(0.01, Math.cos(toRad(centre.lat)));
+
+  let latSpan = Math.max(north - south, minLatSpan);
+  let lngSpan = Math.max(east - west, minLngSpan);
+  latSpan *= 1 + margin * 2;
+  lngSpan *= 1 + margin * 2;
+
+  return {
+    north: centre.lat + latSpan / 2,
+    south: centre.lat - latSpan / 2,
+    west: centre.lng - lngSpan / 2,
+    east: centre.lng + lngSpan / 2,
+  };
+}
+
+/**
+ * A point as a percentage of the viewport, ready for `left` and `top`.
+ *
+ * Returns null for anything outside, so a caller cannot accidentally pin
+ * something to the edge of the canvas and imply it is at the edge of the city.
+ */
+export function positionIn(point: Coords, viewport: Viewport): { left: number; top: number } | null {
+  const nw = mercator({ lat: viewport.north, lng: viewport.west });
+  const se = mercator({ lat: viewport.south, lng: viewport.east });
+  const here = mercator(point);
+
+  const width = se.x - nw.x;
+  const height = se.y - nw.y;
+  if (width <= 0 || height <= 0) return null;
+
+  const left = ((here.x - nw.x) / width) * 100;
+  const top = ((here.y - nw.y) / height) * 100;
+  if (left < 0 || left > 100 || top < 0 || top > 100) return null;
+
+  return { left, top };
+}

@@ -1,3 +1,12 @@
+import type {
+  DataConfidence,
+  PlaceCategory,
+  PlaceLayer as DomainPlaceLayer,
+  PlaceProviderId,
+  Proximity,
+  StudentValue,
+} from "@/domain/places";
+
 /**
  * ============================================================================
  * DOMAIN TYPES
@@ -84,6 +93,20 @@ export type CityContext = {
   mapSeed: number;
   /** True when a full `City` record with seeded content exists. */
   deep: boolean;
+  /**
+   * City centre, imported from Wikidata by `scripts/import-cities.mjs`.
+   *
+   * The origin of every place search, every distance and every map. Non-null
+   * for every city in the directory — `src/config/regions.ts` refuses to build
+   * one without it — and typed as nullable only so that a caller reading a
+   * city out of an old stored row is forced to handle its absence.
+   */
+  lat: number | null;
+  lng: number | null;
+  /** https://www.wikidata.org/wiki/<id> — provenance for the coordinate. */
+  wikidataId: string | null;
+  /** Municipality population. A city fact, never a student count. */
+  population: number | null;
 };
 
 export type Campus = {
@@ -136,41 +159,66 @@ export type LoopPost = {
   poll?: readonly { label: string; share: number }[];
 };
 
-export type PlaceLayer =
-  | "for-you"
-  | "cheap-food"
-  | "groceries"
-  | "free"
-  | "events"
-  | "deals"
-  | "study"
-  | "nightlife"
-  | "fitness";
+/**
+ * Re-exported from the domain, which is where the layer a place belongs to is
+ * decided. Kept here because a hundred components import it from this file.
+ */
+export type { PlaceLayer } from "@/domain/places";
 
+/**
+ * A place as a screen needs it: the provider's row, plus what StudentOS knows
+ * about it, plus how far away it is.
+ *
+ * WHAT THIS TYPE USED TO HAVE, AND WHY IT NO LONGER DOES. It had `price`, a
+ * euro figure nobody had checked; `priceLabel`, a sentence written around that
+ * figure; `walkMinutes`, a haversine dressed as routing; `studentValue`, a
+ * number from 0 to 100 computed from nothing; `verifiedBy`, a confirmation
+ * count with no students behind it; `why`, a hand-written recommendation; and
+ * `x`/`y`, a position on a drawing rather than a coordinate on the earth.
+ * Every one of them was invented, and together they made twenty-five made-up
+ * places look like the most authoritative screen in the product.
+ *
+ * What replaces them is narrower and true. `priceLevel` is the provider's own
+ * 1-to-4 band or null. `proximity` says how it was measured. `value` is a band
+ * with its reasons attached. `confirmations` and `saves` are counted from
+ * rows. And `lat`/`lng` are where the place actually is.
+ */
 export type Place = {
+  /** Provider-qualified: "osm:node/26472667", "google:ChIJ…". */
   id: string;
   citySlug: string;
   name: string;
+  /** Display label for the category, e.g. "Pharmacy". */
   category: string;
-  layers: readonly PlaceLayer[];
-  /** Typical student spend here, not the menu average. */
-  price: number | null;
-  priceLabel: string;
-  walkMinutes: number;
-  /** 0-100. Value for money as rated by students, shown as a bar not a star. */
-  studentValue: number;
-  /**
-   * A place is only "verified" once enough students independently confirm it.
-   * `verifiedBy` is the count behind the badge — the badge is never decorative.
-   */
-  verifiedBy: number;
-  /** Plain sentence explaining the recommendation. Always attributable. */
-  why: string;
-  /** Where the claim comes from, shown in the UI next to the recommendation. */
-  source: "students" | "official" | "venue" | "mixed";
-  /** Position on the stylised map canvas, 0-100 on each axis. */
-  x: number;
-  y: number;
+  categoryKey: PlaceCategory;
+  layers: readonly DomainPlaceLayer[];
+  /** The provider's own 1-4 price band. Null means the provider did not say. */
+  priceLevel: number | null;
+  /** How far, and how that was measured. Never a duration from a distance. */
+  proximity: Proximity;
+  /** A band and its reasons. Never a percentage. */
+  value: StudentValue;
+  /** Students who confirmed something here. Real rows; 0 shows nothing. */
+  confirmations: number;
+  /** Students who saved it. Real rows; 0 shows nothing. */
+  saves: number;
+  lat: number;
+  lng: number;
+  address: string | null;
+  brand: string | null;
+  website: string | null;
+  phone: string | null;
+  /** Verbatim from the provider. Rendered only when it can be parsed. */
+  openingHours: string | null;
+  rating: number | null;
+  ratingCount: number | null;
+  provider: PlaceProviderId;
+  /** The row at the provider, so anybody can check what we showed. */
+  sourceUrl: string;
+  /** Licence line the interface is required to render. */
+  attribution: string;
+  confidence: DataConfidence;
+  fetchedAt: string;
 };
 
 export type PlanItem = {

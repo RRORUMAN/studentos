@@ -279,7 +279,12 @@ function seedFor(slug: string): number {
 }
 
 function fromCoverage(entry: CoverageCity): CityContext {
-  const slug = entry.slug ?? citySlugFor(entry.name);
+  /* The coverage key IS the slug. It used to be derived from the display name,
+     which quietly disagreed with the key the geography import writes for every
+     city whose name has an accent in it -- "São Paulo" slugified one way and
+     was keyed another, so the join found nothing and the city had no
+     coordinate. One identifier, decided in one place. */
+  const slug = entry.key;
   return {
     slug,
     name: entry.name,
@@ -296,10 +301,17 @@ function fromCoverage(entry: CoverageCity): CityContext {
     transport: null,
     mapSeed: seedFor(slug),
     deep: false,
+    lat: entry.lat,
+    lng: entry.lng,
+    wikidataId: entry.wikidataId,
+    population: entry.population,
   };
 }
 
 function fromCity(city: City): CityContext {
+  /* A deep city takes its geography from the same import as every other city.
+     There is no second coordinate for the five that have seeded content. */
+  const coverage = allCoverageCities.find((entry) => entry.key === city.slug);
   return {
     slug: city.slug,
     name: city.name,
@@ -316,6 +328,10 @@ function fromCity(city: City): CityContext {
     transport: city.transport,
     mapSeed: city.mapSeed,
     deep: true,
+    lat: coverage?.lat ?? null,
+    lng: coverage?.lng ?? null,
+    wikidataId: coverage?.wikidataId ?? null,
+    population: coverage?.population ?? null,
   };
 }
 

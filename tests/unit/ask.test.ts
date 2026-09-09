@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { describeList, describePlan, parseAsk, parseBudgetCents } from "../../src/server/engines/ask.ts";
+import {
+  costOf,
+  describeList,
+  describePlan,
+  parseAsk,
+  parseBudgetCents,
+} from "../../src/server/engines/ask.ts";
 
 /**
  * ============================================================================
@@ -95,15 +101,46 @@ describe("parseAsk", () => {
 
 /* -------------------------------------------------------------------------- */
 
+/** A plan line with a published price. */
 const line = (title: string, priceCents: number) => ({
   kind: "activity" as const,
   title,
   detail: "",
   priceCents,
-  walkMinutes: null,
+  estimateCents: null,
+  estimateBasis: null,
+  metres: null,
   refKind: null,
   refId: null,
   source: "students" as const,
+});
+
+/** A plan line nobody published a price for, carrying a city-anchor estimate. */
+const estimated = (title: string, low: number, high: number) => ({
+  kind: "food" as const,
+  title,
+  detail: "",
+  priceCents: null,
+  estimateCents: [low, high] as [number, number],
+  estimateBasis: "city-anchor" as const,
+  metres: 400,
+  refKind: "place" as const,
+  refId: "osm:node/1",
+  source: "provider" as const,
+});
+
+/** A plan line with no price and no basis for estimating one. */
+const unpriced = (title: string) => ({
+  kind: "activity" as const,
+  title,
+  detail: "",
+  priceCents: null,
+  estimateCents: null,
+  estimateBasis: null,
+  metres: null,
+  refKind: null,
+  refId: null,
+  source: "provider" as const,
 });
 
 const fmt = (cents: number) => `€${(cents / 100).toFixed(2)}`;
@@ -112,7 +149,7 @@ describe("describePlan", () => {
   it("only claims free when every line is actually free", () => {
     const summary = describePlan({
       lines: [line("Prado", 0), line("Café", 220), line("Menú", 500)],
-      totalCents: 720,
+      cost: costOf([line("Prado", 0), line("Café", 220), line("Menú", 500)]),
       budgetCents: 2_000,
       formatMoney: fmt,
     });
@@ -124,7 +161,7 @@ describe("describePlan", () => {
   it("says all free when it genuinely is", () => {
     const summary = describePlan({
       lines: [line("Prado", 0), line("Retiro", 0)],
-      totalCents: 0,
+      cost: costOf([line("Prado", 0), line("Retiro", 0)]),
       budgetCents: 2_000,
       formatMoney: fmt,
     });
@@ -135,12 +172,55 @@ describe("describePlan", () => {
   it("reports the leftover against a stated budget", () => {
     const summary = describePlan({
       lines: [line("Menú", 500)],
-      totalCents: 500,
+      cost: costOf([line("Menú", 500)]),
       budgetCents: 2_000,
       formatMoney: fmt,
     });
 
     assert.match(summary, /€15\.00 left over/);
+  });
+
+  /* The three tests below are the reason `PlanCost` has three fields instead
+     of one number. Each is a different claim, and merging them was how a plan
+     came to announce a total for an evening nobody had priced. */
+
+  it("never merges an estimate into the total", () => {
+    const lines = [line("Prado", 0), estimated("Casa Paco", 800, 1_300)];
+    const summary = describePlan({
+      lines,
+      cost: costOf(lines),
+      budgetCents: 3_000,
+      formatMoney: fmt,
+    });
+
+    assert.match(summary, /about €8\.00–€13\.00/, "the estimate is stated as a range");
+    assert.match(summary, /estimate/i, "and it is labelled as an estimate");
+    assert.doesNotMatch(summary, /€13\.00 in total/, "never presented as a total");
+  });
+
+  it("does not claim a plan is free when nothing was priced", () => {
+    const lines = [unpriced("A supermarket"), unpriced("A park")];
+    const cost = costOf(lines);
+
+    assert.equal(cost.totalCents, 0);
+    assert.equal(cost.unpricedLines, 2);
+
+    const summary = describePlan({ lines, cost, budgetCents: 2_000, formatMoney: fmt });
+    assert.doesNotMatch(
+      summary,
+      /all of this is free/i,
+      "a zero total from unpriced rows is not a free plan",
+    );
+    assert.match(summary, /no published price/i);
+  });
+
+  it("keeps known money and estimated money apart in the cost", () => {
+    const cost = costOf([line("Ticket", 1_200), estimated("Dinner", 900, 1_500), unpriced("Walk")]);
+
+    assert.equal(cost.totalCents, 1_200);
+    assert.equal(cost.estimateLowCents, 900);
+    assert.equal(cost.estimateHighCents, 1_500);
+    assert.equal(cost.unpricedLines, 1);
   });
 });
 

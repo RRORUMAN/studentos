@@ -3,7 +3,8 @@ import { notFound } from "next/navigation";
 
 import { CityCollection } from "@/components/marketing/city-collection";
 import { cities, getCity } from "@/data/cities";
-import { placesForCity } from "@/data/places";
+import { requestDate } from "@/server/now";
+import { loadCityPlaces } from "@/server/queries/places";
 import { loopForCity } from "@/data/loop";
 
 export function generateStaticParams() {
@@ -39,15 +40,22 @@ export default async function ThingsToDoPage(props: PageProps<"/city/[slug]/thin
   const city = getCity(slug);
   if (!city) notFound();
 
-  const places = placesForCity(city.slug)
-    .filter((place) =>
-      place.layers.some((layer) =>
-        (["events", "nightlife", "free", "study"] as const).includes(
-          layer as "events" | "nightlife" | "free" | "study",
-        ),
-      ),
-    )
-    .sort((a, b) => b.studentValue - a.studentValue);
+  const now = requestDate();
+
+  const found = await loadCityPlaces({
+    citySlug: city.slug,
+    layers: ["culture", "nightlife", "free", "study"],
+    radiusMetres: 3_000,
+    limit: 24,
+  });
+  const bandOrder = { strong: 0, good: 1, mixed: 2, insufficient: 3 } as const;
+  const places = found.ok
+    ? [...found.places].sort(
+        (a, b) =>
+          bandOrder[a.value.band] - bandOrder[b.value.band] ||
+          a.proximity.metres - b.proximity.metres,
+      )
+    : [];
 
   const posts = loopForCity(city.slug).filter(
     (post) => post.kind === "event" || post.kind === "looking-for" || post.kind === "tip",
@@ -61,6 +69,9 @@ export default async function ThingsToDoPage(props: PageProps<"/city/[slug]/thin
       title={`Things to do in ${city.name}`}
       lead={`Not a list of landmarks. This is what students here actually do with a Tuesday and with a Saturday, ordered by what is worth the money rather than by what is nearest.`}
       places={places}
+      placesUnavailable={found.ok ? null : { message: found.message }}
+      attribution={found.ok ? found.attribution : null}
+      now={now}
       posts={posts}
       emptyTitle={`No listings for ${city.name} yet`}
       emptyBody="This page fills up from what students report, so it stays empty rather than being padded with the same attractions every guide already lists."

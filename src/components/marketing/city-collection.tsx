@@ -29,6 +29,9 @@ export function CityCollection({
   emptyBody,
   aside,
   method,
+  now,
+  placesUnavailable = null,
+  attribution = null,
 }: {
   city: City;
   active: string;
@@ -36,6 +39,10 @@ export function CityCollection({
   title: ReactNode;
   lead: ReactNode;
   places: readonly Place[];
+  /** Set when no place provider answered, so the page can say so. */
+  placesUnavailable?: { message: string } | null;
+  /** Licence line for whatever produced the rows. Rendered under the list. */
+  attribution?: string | null;
   posts: readonly LoopPost[];
   emptyTitle: string;
   emptyBody: string;
@@ -43,6 +50,8 @@ export function CityCollection({
   aside?: ReactNode;
   /** How this list is built. Printed on the page, not hidden in a tooltip. */
   method: string;
+  /** Passed in so the server and client agree on what "now" is. */
+  now: Date;
 }) {
   return (
     <>
@@ -79,9 +88,15 @@ export function CityCollection({
           <PlaceList
             className="mt-6"
             places={places}
+            timezone={city.timezone}
+            now={now}
+            unavailable={placesUnavailable ?? null}
             emptyTitle={emptyTitle}
             emptyBody={emptyBody}
           />
+          {attribution ? (
+            <p className="mt-3 text-xs text-ink-400">Place data: {attribution}</p>
+          ) : null}
           <Reveal>
             <p className="mt-6 max-w-2xl text-[0.8125rem] leading-relaxed text-ink-400">{method}</p>
           </Reveal>

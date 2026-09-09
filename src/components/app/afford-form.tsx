@@ -12,6 +12,8 @@ import type { Place } from "@/data/types";
 import { addTransaction } from "@/server/actions/budget";
 import { affordVerdictMeta, canAfford } from "@/server/engines/afford";
 import { betterOptionForSpend } from "@/server/engines/better-option";
+import { WALK_METRES_PER_MINUTE } from "@/server/engines/recommend";
+import { priceLevelLabel } from "@/domain/places";
 import type { BudgetReading } from "@/server/engines/budget";
 import { layersForCategory, parseAmount } from "@/server/engines/budget";
 import { cn, money } from "@/lib/utils";
@@ -106,7 +108,7 @@ export function AffordForm({
             layers: layersForCategory(category),
             citySlug,
             candidates: places,
-            maxWalkMinutes,
+            maxMetres: Math.max(400, maxWalkMinutes * WALK_METRES_PER_MINUTE),
           }),
     [amountCents, category, citySlug, places, maxWalkMinutes],
   );
@@ -285,14 +287,21 @@ export function AffordForm({
 
       {result && result.verdict !== "no-budget" && better ? (
         <Link
-          href={`/discover/${better.place.id}`}
+          href={`/discover/${encodeURIComponent(better.place.id)}`}
           className="flex items-center gap-4 rounded-2xl bg-white p-5 shadow-[var(--shadow-flat)] ring-1 ring-ink-950/6 transition-shadow hover:shadow-[var(--shadow-raise)]"
         >
           <span className="min-w-0 flex-1">
             <span className="font-mono text-micro uppercase tracking-[0.1em] text-mint-deep">Better option</span>
             <span className="mt-0.5 block text-[1rem] font-semibold text-ink-950">{better.place.name}</span>
             <span className="mt-0.5 block text-[0.8125rem] text-ink-600">
-              {money(better.place.price ?? 0, where)} · {better.why} · saves {fmt(better.savingCents)}
+              {/* A saving figure only exists when students reported prices at
+                  both ends. Without one the sentence says what is actually
+                  known — a cheaper band, and why it is a fair swap — rather
+                  than a number nobody measured. */}
+              {priceLevelLabel(better.place.priceLevel)} · {better.why}
+              {better.savingCents !== null
+                ? ` · saves about ${fmt(better.savingCents)}, from student reports`
+                : ""}
             </span>
           </span>
           <ArrowRight className="size-4 shrink-0 text-ink-400" />

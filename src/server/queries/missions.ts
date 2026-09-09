@@ -98,5 +98,5 @@ export async function loadMissionCandidates(viewer: Viewer, now: Date): Promise<
     loadScoredEvents(viewer.user.id, context, { when: "all" }),
     social ? loadOpenInvites({ userId: viewer.user.id, citySlug: viewer.profile.citySlug, now }) : Promise.resolve([]),
   ]);
-  return { places, events, invites };
+  return { places: places.places, events, invites };
 }

@@ -82,6 +82,15 @@ export interface PlaceProvider {
   /** Categories this provider can answer. Others are dropped before the call. */
   supports(category: PlaceCategory): boolean;
   search(query: PlaceQuery, signal: AbortSignal): Promise<PlaceProviderResult>;
+  /**
+   * Fetch specific rows by the provider's own identity.
+   *
+   * This is what makes a saved place a reference rather than a copy. We store
+   * `osm:node/26472667` and nothing else; when Saved renders, the row is
+   * fetched again, so a shop that closed or moved is not still on the screen
+   * a year later because we cached its name.
+   */
+  lookup(providerPlaceIds: readonly string[], signal: AbortSignal): Promise<readonly RealPlace[]>;
 }
 
 /**

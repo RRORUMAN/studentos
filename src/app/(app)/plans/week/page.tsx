@@ -63,7 +63,7 @@ export default async function WeekPage(props: PageProps<"/plans/week">) {
   const plan = planWeek({
     now,
     events,
-    places,
+    places: places.places,
     weekBudgetCents: money$.unset ? null : money$.reading.safeThisWeekCents,
     dials,
     formatMoney: (cents) => money(cents / 100, where),

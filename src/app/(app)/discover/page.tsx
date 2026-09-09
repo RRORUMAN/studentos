@@ -14,9 +14,10 @@ import { Upsell } from "@/components/app/upsell";
 import { MascotArt } from "@/components/mascot/mascot-art";
 import { TripPicker } from "@/components/app/trip-picker";
 import { Badge } from "@/components/ui/primitives";
-import { placeLayers } from "@/data/places";
+import { placeLayers } from "@/config/places";
 import { cityDirectory, resolveCity } from "@/data/cities";
 import type { Place, PlaceLayer } from "@/data/types";
+import { describeProximity } from "@/domain/places";
 import type { CityEvent } from "@/domain/types";
 import { recordUpgradeTrigger } from "@/server/actions/upgrade";
 import { isFlagOn } from "@/server/queries/settings";
@@ -97,16 +98,31 @@ const TABS: readonly Tab[] = [
     label: "Free",
     core: true,
     kind: "mixed",
-    place: (place) => place.price === 0,
+    /* "Free" is a claim about a ticket price, so for a place it means free to
+       walk into — a park, a public library — and not "cheap". The layer
+       decides, from the category, rather than a euro figure nobody published. */
+    place: hasLayer("free"),
     event: (event) => event.priceCents === 0,
   },
   {
     value: "under-10",
     label: "Under 10",
     core: true,
-    kind: "mixed",
-    place: (place) => place.price !== null && place.price * 100 <= UNDER_TEN_CENTS,
+    /* EVENTS ONLY, and this is the honest half of a tab that used to include
+       places. An event publishes a price and can be compared to ten euro. A
+       place publishes a BAND, and pretending a band is an amount is how a
+       €30 dinner ends up filed under "Under 10". Cheap places have their own
+       tab, which claims exactly what the provider said. */
+    kind: "events",
     event: (event) => event.priceCents <= UNDER_TEN_CENTS,
+  },
+  {
+    value: "cheap",
+    label: "Cheap",
+    core: true,
+    kind: "places",
+    /* The provider's own cheapest band. Not a promise about a euro figure. */
+    place: (place) => place.priceLevel !== null && place.priceLevel <= 1,
   },
   { value: "food", label: "Food", core: true, kind: "places", place: hasLayer("cheap-food") },
   { value: "groceries", label: "Groceries", core: false, kind: "places", place: hasLayer("groceries") },
@@ -134,7 +150,7 @@ const TABS: readonly Tab[] = [
     label: "Culture",
     core: false,
     kind: "mixed",
-    place: (place) => /museum|gallery|cinema|theatre|art/i.test(place.category),
+    place: hasLayer("culture"),
     event: hasTag("culture", "art", "museums", "cinema"),
   },
   {
@@ -142,11 +158,21 @@ const TABS: readonly Tab[] = [
     label: "Nature",
     core: false,
     kind: "mixed",
-    place: (place) => /park|garden|swim|pool|outdoor|river/i.test(`${place.category} ${place.why}`),
+    /* Category rather than a regular expression over a hand-written sentence.
+       The old test read `place.why`, which was prose somebody typed; a park is
+       a park because the provider tagged it as one. */
+    place: (place) => place.categoryKey === "park" || place.categoryKey === "pool",
     event: hasTag("outdoor", "nature", "cycling", "running"),
   },
 ];
 
+/**
+ * Price caps, which apply to EVENTS and DEALS only.
+ *
+ * A place has no amount to cap. The control is hidden on place-only tabs
+ * rather than rendered and quietly ignored — a filter that does nothing is
+ * worse than a missing one, because the student believes it worked.
+ */
 const CAPS = [
   { value: "free", cents: 0 },
   { value: "5", cents: 500 },
@@ -193,7 +219,13 @@ export default async function DiscoverPage(props: PageProps<"/discover">) {
   const citySlug = trip?.slug ?? viewer.profile.citySlug;
   const cityName = trip?.name ?? viewer.city.name;
   const timeZone = trip?.timezone ?? viewer.city.timezone;
-  const mapSeed = trip?.mapSeed ?? viewer.city.mapSeed;
+  /* The map's origin. Every city in the directory has one — `config/regions.ts`
+     refuses to build a city without a coordinate — so the fallbacks below are
+     for a stored city slug that has since been removed, not for a normal one. */
+  const centre = {
+    lat: trip?.lat ?? viewer.city.lat ?? 0,
+    lng: trip?.lng ?? viewer.city.lng ?? 0,
+  };
   const scopedProfile = trip
     ? { ...viewer.profile, citySlug: trip.slug, campusSlug: null, homePoint: null }
     : viewer.profile;
@@ -212,7 +244,7 @@ export default async function DiscoverPage(props: PageProps<"/discover">) {
     now,
   });
 
-  const [allPlaces, allEvents, deals, signals, savedKeys] = await Promise.all([
+  const [placeResults, allEvents, deals, signals, savedKeys] = await Promise.all([
     loadPlaces(context),
     loadScoredEvents(viewer.user.id, context, { when: "week" }),
     loadDeals(citySlug),
@@ -220,16 +252,26 @@ export default async function DiscoverPage(props: PageProps<"/discover">) {
     loadSavedKeys(viewer.user.id),
   ]);
 
+  const allPlaces = placeResults.places;
   const dealFor = dealsByPlace(deals);
 
   /* ---- the current view -------------------------------------------------- */
   const placeMatches = (scored: Scored<Place>) => {
     const place = scored.item;
     if (!tab.place?.(place)) return false;
-    if (capCents !== null && (place.price === null || place.price * 100 > capCents)) return false;
-    if (capValue === "free" && place.price !== 0) return false;
-    if (verified && place.verifiedBy < 10) return false;
-    if (needle && !`${place.name} ${place.category} ${place.why}`.toLowerCase().includes(needle)) return false;
+    /* The euro caps do not apply to places, because places have no euro price.
+       "Free" is the one that has a meaning here, and it means the free layer:
+       somewhere you can walk into without paying. */
+    if (capValue === "free" && !place.layers.includes("free")) return false;
+    if (verified && place.confirmations < 10) return false;
+    if (
+      needle &&
+      !`${place.name} ${place.category} ${place.brand ?? ""} ${place.address ?? ""}`
+        .toLowerCase()
+        .includes(needle)
+    ) {
+      return false;
+    }
     return true;
   };
 
@@ -302,13 +344,13 @@ export default async function DiscoverPage(props: PageProps<"/discover">) {
       id: place.id,
       name: place.name,
       category: place.category,
-      x: place.x,
-      y: place.y,
-      priceCents: place.price === null ? null : Math.round(place.price * 100),
-      priceLabel: place.priceLabel,
-      walkMinutes: place.walkMinutes,
-      studentValue: place.studentValue,
-      verifiedBy: place.verifiedBy,
+      lat: place.lat,
+      lng: place.lng,
+      priceLevel: place.priceLevel,
+      proximityLabel: describeProximity(place.proximity),
+      valueBand: place.value.band,
+      valueReasons: place.value.reasons,
+      confirmations: place.confirmations,
       match: scored.match,
       accent: placeLayers.find((layer) => layer.key === primary)?.accent ?? "signal",
       community: signals.savedByFriends.has(place.id)
@@ -421,7 +463,8 @@ export default async function DiscoverPage(props: PageProps<"/discover">) {
                 <li key={scored.item.id}>
                   <SmartPlaceCard
                     scored={scored}
-                    where={where}
+                    now={now}
+                    timezone={timeZone}
                     campusSaved={signals.savedByCampus.has(scored.item.id)}
                     friendsSaved={signals.savedByFriends.has(scored.item.id)}
                     saved={savedKeys.has(savedKey("place", scored.item.id))}
@@ -497,8 +540,8 @@ export default async function DiscoverPage(props: PageProps<"/discover">) {
 
       <DiscoverLayout
         places={mapPlaces}
-        seed={mapSeed}
-        where={where}
+        centre={centre}
+        attribution={placeResults.attribution}
         eventCount={events.length}
         filters={filters}
         aside={

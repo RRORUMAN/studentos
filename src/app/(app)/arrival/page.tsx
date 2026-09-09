@@ -106,7 +106,7 @@ export default async function ArrivalPage() {
   const activePhases = new Set(phasesForStage(stage));
 
   const startsOn = viewer.profile.arrivingOn ? new Date(viewer.profile.arrivingOn) : new Date(viewer.profile.createdAt);
-  const week = firstWeekPlan({ startsOn, places, freeEvents, doneTaskIds: doneIds, social, cityName: viewer.city.name });
+  const week = firstWeekPlan({ startsOn, places: places.places, freeEvents, doneTaskIds: doneIds, social, cityName: viewer.city.name });
 
   const allTasks = TIMELINE.flatMap((entry) => (entry.phase ? buildPhase(entry.phase) : []));
   const completed = allTasks.filter((task) => task.done).length;

@@ -7,13 +7,13 @@ import { Upsell } from "@/components/app/upsell";
 import { MascotArt } from "@/components/mascot/mascot-art";
 import { Badge } from "@/components/ui/primitives";
 import { cityDirectory, cityStatusLabel, cityStatusNote } from "@/data/cities";
-import { placesForCity } from "@/data/places";
+import { describeProximity, priceLevelLabel } from "@/domain/places";
+import { loadPlacesByIds } from "@/server/queries/places";
 import { recordUpgradeTrigger } from "@/server/actions/upgrade";
 import { findMany } from "@/server/db";
 import { loadCityEvents, loadDeals } from "@/server/queries/discovery";
 import { requestDate } from "@/server/now";
 import { requireViewer } from "@/server/viewer";
-import { money, walk } from "@/lib/utils";
 
 export const metadata: Metadata = {
   title: "My city",
@@ -36,7 +36,7 @@ export const metadata: Metadata = {
 export default async function MyCityPage() {
   const viewer = await requireViewer();
   const now = requestDate();
-  const where = viewer.currency;
+
   const city = viewer.city;
 
   const [saved, responses, groups, events, deals, envelopes] = await Promise.all([
@@ -48,8 +48,16 @@ export default async function MyCityPage() {
     findMany("envelopes", (row) => row.userId === viewer.user.id),
   ]);
 
-  const places = placesForCity(city.slug);
-  const savedPlaces = saved.filter((row) => row.kind === "place").map((row) => places.find((place) => place.id === row.targetId)).filter((place): place is NonNullable<typeof place> => Boolean(place));
+  /* Saved places are provider ids, resolved again here rather than read from
+     a copy we would otherwise have to keep in step with the world. */
+  const { places } = await loadPlacesByIds(
+    saved.filter((row) => row.kind === "place").map((row) => row.targetId),
+    city.slug,
+  );
+  const savedPlaces = saved
+    .filter((row) => row.kind === "place")
+    .map((row) => places.get(row.targetId))
+    .filter((place): place is NonNullable<typeof place> => Boolean(place));
   const cheap = savedPlaces.filter((place) => place.layers.includes("cheap-food") || place.layers.includes("groceries"));
   const study = savedPlaces.filter((place) => place.layers.includes("study"));
   const myEvents = responses.map((row) => events.find((event) => event.id === row.eventId)).filter((event): event is NonNullable<typeof event> => Boolean(event) && Date.parse(event!.startsAt) >= now.getTime());
@@ -94,12 +102,12 @@ export default async function MyCityPage() {
       <div className="mt-6 grid gap-4 sm:grid-cols-2">
         <Block title="My cheap places" icon={<Utensils className="size-4" />} href="/discover?tab=food" empty="Save a lunch spot or a supermarket and it lands here.">
           {cheap.slice(0, 4).map((place) => (
-            <Row key={place.id} href={`/discover/${place.id}`} title={place.name} meta={`${place.price === null ? place.priceLabel : money(place.price, where)} · ${walk(place.walkMinutes)}`} />
+            <Row key={place.id} href={`/discover/${encodeURIComponent(place.id)}`} title={place.name} meta={`${priceLevelLabel(place.priceLevel)} · ${describeProximity(place.proximity)}`} />
           ))}
         </Block>
         <Block title="My study spots" icon={<GraduationCap className="size-4" />} href="/discover?tab=study" empty="Nowhere saved to work yet.">
           {study.slice(0, 4).map((place) => (
-            <Row key={place.id} href={`/discover/${place.id}`} title={place.name} meta={`${walk(place.walkMinutes)} walk`} />
+            <Row key={place.id} href={`/discover/${encodeURIComponent(place.id)}`} title={place.name} meta={describeProximity(place.proximity)} />
           ))}
         </Block>
         <Block title="My events" icon={<CalendarDays className="size-4" />} href="/events" empty="Nothing you are going to yet.">

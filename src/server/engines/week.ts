@@ -1,6 +1,6 @@
 import type { Place } from "@/data/types";
 import type { Cents, CityEvent } from "@/domain/types";
-import type { Scored } from "@/server/engines/recommend";
+import { WALK_METRES_PER_MINUTE, type Scored } from "@/server/engines/recommend";
 
 /**
  * ============================================================================
@@ -124,21 +124,30 @@ export function planWeek(input: {
   /* Places have no date; they fill days events left open, and only the two
      best so the week does not become a list of cafés. */
   for (const scored of input.places.slice(0, 8)) {
-    const cents = scored.item.price === null ? 0 : Math.round(scored.item.price * 100);
+    /* A place contributes NO money to the week. It used to contribute a
+       hand-written price, which is how a week's budget came to include a
+       number for a café nobody had been to. Zero is correct here because the
+       week's total is money committed, and walking past a supermarket commits
+       none of it. */
+    const walkEquivalent = Math.round(scored.item.proximity.metres / WALK_METRES_PER_MINUTE);
     candidates.push({
       kind: "place",
       score:
-        adjust(scored.match, { priceCents: cents, tags: scored.item.layers, walk: scored.item.walkMinutes, dialSet }) -
-        6,
-      priceCents: cents,
-      walk: scored.item.walkMinutes,
+        adjust(scored.match, {
+          priceCents: 0,
+          tags: scored.item.layers,
+          walk: walkEquivalent,
+          dialSet,
+        }) - 6,
+      priceCents: 0,
+      walk: walkEquivalent,
       day: -1,
       dateIso: "",
       title: scored.item.name,
-      detail: scored.item.why,
+      detail: scored.item.value.reasons.join(" · ") || scored.item.category,
       reasons: scored.reasons,
       refId: scored.item.id,
-      href: `/discover/${scored.item.id}`,
+      href: `/discover/${encodeURIComponent(scored.item.id)}`,
       tags: scored.item.layers,
     });
   }

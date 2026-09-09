@@ -1,28 +1,74 @@
-import { Footprints, PackageOpen } from "lucide-react";
+import { PackageOpen, WifiOff } from "lucide-react";
 
-import { SourceNote, StudentVerified } from "@/components/product/verified";
+import {
+  Distance,
+  OpenState,
+  PlaceSource,
+  PriceBand,
+  ProviderRating,
+  StudentValue,
+  StudentVerified,
+} from "@/components/product/place-meta";
 import { ButtonLink } from "@/components/ui/button";
-import { Meter } from "@/components/ui/primitives";
 import { RevealGroup, RevealItem } from "@/components/ui/reveal";
 import type { Place } from "@/data/types";
-import { cn, walk } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 
 /**
- * Light-ground list of places, used on the city sub-pages. Same data and same
- * rules as the map's place card, laid out for reading rather than for tapping
- * a pin.
+ * Light-ground list of places. Same data and same rules as the dark card, laid
+ * out for reading rather than for tapping a pin.
+ *
+ * THREE EMPTY STATES, not one. A list with nothing in it can mean three
+ * different things and the old version drew all of them as "Nothing here yet":
+ *
+ *   nothing found   the provider answered and there is genuinely nothing of
+ *                   this kind nearby. A real answer.
+ *   unavailable     no provider could be reached. NOT an answer, and saying
+ *                   "nothing here" would be a false one.
+ *   no city         we have no coordinate for this city, so no search was made.
+ *
+ * `unavailable` is the one that matters. It is the difference between a
+ * student concluding there is no pharmacy near them and knowing our map is
+ * down.
  */
 export function PlaceList({
   places,
+  timezone,
+  now,
+  unavailable,
   emptyTitle = "Nothing here yet",
   emptyBody,
   className,
 }: {
   places: readonly Place[];
+  timezone: string;
+  now: Date;
+  /** Set when no provider answered. Rendered instead of the empty state. */
+  unavailable?: { message: string } | null;
   emptyTitle?: string;
   emptyBody?: string;
   className?: string;
 }) {
+  if (unavailable) {
+    return (
+      <div
+        className={cn(
+          "flex flex-col items-center gap-3 rounded-xl border border-dashed border-amber/40 bg-amber-soft/40 px-6 py-14 text-center",
+          className,
+        )}
+      >
+        <WifiOff className="size-6 text-amber-deep" aria-hidden />
+        <div>
+          <p className="text-[0.9375rem] font-medium text-ink-950">{unavailable.message}</p>
+          <p className="mx-auto mt-1.5 max-w-sm text-sm leading-relaxed text-ink-500">
+            This is our map service, not your connection. Places will come back on their own —
+            nothing here is a statement about what is actually near you.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   if (places.length === 0) {
     return (
       <div
@@ -62,33 +108,24 @@ export function PlaceList({
               <h3 className="mt-1 text-[0.9375rem] leading-snug font-semibold text-ink-950">
                 {place.name}
               </h3>
+              {place.address ? (
+                <p className="mt-0.5 truncate text-xs text-ink-400">{place.address}</p>
+              ) : null}
             </div>
-            <span
-              className={cn(
-                "tnum shrink-0 rounded-full px-2.5 py-1 font-mono text-sm font-medium",
-                place.price === 0 ? "bg-mint-soft text-mint-deep" : "bg-ink-100 text-ink-900",
-              )}
-            >
-              {place.priceLabel}
-            </span>
+            <PriceBand level={place.priceLevel} />
           </div>
 
-          <p className="mt-2.5 flex-1 text-[0.875rem] leading-relaxed text-ink-600">{place.why}</p>
-
-          <div className="mt-3.5">
-            <div className="flex items-center justify-between gap-3 text-xs text-ink-400">
-              <span className="inline-flex items-center gap-1.5">
-                <Footprints className="size-3.5" aria-hidden />
-                <span className="tnum">{walk(place.walkMinutes)}</span>
-              </span>
-              <span className="tnum">Student value {place.studentValue}/100</span>
-            </div>
-            <Meter value={place.studentValue} accent="signal" className="mt-2" label="Student value" />
+          <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+            <Distance place={place} />
+            <OpenState place={place} timezone={timezone} now={now} />
+            <ProviderRating place={place} />
           </div>
+
+          <StudentValue place={place} className="mt-3 flex-1" />
 
           <div className="mt-3.5 flex flex-wrap items-center justify-between gap-2 border-t border-ink-100 pt-3">
-            <StudentVerified count={place.verifiedBy} size="sm" />
-            <SourceNote source={place.source} />
+            <StudentVerified count={place.confirmations} size="sm" />
+            <PlaceSource place={place} now={now} />
           </div>
         </RevealItem>
       ))}

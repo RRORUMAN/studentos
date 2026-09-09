@@ -10,18 +10,16 @@ import { PlanView } from "@/components/product/plan-view";
 import { WaitlistForm } from "@/components/marketing/waitlist-form";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
-import { StudentVerified } from "@/components/product/verified";
 import { brand } from "@/brand/brand.config";
 import { plans as pricingPlans, type PlanKey } from "@/config/pricing";
 import { arrivalTasksFor } from "@/data/arrival";
 import { campusesForCity, cities, cityStatusLabel, getCity } from "@/data/cities";
 import { UniversityPicker, type UniversityChoice } from "@/components/onboarding/university-picker";
 import { heroPlans, planTotal } from "@/data/plans";
-import { placesForCity } from "@/data/places";
 import { loopSummaries } from "@/data/loop";
 import type { PlaceLayer } from "@/data/types";
 import { duration, ease, spring } from "@/lib/motion";
-import { cn, money, walk } from "@/lib/utils";
+import { cn, money } from "@/lib/utils";
 import { track } from "@/services/analytics";
 
 /* -------------------------------------------------------------------------- */
@@ -35,7 +33,7 @@ const INTERESTS: readonly { key: string; label: string; layers: readonly PlaceLa
   { key: "sport", label: "Sport", layers: ["fitness"] },
   { key: "study", label: "Study spots", layers: ["study"] },
   { key: "markets", label: "Markets and groceries", layers: ["groceries"] },
-  { key: "events", label: "Events", layers: ["events"] },
+  { key: "events", label: "Events", layers: ["culture"] },
   { key: "deals", label: "Deals", layers: ["deals"] },
 ];
 
@@ -459,13 +457,14 @@ function Result({
     return affordable[0] ?? heroPlans.find((candidate) => candidate.id === "free-tonight")!;
   }, [daily]);
 
-  const layers = new Set(
-    interests.flatMap((key) => INTERESTS.find((item) => item.key === key)?.layers ?? []),
-  );
-  const matches = placesForCity(citySlug)
-    .filter((place) => place.layers.some((layer) => layers.has(layer)))
-    .sort((a, b) => b.studentValue - a.studentValue)
-    .slice(0, 3);
+  /* NO PLACE PREVIEW HERE, and deliberately.
+     This step used to end with three places, taken from the hand-written list
+     so that the last screen of onboarding looked full. Real places come from a
+     provider, which is a network call this client component cannot make, and
+     more to the point: a student has not told us where they live yet, so the
+     three would be picked from the middle of the city. The summary below shows
+     what onboarding actually established, and the places are on Today, ranked
+     against everything they just told us. */
 
   return (
     <motion.div
@@ -518,7 +517,7 @@ function Result({
         </AppSurface>
 
         <div className="flex flex-col gap-4">
-          {/* matches */}
+          {/* what onboarding established */}
           <div className="rounded-xl border border-ink-200 bg-paper-2 p-5">
             <p className="font-mono text-micro uppercase tracking-[0.12em] text-ink-400">
               Because you picked{" "}
@@ -527,29 +526,17 @@ function Result({
                 .filter(Boolean)
                 .join(", ")}
             </p>
-            {matches.length > 0 ? (
-              <ul className="mt-3 flex flex-col gap-3">
-                {matches.map((place) => (
-                  <li key={place.id} className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-[0.9375rem] font-medium text-ink-950">{place.name}</p>
-                      <p className="mt-0.5 text-[0.8125rem] text-ink-500">
-                        <span className="tnum">{walk(place.walkMinutes)}</span> ·{" "}
-                        {place.priceLabel}
-                      </p>
-                      <div className="mt-1.5">
-                        <StudentVerified count={place.verifiedBy} size="sm" />
-                      </div>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="mt-3 text-sm leading-relaxed text-ink-500">
-                Nothing seeded for that combination in {city?.name} yet. In the product this is
-                where your first recommendations would come from your own campus feed.
-              </p>
-            )}
+            {/* This block used to list three places. They came from the
+                hand-written place file so the last screen of onboarding looked
+                full, and they were picked before the student had said where
+                they live — so even as a preview they were showing the middle
+                of the city. Real places are one request away, on Today, ranked
+                against everything just entered. Saying that is better than
+                three names nobody chose. */}
+            <p className="mt-3 text-sm leading-relaxed text-ink-600">
+              Your first list is built when you open {brand.name}: real places near where you are
+              staying, ordered by what you just told us. Nothing is picked in advance.
+            </p>
           </div>
 
           {/* pulse */}

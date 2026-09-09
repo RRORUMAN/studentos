@@ -7,7 +7,8 @@ import { SaveButton } from "@/components/app/save-button";
 import { UpsellLine } from "@/components/app/upsell";
 import { MascotArt } from "@/components/mascot/mascot-art";
 import { Badge } from "@/components/ui/primitives";
-import { placesForCity } from "@/data/places";
+import { describeProximity, priceLevelLabel } from "@/domain/places";
+import { loadPlacesByIds } from "@/server/queries/places";
 import type { Place } from "@/data/types";
 import type { CityEvent, SavedItem } from "@/domain/types";
 import { loadCityEvents, loadDeals } from "@/server/queries/discovery";
@@ -15,7 +16,7 @@ import { findMany } from "@/server/db";
 import { requestDate } from "@/server/now";
 import { requireViewer } from "@/server/viewer";
 import { fmtWhen } from "@/lib/dates";
-import { cn, money, walk } from "@/lib/utils";
+import { cn, money } from "@/lib/utils";
 
 export const metadata: Metadata = {
   title: "Saved",
@@ -65,13 +66,20 @@ export default async function SavedPage(props: PageProps<"/saved">) {
     findMany("posts", (row) => row.citySlug === viewer.profile.citySlug && row.hiddenAt === null),
   ]);
 
-  const places = placesForCity(viewer.profile.citySlug);
+  /* A saved place is a provider id and nothing else, so the rows are fetched
+     again here rather than read from a copy. A shop that closed since it was
+     saved stops resolving, and drops off this screen instead of sitting on it
+     with a name we cached a year ago. */
+  const { places } = await loadPlacesByIds(
+    saved.filter((row) => row.kind === "place").map((row) => row.targetId),
+    viewer.profile.citySlug,
+  );
   const quota = viewer.entitlements.quotas.savedItems;
 
   const resolved: Resolved[] = saved
     .map((item): Resolved | null => {
       if (item.kind === "place") {
-        const place = places.find((row) => row.id === item.targetId);
+        const place = places.get(item.targetId);
         return place ? { saved: item, kind: "place", place } : null;
       }
       if (item.kind === "event") {
@@ -113,7 +121,7 @@ export default async function SavedPage(props: PageProps<"/saved">) {
   const smart: { key: string; label: string; emoji: string; test: (entry: Resolved) => boolean }[] = [
     { key: "cheap-eats", label: "Cheap Eats", emoji: "🍜", test: (entry) => entry.kind === "place" && entry.place.layers.includes("cheap-food") },
     { key: "want-to-go", label: "Want To Go", emoji: "🎟️", test: (entry) => entry.kind === "event" && Date.parse(entry.event.startsAt) >= now.getTime() },
-    { key: "free", label: "Free Stuff", emoji: "🎁", test: (entry) => (entry.kind === "place" && entry.place.price === 0) || (entry.kind === "event" && entry.event.priceCents === 0) || (entry.kind === "listing" && entry.priceCents === 0) },
+    { key: "free", label: "Free Stuff", emoji: "🎁", test: (entry) => (entry.kind === "place" && entry.place.layers.includes("free")) || (entry.kind === "event" && entry.event.priceCents === 0) || (entry.kind === "listing" && entry.priceCents === 0) },
     { key: "study", label: "Study", emoji: "📚", test: (entry) => entry.kind === "place" && entry.place.layers.includes("study") },
     { key: "weekend", label: "This Weekend", emoji: "🗓️", test: (entry) => entry.kind === "event" && Date.parse(entry.event.startsAt) >= now.getTime() && Date.parse(entry.event.startsAt) <= weekendEnd },
     { key: "deals", label: "Deals", emoji: "🏷️", test: (entry) => entry.kind === "deal" },
@@ -222,8 +230,8 @@ export default async function SavedPage(props: PageProps<"/saved">) {
               {entry.kind === "place" ? (
                 <>
                   <Link href={`/discover/${entry.place.id}`} className="mt-3 text-[1rem] font-semibold text-ink-950 hover:underline">{entry.place.name}</Link>
-                  <p className="mt-0.5 text-[0.8125rem] text-ink-500">{entry.place.category} · {walk(entry.place.walkMinutes)} walk</p>
-                  <p className="mt-1.5 text-[0.875rem] font-medium text-ink-800">{entry.place.price === null ? entry.place.priceLabel : entry.place.price === 0 ? "Free" : money(entry.place.price, where)}</p>
+                  <p className="mt-0.5 text-[0.8125rem] text-ink-500">{entry.place.category} · {describeProximity(entry.place.proximity)}</p>
+                  <p className="mt-1.5 text-[0.875rem] font-medium text-ink-800">{priceLevelLabel(entry.place.priceLevel)}</p>
                 </>
               ) : entry.kind === "event" ? (
                 <>

@@ -151,6 +151,14 @@ let lastGood: string | null = null;
 const USER_AGENT =
   "StudentOS/1.0 (+https://github.com/RRORUMAN/studentos; places for international students)";
 
+/**
+ * The licence line, written once.
+ *
+ * ODbL requires it wherever the data appears, and it travels on every row as a
+ * field rather than being added by whichever component remembered.
+ */
+const ATTRIBUTION = "© OpenStreetMap contributors";
+
 /* -------------------------------------------------------------------------- */
 /* Query                                                                       */
 /* -------------------------------------------------------------------------- */
@@ -184,6 +192,41 @@ export function buildQuery(query: PlaceQuery): string {
     .join("\n");
 
   return `[out:json][timeout:${SERVER_TIMEOUT_S}];\n(\n${clauses}\n);\nout center ${Math.min(query.limit * 3, 400)};`;
+}
+
+/**
+ * Fetch specific objects by their OpenStreetMap identity.
+ *
+ * `node/26472667` is a permanent, public, citable identity, which is exactly
+ * why a saved place stores one and not a copy of the shop. This turns a set of
+ * them back into rows.
+ *
+ * Objects are grouped by type so the query is three statements at most rather
+ * than one per id — a student with forty saved places would otherwise make
+ * forty statements, and Overpass would be right to refuse.
+ */
+export function buildLookupQuery(providerPlaceIds: readonly string[]): string {
+  const byType = new Map<string, string[]>();
+
+  for (const id of providerPlaceIds) {
+    const [type, value] = id.split("/");
+    /* Anything that is not a plain numeric id of a known object type is
+       dropped rather than interpolated. This string goes into a query
+       language, and an id that arrived from a stored row is not trusted to be
+       what we wrote there. */
+    if (!type || !value || !/^[0-9]+$/.test(value)) continue;
+    if (type !== "node" && type !== "way" && type !== "relation") continue;
+    const held = byType.get(type);
+    if (held) held.push(value);
+    else byType.set(type, [value]);
+  }
+
+  const clauses = [...byType.entries()]
+    .map(([type, ids]) => `  ${type}(id:${ids.join(",")});`)
+    .join("\n");
+
+  if (!clauses) return "";
+  return `[out:json][timeout:${SERVER_TIMEOUT_S}];\n(\n${clauses}\n);\nout center;`;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -298,13 +341,87 @@ export function parseElements(
 /* The provider                                                                */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * Send one Overpass query, trying each endpoint until one answers.
+ *
+ * Shared by search and lookup because the failure handling is the whole point
+ * and having it twice is how the second copy stops checking the content type.
+ */
+async function run(
+  endpoints: readonly string[],
+  body: string,
+  signal: AbortSignal,
+): Promise<{ places: RealPlace[]; endpoint: string; tookMs: number }> {
+  const started = Date.now();
+  const failures: string[] = [];
+
+  const ordered =
+    lastGood && endpoints.includes(lastGood)
+      ? [lastGood, ...endpoints.filter((candidate) => candidate !== lastGood)]
+      : endpoints;
+
+  for (const endpoint of ordered) {
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+          accept: "application/json",
+          "user-agent": USER_AGENT,
+        },
+        body: new URLSearchParams({ data: body }),
+        /* The caller's abort AND this endpoint's own deadline, whichever fires
+           first, so one slow instance cannot spend the whole search's budget.
+           A single shared budget was the first version, and it meant the busy
+           canonical instance absorbed all of it and the second endpoint was
+           never asked — a failover that never fires is not a failover. */
+        signal: AbortSignal.any([signal, AbortSignal.timeout(ENDPOINT_TIMEOUT_MS)]),
+        cache: "no-store",
+      });
+
+      if (response.status === 429 || response.status === 504) {
+        throw new ProviderRefused("osm", response.status, `${endpoint} is rate limiting`);
+      }
+      if (!response.ok) {
+        throw new Error(`${endpoint} returned ${response.status} ${response.statusText}`);
+      }
+
+      /* A busy instance answers 200 with an HTML error page. Reading the
+         content type is the only way to tell that apart from data, and
+         skipping the check produces a JSON parse error whose message says
+         nothing useful to whoever is looking at the health screen. */
+      const contentType = response.headers.get("content-type") ?? "";
+      if (!contentType.includes("json")) {
+        const text = (await response.text()).slice(0, 400);
+        const reason = /Error<\/strong>:\s*([^<]+)/.exec(text)?.[1]?.trim() ?? "not JSON";
+        throw new ProviderRefused("osm", response.status, `${endpoint}: ${reason}`);
+      }
+
+      const payload = (await response.json()) as { elements?: OverpassElement[] };
+      const places = parseElements(
+        payload.elements ?? [],
+        new Date().toISOString(),
+        ATTRIBUTION,
+      );
+
+      lastGood = endpoint;
+      return { places, endpoint, tookMs: Date.now() - started };
+    } catch (error) {
+      if (signal.aborted) throw error;
+      failures.push(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  throw new Error(failures.join("; ") || "no Overpass endpoint configured");
+}
+
 export function overpassProvider(): PlaceProvider {
   const endpoints = env.places.overpassUrl ? [env.places.overpassUrl] : [...DEFAULT_ENDPOINTS];
 
   return {
     id: "osm",
     label: "OpenStreetMap (Overpass)",
-    attribution: "© OpenStreetMap contributors",
+    attribution: ATTRIBUTION,
 
     status: () => ({
       configured: true,
@@ -313,67 +430,15 @@ export function overpassProvider(): PlaceProvider {
 
     supports: (category) => (OSM_TAGS[category] ?? []).length > 0,
 
+    async lookup(providerPlaceIds, signal) {
+      const body = buildLookupQuery(providerPlaceIds);
+      if (!body) return [];
+      const { places } = await run(endpoints, body, signal);
+      return places;
+    },
+
     async search(query, signal): Promise<PlaceProviderResult> {
-      const body = buildQuery(query);
-      const started = Date.now();
-      const failures: string[] = [];
-
-      const ordered =
-        lastGood && endpoints.includes(lastGood)
-          ? [lastGood, ...endpoints.filter((candidate) => candidate !== lastGood)]
-          : endpoints;
-
-      for (const endpoint of ordered) {
-        try {
-          const response = await fetch(endpoint, {
-            method: "POST",
-            headers: {
-              "content-type": "application/x-www-form-urlencoded",
-              accept: "application/json",
-              "user-agent": USER_AGENT,
-            },
-            body: new URLSearchParams({ data: body }),
-            /* The caller's abort AND this endpoint's own deadline, whichever
-               fires first, so one slow instance cannot spend the whole
-               search's budget. */
-            signal: AbortSignal.any([signal, AbortSignal.timeout(ENDPOINT_TIMEOUT_MS)]),
-            cache: "no-store",
-          });
-
-          if (response.status === 429 || response.status === 504) {
-            throw new ProviderRefused("osm", response.status, `${endpoint} is rate limiting`);
-          }
-          if (!response.ok) {
-            throw new Error(`${endpoint} returned ${response.status} ${response.statusText}`);
-          }
-
-          /* A busy instance answers 200 with an HTML error page. Reading the
-             content type is the only way to tell that apart from data, and
-             skipping the check produces a JSON parse error whose message says
-             nothing useful to whoever is looking at the health screen. */
-          const contentType = response.headers.get("content-type") ?? "";
-          if (!contentType.includes("json")) {
-            const text = (await response.text()).slice(0, 400);
-            const reason = /Error<\/strong>:\s*([^<]+)/.exec(text)?.[1]?.trim() ?? "not JSON";
-            throw new ProviderRefused("osm", response.status, `${endpoint}: ${reason}`);
-          }
-
-          const payload = (await response.json()) as { elements?: OverpassElement[] };
-          const places = parseElements(
-            payload.elements ?? [],
-            new Date().toISOString(),
-            "© OpenStreetMap contributors",
-          );
-
-          lastGood = endpoint;
-          return { places, endpoint, tookMs: Date.now() - started };
-        } catch (error) {
-          if (signal.aborted) throw error;
-          failures.push(error instanceof Error ? error.message : String(error));
-        }
-      }
-
-      throw new Error(failures.join("; ") || "no Overpass endpoint configured");
+      return run(endpoints, buildQuery(query), signal);
     },
   };
 }

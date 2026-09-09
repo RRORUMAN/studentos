@@ -3,7 +3,8 @@ import "server-only";
 import { cache } from "react";
 
 import { defaultCityContext, getCampus, resolveCity } from "@/data/cities";
-import { placesForCity } from "@/data/places";
+import { describeProximity } from "@/domain/places";
+import { loadCityPlaces, loadPlacesByIds } from "@/server/queries/places";
 import type { ChatAttachment, CommunityPost, Profile } from "@/domain/types";
 import { findMany, findOne } from "@/server/db";
 import {
@@ -298,9 +299,16 @@ export async function resolveAttachment(
         : null;
     }
     case "place": {
-      const place = placesForCity(citySlug).find((row) => row.id === id);
+      const { places } = await loadPlacesByIds([id], citySlug);
+      const place = places.get(id);
       return place
-        ? { kind: "place", id, title: place.name, meta: `${place.category} · ${place.priceLabel} · ${place.walkMinutes} min walk`, href: `/discover/${id}` }
+        ? {
+            kind: "place",
+            id,
+            title: place.name,
+            meta: `${place.category} · ${describeProximity(place.proximity)}`,
+            href: `/discover/${encodeURIComponent(id)}`,
+          }
         : null;
     }
     case "deal": {
@@ -390,9 +398,19 @@ export async function loadAttachables(citySlug: string, where: Where): Promise<A
     findMany("listings", (row) => row.citySlug === citySlug && row.status === "active"),
   ]);
 
-  const places = placesForCity(citySlug)
+  /* The attachment picker: what a student can drop into a message. Provider
+     rows, ordered by the value band the domain computed, and simply empty when
+     no provider answered — an attachment list that fails to load is a missing
+     list, not a claim that the city has nowhere in it. */
+  const nearbyPlaces = await loadCityPlaces({ citySlug, radiusMetres: 2_500, limit: 40 });
+  const bandOrder = { strong: 0, good: 1, mixed: 2, insufficient: 3 } as const;
+  const places = (nearbyPlaces.ok ? nearbyPlaces.places : [])
     .slice()
-    .sort((a, b) => b.studentValue - a.studentValue)
+    .sort(
+      (a, b) =>
+        bandOrder[a.value.band] - bandOrder[b.value.band] ||
+        a.proximity.metres - b.proximity.metres,
+    )
     .slice(0, 16);
 
   return [
@@ -410,8 +428,8 @@ export async function loadAttachables(citySlug: string, where: Where): Promise<A
       kind: "place",
       id: place.id,
       title: place.name,
-      meta: `${place.category} · ${place.priceLabel}`,
-      href: `/discover/${place.id}`,
+      meta: `${place.category} · ${describeProximity(place.proximity)}`,
+      href: `/discover/${encodeURIComponent(place.id)}`,
     })),
     ...deals.slice(0, 16).map<AttachmentCard>((deal) => ({
       kind: "deal",

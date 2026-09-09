@@ -20,6 +20,8 @@ import {
   followUps,
   parseAsk,
   type ParsedAsk,
+  costOf,
+  type PlanCost,
 } from "@/server/engines/ask";
 import { QuotaError, readQuota } from "@/server/entitlements";
 import { recordOutcome, recordSearchMiss } from "@/server/actions/insight";
@@ -264,7 +266,7 @@ export async function askStudentOS(query: string): Promise<AskResult> {
   /* ---- assemble (Tier 0) ------------------------------------------------- */
   const wantsPlan = parsed.intent === "plan-night" || parsed.intent === "plan-day" || parsed.intent === "plan-weekend";
 
-  let assembled: { lines: AskLine[]; totalCents: number };
+  let assembled: { lines: AskLine[]; cost: PlanCost };
   if (wantsPlan) {
     /* The plan builder needs the scored rows rather than the flattened cards,
        because it reasons about layers and price bands. Same retrieval, one
@@ -282,18 +284,28 @@ export async function askStudentOS(query: string): Promise<AskResult> {
         freeOnly: parsed.freeOnly,
         maxPriceCents: parsed.budgetCents,
       }),
-      loadPlaces(context, { freeOnly: parsed.freeOnly, maxPriceCents: parsed.budgetCents }),
+      /* `maxPriceCents` is gone: no place provider publishes an amount to
+         compare a budget against. A tight budget now steers the ranking
+         through `priceSensitivity` inside the engine, and `cheapOnly` is the
+         explicit filter when the student asked for cheap. */
+      loadPlaces(context, { freeOnly: parsed.freeOnly, cheapOnly: parsed.cheaper }),
     ]);
     assembled = assemblePlan({
       budgetCents,
       events,
-      places,
+      places: places.places,
       fareCents: Math.round((viewer.city.anchors?.singleFare ?? 0) * 100),
+      /* The city's own curated price anchors. Null for a city that has none,
+         and then a food stop carries no figure rather than a guessed one. */
+      anchors: viewer.city.anchors
+        ? { lunch: viewer.city.anchors.lunch, pint: viewer.city.anchors.pint }
+        : null,
       wantsFood: true,
       cheaper: parsed.cheaper,
     });
   } else {
-    assembled = { lines: cardsToLines(tools), totalCents: 0 };
+    const lines = cardsToLines(tools);
+    assembled = { lines, cost: costOf(lines) };
   }
 
   const students = await studentsSay(viewer.profile.citySlug, parsed);
@@ -327,7 +339,7 @@ export async function askStudentOS(query: string): Promise<AskResult> {
             ? `Nothing in ${viewer.city.name} fits that budget in our rows right now. Try widening it, or ask for free things.`
             : `We do not have rows for that in ${viewer.city.name} yet. It has been noted.`),
         lines: [],
-        totalCents: 0,
+        cost: { totalCents: 0, estimateLowCents: 0, estimateHighCents: 0, unpricedLines: 0 },
         parsed,
         sources: [],
         missReason: "no-candidates",
@@ -339,7 +351,7 @@ export async function askStudentOS(query: string): Promise<AskResult> {
   const deterministic = afford
     ? afford.headline
     : wantsPlan
-      ? describePlan({ lines: assembled.lines, totalCents: assembled.totalCents, budgetCents, formatMoney: fmt })
+      ? describePlan({ lines: assembled.lines, cost: assembled.cost, budgetCents, formatMoney: fmt })
       : hasFigures && assembled.lines.length === 0
         ? figureSummary(tools, parsed)
         : describeList({ lines: assembled.lines, formatMoney: fmt, cityName: viewer.city.name });
@@ -362,8 +374,13 @@ export async function askStudentOS(query: string): Promise<AskResult> {
         scope: `${viewer.profile.citySlug}:${parsed.intent}:${parsed.when}:${parsed.freeOnly}:${parsed.budgetCents ?? "none"}`,
         domain: "general",
         payload: {
-          lines: assembled.lines.map((line) => ({ title: line.title, price: line.priceCents, detail: line.detail })),
-          total: assembled.totalCents,
+          lines: assembled.lines.map((line) => ({
+            title: line.title,
+            price: line.priceCents,
+            estimate: line.estimateCents,
+            detail: line.detail,
+          })),
+          total: assembled.cost.totalCents,
           budget: budgetCents,
         },
         system: BASE_SYSTEM,
@@ -371,9 +388,11 @@ export async function askStudentOS(query: string): Promise<AskResult> {
           `Question: ${query}`,
           `Rows selected (do not add to these):`,
           JSON.stringify(assembled.lines, null, 1),
-          `Total: ${assembled.totalCents} cents. Budget: ${budgetCents ?? "unstated"}.`,
+          `Known total: ${assembled.cost.totalCents} cents. Estimated on top: ${assembled.cost.estimateLowCents}-${assembled.cost.estimateHighCents} cents. Budget: ${budgetCents ?? "unstated"}.`,
           "",
-          "Write two short sentences summarising this. State the total.",
+          "Write two short sentences summarising this. State the known total.",
+          "If there is an estimate, say it is an estimate from typical city prices.",
+          "Never merge the known total and the estimate into one figure.",
           "<<render>>",
           deterministic,
         ].join("\n"),
@@ -421,10 +440,10 @@ export async function askStudentOS(query: string): Promise<AskResult> {
     kind: afford ? "figures" : wantsPlan ? "plan" : assembled.lines.length === 0 && hasFigures ? "figures" : "list",
     title: afford
       ? `${fmt(afford.amountCents)} — ${afford.verdict === "yes" ? "yes" : afford.verdict === "possibly" ? "possibly" : afford.verdict === "no-budget" ? "set a budget first" : "not ideal"}`
-      : titleFor(parsed, assembled.totalCents, fmt, wantsPlan ? "plan" : "list", viewer.city.name),
+      : titleFor(parsed, assembled.cost, fmt, wantsPlan ? "plan" : "list", viewer.city.name),
     summary,
     lines: assembled.lines,
-    totalCents: assembled.totalCents,
+    cost: assembled.cost,
     parsed,
     sources: uniqueSources(assembled.lines, tools),
     missReason: null,
@@ -478,8 +497,13 @@ function cardsToLines(tools: readonly ToolResult[]): AskLine[] {
         kind: card.kind === "event" ? "event" : card.kind === "place" ? "activity" : "activity",
         title: card.title,
         detail: card.detail,
-        priceCents: card.priceCents ?? 0,
-        walkMinutes: card.walkMinutes,
+        /* `?? null`, not `?? 0`. A card whose source published no price is
+           unpriced, and turning that into a zero is how a plan comes to say
+           "free" about something nobody costed. */
+        priceCents: card.priceCents ?? null,
+        estimateCents: null,
+        estimateBasis: null,
+        metres: card.metres ?? null,
         refKind: card.kind === "place" ? "place" : card.kind === "event" ? "event" : null,
         refId: card.kind === "place" || card.kind === "event" ? card.id : null,
         source: card.source === "you" ? "students" : card.source,
@@ -661,12 +685,14 @@ async function officialAnswer(citySlug: string, countryCode: string, query: stri
       title: fact.title,
       detail: `${fact.summary}${fact.variesByNationality ? " (Depends on your nationality — check the source.)" : ""} · ${factFreshness(fact).label}`,
       priceCents: 0,
-      walkMinutes: null,
+      estimateCents: null,
+      estimateBasis: null,
+      metres: null,
       refKind: null,
       refId: null,
       source: fact.authority === "official" ? ("official" as const) : ("students" as const),
     })),
-    totalCents: 0,
+    cost: { totalCents: 0, estimateLowCents: 0, estimateHighCents: 0, unpricedLines: 0 },
     parsed,
     sources: chosen.map(({ fact }) => ({ label: fact.sourceName, url: fact.sourceUrl })),
     missReason: chosen.length === 0 ? "no-official-rows" : null,
@@ -679,7 +705,7 @@ async function officialAnswer(citySlug: string, countryCode: string, query: stri
 
 function titleFor(
   parsed: ParsedAsk,
-  totalCents: number,
+  cost: PlanCost,
   fmt: (cents: number) => string,
   kind: "plan" | "list",
   cityName: string,
@@ -698,10 +724,20 @@ function titleFor(
     if (parsed.freeOnly) return "Free things";
     return `In ${cityName}`;
   }
-  if (totalCents === 0) return "All free";
-  if (parsed.when === "tonight" || parsed.when === "now") return `Tonight, ${fmt(totalCents)}`;
-  if (parsed.when === "weekend") return `Your weekend, ${fmt(totalCents)}`;
-  return `${fmt(totalCents)} plan`;
+  /* "All free" may only be claimed when nothing was estimated and nothing was
+     left unpriced. A plan whose food stop has no published price is not a free
+     plan, it is a plan with an unknown in it, and the two must not share a
+     headline. */
+  const clean = cost.estimateHighCents === 0 && cost.unpricedLines === 0;
+  if (cost.totalCents === 0 && clean) return "All free";
+
+  /* With an estimate in play the headline says "from", because the known money
+     is a floor rather than a total. */
+  const money = clean ? fmt(cost.totalCents) : `from ${fmt(cost.totalCents)}`;
+
+  if (parsed.when === "tonight" || parsed.when === "now") return `Tonight, ${money}`;
+  if (parsed.when === "weekend") return `Your weekend, ${money}`;
+  return `${money} plan`;
 }
 
 function uniqueSources(lines: readonly { source: string }[], tools: readonly ToolResult[]): { label: string; url: null }[] {

@@ -2,7 +2,8 @@ import "server-only";
 
 import { cache } from "react";
 
-import { placesForCity } from "@/data/places";
+import { WALK_METRES_PER_MINUTE } from "@/server/engines/recommend";
+import { loadCityPlaces } from "@/server/queries/places";
 import type { Place } from "@/data/types";
 import type { Bucket, BucketEntry, Settlement } from "@/domain/social";
 import { settleBucket } from "@/domain/social";
@@ -180,8 +181,17 @@ export async function loadSpendLess(input: {
     .sort((a, b) => b.paceDeltaCents - a.paceDeltaCents)[0];
   if (!drifting) return null;
 
-  const places = placesForCity(input.citySlug);
   const maxWalkMinutes = input.maxWalkMinutes;
+  const maxMetres = Math.max(400, maxWalkMinutes * WALK_METRES_PER_MINUTE);
+
+  /* Real places near the student. An outage leaves this empty, which means the
+     screen offers no alternatives rather than alternatives from nowhere. */
+  const nearby = await loadCityPlaces({
+    citySlug: input.citySlug,
+    radiusMetres: Math.min(5_000, Math.round(maxMetres)),
+    limit: 80,
+  });
+  const places = nearby.ok ? nearby.places : [];
 
   const [observations, deals, cityEvents] = await Promise.all([
     findMany("priceObservations", (row) => row.citySlug === input.citySlug),
@@ -207,7 +217,7 @@ export async function loadSpendLess(input: {
     opportunity,
     options: opportunity
       ? opportunity.alternatives
-      : cheapOptions({ category: drifting.category, places, maxWalkMinutes }),
+      : cheapOptions({ category: drifting.category, places, maxMetres }),
     freeEvents: filterEventsByWhen(cityEvents, "week", input.now)
       .filter((event) => event.priceCents === 0)
       .slice(0, 2),
@@ -226,23 +236,34 @@ export async function loadSpendLess(input: {
 }
 
 /** Cheap real places in one category, for the category detail screen. */
-export function cheapPlacesIn(input: {
+export async function cheapPlacesIn(input: {
   citySlug: string;
   category: string;
   maxWalkMinutes: number;
   limit?: number;
-}): Alternative[] {
+}): Promise<Alternative[]> {
+  const maxMetres = Math.max(400, input.maxWalkMinutes * WALK_METRES_PER_MINUTE);
+  const result = await loadCityPlaces({
+    citySlug: input.citySlug,
+    radiusMetres: maxMetres,
+    limit: 60,
+  });
+  /* No provider, no options. The screen shows its empty state rather than a
+     list built from somewhere else. */
+  if (!result.ok) return [];
+
   return cheapOptions({
     category: input.category,
-    places: placesForCity(input.citySlug),
-    maxWalkMinutes: input.maxWalkMinutes,
+    places: result.places,
+    maxMetres,
     limit: input.limit,
   });
 }
 
 /** Every place in the student's city, for the client-side "better option". */
-export function placesFor(citySlug: string): Place[] {
-  return placesForCity(citySlug);
+export async function placesFor(citySlug: string): Promise<Place[]> {
+  const result = await loadCityPlaces({ citySlug, radiusMetres: 3_000, limit: 120 });
+  return result.ok ? result.places : [];
 }
 
 /* -------------------------------------------------------------------------- */

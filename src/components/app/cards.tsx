@@ -3,11 +3,13 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 import type { Place } from "@/data/types";
+import { describeProximity } from "@/domain/places";
+import { PriceBand } from "@/components/product/place-meta";
 import { accents, type Accent } from "@/components/ui/accent";
 import { Badge } from "@/components/ui/primitives";
 import type { CityEvent } from "@/domain/types";
 import type { Scored } from "@/server/engines/recommend";
-import { cn, money, walk } from "@/lib/utils";
+import { cn, money } from "@/lib/utils";
 
 /**
  * ============================================================================
@@ -172,22 +174,20 @@ export function EventCard({
 
 export function PlaceCard({
   scored,
-  where,
 }: {
   scored: Scored<Place>;
-  where: { currency: string; locale: string };
 }) {
   const place = scored.item;
 
   return (
     <article className="group relative flex flex-col rounded-lg border border-ink-200 bg-white p-4 transition-[border-color,box-shadow] hover:border-ink-300 hover:shadow-[var(--shadow-raise)]">
       <div className="flex items-start justify-between gap-3">
-        <PriceTag cents={place.price === null ? null : Math.round(place.price * 100)} where={where} />
+        <PriceBand level={place.priceLevel} />
         <MatchChip match={scored.match} />
       </div>
 
       <h3 className="mt-2.5 text-[1.0625rem] leading-snug font-semibold text-ink-950">
-        <Link href={`/discover/${place.id}`} className="after:absolute after:inset-0">
+        <Link href={`/discover/${encodeURIComponent(place.id)}`} className="after:absolute after:inset-0">
           {place.name}
         </Link>
       </h3>
@@ -197,13 +197,13 @@ export function PlaceCard({
       <dl className="mt-3 flex flex-wrap items-center gap-x-3.5 gap-y-1 text-[0.8125rem] text-ink-500">
         <div className="flex items-center gap-1.5">
           <MapPin className="size-3.5" aria-hidden />
-          <dd>{walk(place.walkMinutes)} walk</dd>
+          <dd>{describeProximity(place.proximity)}</dd>
         </div>
-        {place.verifiedBy >= 10 ? (
+        {place.confirmations >= 10 ? (
           <div className="flex items-center gap-1.5">
             <Users className="size-3.5" aria-hidden />
             <dd>
-              Verified by <span className="tnum">{place.verifiedBy}</span>
+              Verified by <span className="tnum">{place.confirmations}</span>
             </dd>
           </div>
         ) : null}

@@ -3,6 +3,7 @@ import "server-only";
 import { z } from "zod";
 
 import { phrasesFor } from "@/domain/language";
+import { describeProximity, type PlaceLayer } from "@/domain/places";
 import { listingKind, listingMode } from "@/domain/social";
 import type { Cents } from "@/domain/types";
 import { findMany } from "@/server/db";
@@ -77,8 +78,17 @@ export type ToolCard = {
   social: string | null;
   /** When it happens, for time-bound rows. */
   at: string | null;
-  /** Walking minutes, only when a real home point produced one. */
+  /** Walking minutes, ONLY when a routing provider produced them. */
   walkMinutes: number | null;
+  /**
+   * Straight-line distance from the student, in metres.
+   *
+   * Separate from `walkMinutes` on purpose. Most deployments have no routing
+   * provider, so `walkMinutes` is null and this is what the card shows — as a
+   * distance, which is what it is. Optional because most cards are not places
+   * and have no distance of any kind.
+   */
+  metres?: number | null;
 };
 
 export type ToolResult = {
@@ -248,12 +258,20 @@ export async function runTool<K extends ToolName>(name: K, rawArgs: unknown, ctx
     case "search_places": {
       const a = args as ToolArgs["search_places"];
       const { recommend } = await contextFor(ctx);
-      const rows = await loadPlaces(recommend, {
-        layers: a.layers,
-        maxPriceCents: a.maxPriceCents ?? null,
+      const found = await loadPlaces(recommend, {
+        layers: a.layers as readonly PlaceLayer[] | undefined,
+        cheapOnly: a.maxPriceCents !== undefined && a.maxPriceCents !== null,
         freeOnly: a.freeOnly,
         verifiedOnly: a.verifiedOnly,
       });
+
+      /* A provider outage is reported as one. The model is handed an explicit
+         "we could not reach the map" rather than an empty list, because an
+         empty list is a fact about the city and this is a fact about us. */
+      if (found.unavailable) {
+        return { tool: name, args: a, cards: [], emptyReason: found.unavailable.message };
+      }
+      const rows = found.places;
       return {
         tool: name,
         args: a,
@@ -261,14 +279,24 @@ export async function runTool<K extends ToolName>(name: K, rawArgs: unknown, ctx
           kind: "place" as const,
           id: scored.item.id,
           title: scored.item.name,
-          detail: `${scored.item.category} · ${scored.item.walkMinutes} min walk`,
-          priceCents: scored.item.price === null ? null : Math.round(scored.item.price * 100),
-          href: `/discover/${scored.item.id}`,
+          /* Distance, in the words the card uses. `describeProximity` prints
+             minutes only when a router produced them. */
+          detail: `${scored.item.category} · ${describeProximity(scored.item.proximity)}`,
+          /* No place provider publishes an amount, so a place card never
+             carries one. The band is in `reasons` where it belongs. */
+          priceCents: null,
+          href: `/discover/${encodeURIComponent(scored.item.id)}`,
           reasons: scored.reasons,
-          source: scored.item.source === "mixed" ? ("students" as const) : scored.item.source,
-          social: scored.item.verifiedBy >= 10 ? `${scored.item.verifiedBy} students confirmed this` : null,
+          /* Where the row came from, which for a place is always a provider.
+             "students" would claim a student wrote it. */
+          source: "official" as const,
+          social:
+            scored.item.confirmations >= 10
+              ? `${scored.item.confirmations} students confirmed this`
+              : null,
           at: null,
-          walkMinutes: scored.item.walkMinutes,
+          walkMinutes: scored.item.proximity.minutes,
+          metres: scored.item.proximity.metres,
         })),
         emptyReason: rows.length === 0 ? `No places match that in ${ctx.viewer.city.name} yet.` : undefined,
       };
@@ -545,8 +573,12 @@ export async function runTool<K extends ToolName>(name: K, rawArgs: unknown, ctx
         eventIds.size > 0 ? findMany("events", (row) => eventIds.has(row.id)) : Promise.resolve([]),
         listingIds.size > 0 ? findMany("listings", (row) => listingIds.has(row.id)) : Promise.resolve([]),
       ]);
-      const { placesForCity } = await import("@/data/places");
-      const places = placesForCity(ctx.viewer.profile.citySlug);
+      /* Saved places are provider ids and nothing else, so they are looked up
+         again rather than read from a table. One that no longer resolves is
+         reported as gone rather than rendered from a stale copy. */
+      const { loadPlacesByIds } = await import("@/server/queries/places");
+      const placeIds = saved.filter((row) => row.kind === "place").map((row) => row.targetId);
+      const { places } = await loadPlacesByIds(placeIds, ctx.viewer.profile.citySlug);
 
       const cards: ToolCard[] = [];
       for (const row of saved.slice(0, a.limit)) {
@@ -556,9 +588,22 @@ export async function runTool<K extends ToolName>(name: K, rawArgs: unknown, ctx
             cards.push({ kind: "event", id: event.id, title: event.title, detail: event.venue, priceCents: event.priceCents, href: `/events/${event.id}`, reasons: ["You saved this"], source: event.source, social: null, at: event.startsAt, walkMinutes: null });
           }
         } else if (row.kind === "place") {
-          const place = places.find((entry) => entry.id === row.targetId);
+          const place = places.get(row.targetId);
           if (place) {
-            cards.push({ kind: "place", id: place.id, title: place.name, detail: `${place.category} · ${place.walkMinutes} min walk`, priceCents: place.price === null ? null : Math.round(place.price * 100), href: `/discover/${place.id}`, reasons: ["You saved this"], source: place.source === "mixed" ? "students" : place.source, social: null, at: null, walkMinutes: place.walkMinutes });
+            cards.push({
+              kind: "place",
+              id: place.id,
+              title: place.name,
+              detail: `${place.category} · ${describeProximity(place.proximity)}`,
+              priceCents: null,
+              href: `/discover/${encodeURIComponent(place.id)}`,
+              reasons: ["You saved this"],
+              source: "official",
+              social: null,
+              at: null,
+              walkMinutes: place.proximity.minutes,
+              metres: place.proximity.metres,
+            });
           }
         } else if (row.kind === "listing") {
           const listing = listings.find((entry) => entry.id === row.targetId);

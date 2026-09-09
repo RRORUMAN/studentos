@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { type FeedbackKind, feedbackOrder } from "@/config/feedback";
-import { placesForCity } from "@/data/places";
+import { loadPlace } from "@/server/queries/places";
 import { emptyMemory, nudgeAffinity } from "@/domain/social";
 import { findOne, insert, newId, nowIso, transaction } from "@/server/db";
 import { limits, rateLimit } from "@/server/rate-limit";
@@ -53,11 +53,13 @@ export async function recordFeedback(input: {
   let walkMinutes: number | null = null;
 
   if (targetKind === "place") {
-    const place = placesForCity(profile.citySlug).find((row) => row.id === targetId);
+    const place = await loadPlace(targetId, profile.citySlug);
     if (!place) return { ok: false, message: "That place is not listed." };
     tags = place.layers.filter((layer) => layer !== "for-you");
-    priceCents = place.price === null ? null : Math.round(place.price * 100);
-    walkMinutes = place.walkMinutes;
+    /* Null, not zero. Nobody published a price for this place, and recording a
+       zero would make the feedback row say it was free. */
+    priceCents = null;
+    walkMinutes = place.proximity.minutes;
   } else {
     const event = await findOne("events", (row) => row.id === targetId);
     if (!event) return { ok: false, message: "That event is not listed." };

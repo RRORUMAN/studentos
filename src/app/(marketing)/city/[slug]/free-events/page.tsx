@@ -3,7 +3,8 @@ import { notFound } from "next/navigation";
 
 import { CityCollection } from "@/components/marketing/city-collection";
 import { cities, getCity } from "@/data/cities";
-import { placesForCity } from "@/data/places";
+import { requestDate } from "@/server/now";
+import { loadCityPlaces } from "@/server/queries/places";
 import { loopForCity } from "@/data/loop";
 
 export function generateStaticParams() {
@@ -29,9 +30,24 @@ export default async function FreeEventsPage(props: PageProps<"/city/[slug]/free
   const city = getCity(slug);
   if (!city) notFound();
 
-  const places = placesForCity(city.slug)
-    .filter((place) => place.layers.includes("free") || place.layers.includes("events"))
-    .sort((a, b) => b.studentValue - a.studentValue);
+  const now = requestDate();
+
+  /* "Free" here means free to walk into — parks and public libraries — and
+     not "cheap". The events on this page carry their own published prices. */
+  const found = await loadCityPlaces({
+    citySlug: city.slug,
+    layers: ["free"],
+    radiusMetres: 3_000,
+    limit: 24,
+  });
+  const bandOrder = { strong: 0, good: 1, mixed: 2, insufficient: 3 } as const;
+  const places = found.ok
+    ? [...found.places].sort(
+        (a, b) =>
+          bandOrder[a.value.band] - bandOrder[b.value.band] ||
+          a.proximity.metres - b.proximity.metres,
+      )
+    : [];
 
   const posts = loopForCity(city.slug).filter((post) => post.price === 0);
 
@@ -43,6 +59,9 @@ export default async function FreeEventsPage(props: PageProps<"/city/[slug]/free
       title={`Free things to do in ${city.name}`}
       lead="Free is a schedule, not a category. Museums have free windows, venues have no-cover hours, and most of the good ones end before midnight — so the useful list is the one with times attached."
       places={places}
+      placesUnavailable={found.ok ? null : { message: found.message }}
+      attribution={found.ok ? found.attribution : null}
+      now={now}
       posts={posts}
       emptyTitle={`No free listings for ${city.name} yet`}
       emptyBody="Free windows change constantly, which is exactly why students are better at tracking them than a directory is."

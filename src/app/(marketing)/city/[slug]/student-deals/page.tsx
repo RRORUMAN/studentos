@@ -3,7 +3,8 @@ import { notFound } from "next/navigation";
 
 import { CityCollection } from "@/components/marketing/city-collection";
 import { cities, getCity } from "@/data/cities";
-import { placesForCity } from "@/data/places";
+import { requestDate } from "@/server/now";
+import { loadCityPlaces } from "@/server/queries/places";
 import { loopForCity } from "@/data/loop";
 
 export function generateStaticParams() {
@@ -29,9 +30,20 @@ export default async function StudentDealsPage(props: PageProps<"/city/[slug]/st
   const city = getCity(slug);
   if (!city) notFound();
 
-  const places = placesForCity(city.slug)
-    .filter((place) => place.layers.includes("deals"))
-    .sort((a, b) => b.verifiedBy - a.verifiedBy);
+  const now = requestDate();
+
+  /* Only places with a VERIFIED deal attached. The layer is set from our own
+     deals table, so this page lists nowhere that somebody has not confirmed an
+     offer at — which is the whole point of a student-deals page. */
+  const found = await loadCityPlaces({
+    citySlug: city.slug,
+    layers: ["deals"],
+    radiusMetres: 3_000,
+    limit: 24,
+  });
+  const places = found.ok
+    ? [...found.places].sort((a, b) => b.confirmations - a.confirmations)
+    : [];
 
   const posts = loopForCity(city.slug).filter(
     (post) => post.kind === "deal" || post.kind === "warning",
@@ -45,6 +57,9 @@ export default async function StudentDealsPage(props: PageProps<"/city/[slug]/st
       title={`Student deals in ${city.name} that people actually use`}
       lead="Most student discount lists are advertising. This one has no paid placements, because nothing on it was sold to us — it is what students reported using and what they told each other to avoid."
       places={places}
+      placesUnavailable={found.ok ? null : { message: found.message }}
+      attribution={found.ok ? found.attribution : null}
+      now={now}
       posts={posts}
       emptyTitle={`No deals confirmed in ${city.name} yet`}
       emptyBody="A deal only appears once a student has actually used it and said so. That is slower than scraping a discount site, and considerably more useful."

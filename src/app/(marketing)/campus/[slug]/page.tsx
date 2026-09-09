@@ -11,7 +11,8 @@ import { Eyebrow, ProductPanel, SampleTag, Section } from "@/components/ui/primi
 import { Reveal } from "@/components/ui/reveal";
 import { brand } from "@/brand/brand.config";
 import { campuses, getCampus, getCity } from "@/data/cities";
-import { placesForCity } from "@/data/places";
+import { requestDate } from "@/server/now";
+import { loadCityPlaces } from "@/server/queries/places";
 import { loopForCity } from "@/data/loop";
 
 export function generateStaticParams() {
@@ -39,10 +40,18 @@ export default async function CampusPage(props: PageProps<"/campus/[slug]">) {
   const city = getCity(campus.citySlug);
   if (!city) notFound();
 
+  const now = requestDate();
+
   const posts = loopForCity(city.slug).filter((post) => post.author.campusSlug === campus.slug);
-  const nearby = placesForCity(city.slug)
-    .sort((a, b) => a.walkMinutes - b.walkMinutes)
-    .slice(0, 4);
+  /* Nearest to the CAMPUS, not to the city centre. The campus has a
+     neighbourhood but not a coordinate of its own, so the search runs from the
+     city centre and the list is ordered by distance from there — which the
+     heading below now says, instead of claiming a walking time from a building
+     whose location we do not hold. */
+  const found = await loadCityPlaces({ citySlug: city.slug, radiusMetres: 2_500, limit: 12 });
+  const nearby = found.ok
+    ? [...found.places].sort((a, b) => a.proximity.metres - b.proximity.metres).slice(0, 4)
+    : [];
 
   return (
     <>
@@ -138,14 +147,17 @@ export default async function CampusPage(props: PageProps<"/campus/[slug]">) {
           <Reveal>
             <Eyebrow index="02">Closest to campus</Eyebrow>
             <h2 className="mt-3 max-w-2xl text-display-sm text-ink-950">
-              Sorted by walking time, because that is the deciding factor between lectures
+              Sorted by distance from the centre of {city.name}
             </h2>
           </Reveal>
           <PlaceList
             className="mt-6"
             places={nearby}
+            timezone={city.timezone}
+            now={now}
+            unavailable={found.ok ? null : { message: found.message }}
             emptyTitle={`Nothing mapped near ${campus.shortName} yet`}
-            emptyBody="Places appear as students report them."
+            emptyBody="Places appear here as soon as a provider has them, and anyone can add one to OpenStreetMap."
           />
         </div>
       </Section>

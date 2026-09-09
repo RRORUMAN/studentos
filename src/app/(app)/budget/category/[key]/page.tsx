@@ -6,6 +6,7 @@ import { notFound } from "next/navigation";
 import { CategoryBar } from "@/components/app/budget-charts";
 import { BudgetHistory, type HistoryGroup } from "@/components/app/budget-ui";
 import { categoryLabel, groupTransactionsByDay } from "@/server/engines/budget";
+import { formatDistance, priceLevelLabel } from "@/domain/places";
 import { cheapPlacesIn, loadMoney } from "@/server/queries/money";
 import { requestDate } from "@/server/now";
 import { requireViewer } from "@/server/viewer";
@@ -62,7 +63,7 @@ export default async function BudgetCategoryPage(props: PageProps<"/budget/categ
   }));
 
   const cheaper = reading.discretionary
-    ? cheapPlacesIn({
+    ? await cheapPlacesIn({
         citySlug: viewer.profile.citySlug,
         category,
         maxWalkMinutes: Math.round(viewer.profile.maxTravelMinutes * 1.6),
@@ -141,12 +142,12 @@ export default async function BudgetCategoryPage(props: PageProps<"/budget/categ
                   <span className="min-w-0 flex-1">
                     <span className="block text-[0.9375rem] font-medium text-ink-900">{place.name}</span>
                     <span className="block text-[0.8125rem] text-ink-500">
-                      {place.walkMinutes} min walk
+                      {formatDistance(place.metres)} away
                       {place.verifiedBy >= 10 ? ` · ${place.verifiedBy} confirmed` : ""}
                     </span>
                   </span>
                   <span className="tnum shrink-0 font-mono text-[0.9375rem] font-semibold text-mint-deep">
-                    {fmt(place.priceCents)}
+                    {place.priceCents === null ? priceLevelLabel(place.priceLevel) : fmt(place.priceCents)}
                   </span>
                   <ArrowRight className="size-4 shrink-0 text-ink-300" />
                 </Link>

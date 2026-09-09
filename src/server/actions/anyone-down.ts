@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
-import { placesForCity } from "@/data/places";
+import { placeExists } from "@/server/queries/places";
 import type { Invite } from "@/domain/types";
 import { findOne, newId, nowIso, transaction, update } from "@/server/db";
 import { QuotaError, assertQuota } from "@/server/entitlements";
@@ -59,7 +59,7 @@ async function resolveAnchor(
     case "event":
       return (await findOne("events", (row) => row.id === id && row.citySlug === citySlug)) ? { anchorKind: "event", anchorId: id } : none;
     case "place":
-      return placesForCity(citySlug).some((place) => place.id === id) ? { anchorKind: "place", anchorId: id } : none;
+      return (await placeExists(id)) ? { anchorKind: "place", anchorId: id } : none;
     case "plan":
       return (await findOne("plans", (row) => row.id === id)) ? { anchorKind: "plan", anchorId: id } : none;
     case "post":

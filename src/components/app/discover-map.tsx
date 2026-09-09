@@ -5,8 +5,16 @@ import Link from "next/link";
 import { useMemo } from "react";
 
 import { accents, type Accent } from "@/components/ui/accent";
-import { Badge, Meter } from "@/components/ui/primitives";
-import { cn, money } from "@/lib/utils";
+import { valueLabel } from "@/config/places";
+import {
+  type ValueBand,
+  type Viewport,
+  positionIn,
+  priceLevelLabel,
+  priceLevelNote,
+  viewportFor,
+} from "@/domain/places";
+import { cn } from "@/lib/utils";
 
 /**
  * ============================================================================
@@ -30,20 +38,30 @@ import { cn, money } from "@/lib/utils";
  * ============================================================================
  */
 
+/**
+ * A place, as the map needs it.
+ *
+ * `x` and `y` used to be here: a position on a drawing, written by hand beside
+ * each invented place. They are gone. A place carries where it actually is,
+ * and the map projects that into the canvas, so two shops on one street are
+ * drawn on one street.
+ */
 export type MapPlace = {
   id: string;
   name: string;
   category: string;
-  /** Position on the canvas, 0-100. */
-  x: number;
-  y: number;
-  priceCents: number | null;
-  priceLabel: string;
-  walkMinutes: number;
-  /** 0-100, as rated by students. */
-  studentValue: number;
-  verifiedBy: number;
-  /** 0-100 from the scorer. */
+  lat: number;
+  lng: number;
+  /** The provider's 1-4 band. Null means it did not publish one. */
+  priceLevel: number | null;
+  /** "8 min walk" or "600 m away", already decided by `describeProximity`. */
+  proximityLabel: string;
+  /** A word and its reasons. Never a percentage. */
+  valueBand: ValueBand;
+  valueReasons: readonly string[];
+  /** Real confirmations. Zero renders nothing. */
+  confirmations: number;
+  /** 0-100 from the scorer: fit against this student, not quality. */
   match: number;
   accent: Accent;
   community: "friends" | "campus" | null;
@@ -56,22 +74,33 @@ export function DiscoverMap({
   places,
   selectedId,
   onSelect,
-  seed,
-  where,
+  centre,
+  attribution,
   eventCount = 0,
   className,
 }: {
   places: readonly MapPlace[];
   selectedId: string | null;
   onSelect: (id: string | null) => void;
-  /** The city's map seed; the same city always draws the same way. */
-  seed: number;
-  where: { currency: string; locale: string };
+  /** City centre, used to anchor the view when nothing is pinned. */
+  centre: { lat: number; lng: number };
+  /** Licence line for whatever produced these rows. Rendered on the canvas. */
+  attribution?: string | null;
   /** Events in the current view, listed below but not pinned. */
   eventCount?: number;
   className?: string;
 }) {
   const selected = places.find((place) => place.id === selectedId) ?? null;
+
+  /* The viewport follows what is on screen, so filtering to one category zooms
+     into it rather than leaving three pins in a corner. */
+  const viewport = useMemo(
+    () =>
+      viewportFor(
+        places.length > 0 ? places.map((place) => ({ lat: place.lat, lng: place.lng })) : [centre],
+      ),
+    [places, centre],
+  );
 
   return (
     <div
@@ -107,16 +136,25 @@ export function DiscoverMap({
 
       {/* ---- canvas ------------------------------------------------------- */}
       <div className="relative aspect-[4/3] w-full overflow-hidden bg-ink-900 lg:aspect-[16/11]">
-        <MapCanvas seed={seed} />
+        <MapGround />
 
-        {places.map((place) => (
-          <Pin
-            key={place.id}
-            place={place}
-            selected={place.id === selectedId}
-            onSelect={() => onSelect(place.id === selectedId ? null : place.id)}
-          />
-        ))}
+        {viewport
+          ? places.map((place) => (
+              <Pin
+                key={place.id}
+                place={place}
+                viewport={viewport}
+                selected={place.id === selectedId}
+                onSelect={() => onSelect(place.id === selectedId ? null : place.id)}
+              />
+            ))
+          : null}
+
+        {attribution ? (
+          <span className="absolute bottom-1.5 right-2 z-10 rounded bg-ink-950/70 px-1.5 py-0.5 text-[0.625rem] text-white/50">
+            {attribution}
+          </span>
+        ) : null}
 
         {places.length === 0 ? (
           <div className="absolute inset-0 z-20 grid place-items-center bg-ink-950/60 px-6 text-center backdrop-blur-[2px]">
@@ -141,15 +179,12 @@ export function DiscoverMap({
                 <p className="mt-0.5 truncate text-[1rem] font-semibold text-ink-950">{selected.name}</p>
               </div>
               <div className="flex shrink-0 items-center gap-1.5">
-                {selected.priceCents === 0 ? (
-                  <Badge accent="mint" tone="solid">Free</Badge>
-                ) : selected.priceCents === null ? (
-                  <span className="text-[0.8125rem] text-ink-500">{selected.priceLabel}</span>
-                ) : (
-                  <span className="tnum font-mono text-[1rem] font-semibold text-ink-950">
-                    {money(selected.priceCents / 100, where)}
-                  </span>
-                )}
+                <span
+                  className="text-[0.9375rem] font-medium text-ink-700"
+                  title={priceLevelNote(selected.priceLevel)}
+                >
+                  {priceLevelLabel(selected.priceLevel)}
+                </span>
                 {selected.match >= 60 ? (
                   <span className="tnum rounded-full bg-signal-soft px-2 py-0.5 font-mono text-micro font-semibold text-signal-deep">
                     {selected.match}%
@@ -161,12 +196,12 @@ export function DiscoverMap({
             <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[0.8125rem] text-ink-600">
               <span className="inline-flex items-center gap-1">
                 <Footprints className="size-3.5 text-ink-400" aria-hidden />
-                <span className="tnum">{selected.walkMinutes} min walk</span>
+                <span className="tnum">{selected.proximityLabel}</span>
               </span>
-              {selected.verifiedBy >= 10 ? (
+              {selected.confirmations >= 10 ? (
                 <span className="inline-flex items-center gap-1 text-mint-deep">
                   <ShieldCheck className="size-3.5" aria-hidden />
-                  <span className="tnum">{selected.verifiedBy}</span> confirmed
+                  <span className="tnum">{selected.confirmations}</span> confirmed
                 </span>
               ) : null}
               {selected.community === "friends" ? (
@@ -189,15 +224,20 @@ export function DiscoverMap({
             </p>
 
             <div className="mt-2.5 flex items-center gap-3">
+              {/* A band and its reasons, not a bar. The bar said a measurement
+                  had happened; the number behind it was written by hand. */}
               <div className="min-w-0 flex-1">
-                <div className="flex items-center justify-between text-[0.75rem]">
-                  <span className="text-ink-500">Student value</span>
-                  <span className="tnum font-mono text-ink-400">{selected.studentValue}/100</span>
-                </div>
-                <Meter value={selected.studentValue} accent={selected.studentValue >= 85 ? "mint" : selected.studentValue >= 70 ? "signal" : "amber"} label={`Student value ${selected.studentValue} of 100`} className="mt-1" />
+                <span className="text-[0.75rem] font-medium text-ink-700">
+                  {valueLabel[selected.valueBand]}
+                </span>
+                {selected.valueReasons.length > 0 ? (
+                  <p className="mt-0.5 truncate text-[0.75rem] text-ink-500">
+                    {selected.valueReasons.join(" · ")}
+                  </p>
+                ) : null}
               </div>
               <Link
-                href={`/discover/${selected.id}`}
+                href={`/discover/${encodeURIComponent(selected.id)}`}
                 className="inline-flex shrink-0 items-center gap-1 rounded-full bg-ink-950 px-3 py-1.5 text-[0.8125rem] font-medium text-paper"
               >
                 Open
@@ -228,27 +268,29 @@ export function DiscoverMap({
 
 function Pin({
   place,
+  viewport,
   selected,
   onSelect,
 }: {
   place: MapPlace;
+  viewport: Viewport;
   selected: boolean;
   onSelect: () => void;
 }) {
+  const at = positionIn({ lat: place.lat, lng: place.lng }, viewport);
+  /* Outside the viewport is not drawn. Clamping to the edge would put a pin
+     where the place is not. */
+  if (!at) return null;
+
   const accent = accents[place.accent];
-  const label =
-    place.priceCents === 0
-      ? "Free"
-      : place.priceCents === null
-        ? place.priceLabel.replace(/^≈/, "")
-        : place.priceLabel.replace(/^≈/, "");
+  const label = place.name.length > 16 ? `${place.name.slice(0, 15)}\u2026` : place.name;
 
   return (
     <button
       type="button"
       onClick={onSelect}
       aria-pressed={selected}
-      aria-label={`${place.name}, ${place.priceLabel}, ${place.walkMinutes} minute walk`}
+      aria-label={`${place.name}, ${place.category}, ${place.proximityLabel}`}
       className={cn(
         "absolute z-20 flex -translate-x-1/2 -translate-y-1/2 items-center gap-1 rounded-full border px-1.5 py-1 text-[0.6875rem] font-medium",
         "transition-[background-color,border-color,color,transform] duration-150 hover:scale-105 active:scale-95",
@@ -256,75 +298,40 @@ function Pin({
           ? cn(accent.fill, accent.onFill, "z-30 border-transparent shadow-[var(--shadow-float)]")
           : "border-white/12 bg-ink-950/85 text-white/85 hover:border-white/35",
       )}
-      style={{ left: `${place.x}%`, top: `${place.y}%` }}
+      style={{ left: `${at.left}%`, top: `${at.top}%` }}
     >
       <span
         aria-hidden
         className={cn("size-1.5 shrink-0 rounded-full", selected ? "bg-current opacity-60" : accent.fill)}
       />
-      <span className={cn("tnum whitespace-nowrap", selected ? "inline" : "hidden sm:inline")}>{label}</span>
+      <span className={cn("whitespace-nowrap", selected ? "inline" : "hidden sm:inline")}>{label}</span>
     </button>
   );
 }
 
 /* -------------------------------------------------------------------------- */
-/* Canvas — deterministic abstract city                                        */
+/* Ground                                                                      */
 /* -------------------------------------------------------------------------- */
 
-/** Tiny seeded PRNG so a city always draws the same way. */
-function mulberry32(seed: number) {
-  let a = seed >>> 0;
-  return () => {
-    a |= 0;
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-function MapCanvas({ seed }: { seed: number }) {
-  const blocks = useMemo(() => {
-    const random = mulberry32(seed);
-    return Array.from({ length: 26 }, () => ({
-      x: random() * 100,
-      y: random() * 100,
-      w: 6 + random() * 16,
-      h: 5 + random() * 13,
-      r: random() * 2.5,
-      o: 0.03 + random() * 0.06,
-    }));
-  }, [seed]);
-
+/**
+ * A plain grid, and deliberately so.
+ *
+ * There used to be a generated city here: random blocks, a park, a river,
+ * arterial roads, all drawn from the city's `mapSeed`. Every city got a river
+ * whether or not it has one. Now that the pins are at real coordinates that
+ * fiction would be worse than before, because it would look like the shops sit
+ * on those streets. A grid claims nothing. Configure a tile provider and the
+ * streets become real and attributed.
+ */
+function MapGround() {
   return (
     <svg className="absolute inset-0 size-full" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden>
-      {blocks.map((block, index) => (
-        <rect key={index} x={block.x} y={block.y} width={block.w} height={block.h} rx={block.r} fill="white" opacity={block.o} />
-      ))}
-      <path d="M62 34 Q78 30 86 42 Q90 54 80 60 Q68 64 62 54 Z" fill="var(--color-mint)" opacity="0.14" />
-      <path
-        d="M-4 84 Q22 74 38 86 Q56 98 78 88 Q92 82 104 90"
-        fill="none"
-        stroke="var(--color-flow)"
-        strokeOpacity="0.28"
-        strokeWidth="3.5"
-        strokeLinecap="round"
-      />
-      <g stroke="white" strokeOpacity="0.08" strokeWidth="0.5">
-        <line x1="0" y1="24" x2="100" y2="20" />
-        <line x1="0" y1="52" x2="100" y2="56" />
-        <line x1="18" y1="0" x2="14" y2="100" />
-        <line x1="48" y1="0" x2="52" y2="100" />
-        <line x1="76" y1="0" x2="72" y2="100" />
-      </g>
-      <g stroke="white" strokeOpacity="0.04" strokeWidth="0.3">
-        <line x1="0" y1="12" x2="100" y2="10" />
-        <line x1="0" y1="38" x2="100" y2="38" />
-        <line x1="0" y1="70" x2="100" y2="72" />
-        <line x1="32" y1="0" x2="30" y2="100" />
-        <line x1="62" y1="0" x2="64" y2="100" />
-        <line x1="90" y1="0" x2="88" y2="100" />
-      </g>
+      <defs>
+        <pattern id="discover-grid" width="8" height="8" patternUnits="userSpaceOnUse">
+          <path d="M 8 0 L 0 0 0 8" fill="none" stroke="white" strokeOpacity="0.05" strokeWidth="0.4" />
+        </pattern>
+      </defs>
+      <rect width="100" height="100" fill="url(#discover-grid)" />
     </svg>
   );
 }

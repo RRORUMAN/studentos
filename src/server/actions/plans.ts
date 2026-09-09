@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
-import { placesForCity } from "@/data/places";
+import { loadPlacesByIds } from "@/server/queries/places";
 import type { SavedPlanItem } from "@/domain/types";
 import { findOne, insert, newId, nowIso, remove, transaction, update } from "@/server/db";
 import { STRATEGY_VERSION } from "@/server/engines/recommend";
@@ -115,16 +115,26 @@ async function trustedLine(
     }
   }
   if (line.refKind === "place" && line.refId) {
-    const place = placesForCity(citySlug).find((row) => row.id === line.refId);
+    const { places } = await loadPlacesByIds([line.refId], citySlug);
+    const place = places.get(line.refId);
     if (place) {
       return {
         time: line.time,
         title: place.name,
         detail: place.category,
-        priceCents: place.price === null ? 0 : Math.round(place.price * 100),
-        walkMinutes: place.walkMinutes,
-        kind: place.layers.includes("nightlife") ? "drink" : place.layers.includes("cheap-food") ? "food" : "activity",
-        source: place.source === "mixed" ? "students" : place.source,
+        /* A place has no published amount, so a plan line built from one
+           carries no money. Zero is correct: it is what this stop commits, and
+           the plan's own total is money committed. */
+        priceCents: 0,
+        /* Only ever a routed duration. Null means the card shows the distance
+           instead, which is what `Proximity` is for. */
+        walkMinutes: place.proximity.minutes,
+        kind: place.layers.includes("nightlife")
+          ? "drink"
+          : place.layers.includes("cheap-food")
+            ? "food"
+            : "activity",
+        source: "official",
         refKind: "place",
         refId: place.id,
       };

@@ -212,7 +212,7 @@ export async function loadHome(viewer: Viewer, now: Date): Promise<HomeData> {
   /* ---- feed ------------------------------------------------------------- */
   const feed = buildForYouFeed({
     events,
-    places,
+    places: places.places,
     deals,
     invites,
     posts: trending.map((post) => ({ ...post, score: 1 })),

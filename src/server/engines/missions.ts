@@ -1,4 +1,5 @@
 import type { Place } from "@/data/types";
+import { describeProximity } from "@/domain/places";
 import {
   type MissionStep,
   type MissionStepTemplate,
@@ -58,9 +59,36 @@ function scaled(cents: Cents, ratio: number): Cents {
 
 const DAY_MS = 86_400_000;
 
-function placeCents(place: Place): Cents | null {
-  return place.price === null ? null : Math.round(place.price * 100);
-}
+/**
+ * What a place costs, which is nothing we know.
+ *
+ * A mission step priced from a place used to read `place.price`. There is no
+ * such field: a provider publishes a band, not an amount. A step whose
+ * template states a price keeps that (it is the mission's own budget line,
+ * scaled to the city); a step that relied on the place for a figure now
+ * carries none, and the mission total says so.
+ */
+/**
+ * What a place costs, which is nothing we know.
+ *
+ * A mission step priced from a place used to read `place.price`. There is no
+ * such field: a provider publishes a BAND, not an amount. So the two rules
+ * that used to be expressed in euros are expressed in the terms that survive:
+ *
+ *   `free`     the free LAYER — somewhere you can walk into without paying,
+ *              which is a park or a public library. It is not "cheap", and a
+ *              price of zero was never how a place proved it.
+ *   `cheaper`  the provider's price band, with an unknown band sorting behind
+ *              both known ones, because "nobody published a price" is not a
+ *              claim to be cheap.
+ *
+ * A step whose template states a price keeps it: that is the mission's own
+ * budget line, scaled to the city, and it was never a claim about the place.
+ */
+const isFreeToEnter = (place: Place) => place.layers.includes("free");
+
+/** 1-4 from the provider, with an unknown band sorting last. */
+const priceBand = (place: Place) => place.priceLevel ?? 3;
 
 function pickPlace(
   step: MissionStepTemplate,
@@ -75,15 +103,17 @@ function pickPlace(
     const place = entry.item;
     if (used.has(place.id)) return false;
     if (pick.layers && !place.layers.some((layer) => pick.layers?.includes(layer))) return false;
-    const cents = placeCents(place);
-    if (pick.free && cents !== 0) return false;
-    if (ceiling !== null && cents !== null && cents > ceiling) return false;
+    if (pick.free && !isFreeToEnter(place)) return false;
+    /* The ceiling is a euro figure from the mission template and a place has
+       no euro figure to compare it against. A tight ceiling therefore steers
+       towards the cheap band rather than excluding on a number nobody has. */
+    if (ceiling !== null && ceiling <= 500 && priceBand(place) > 1) return false;
     return true;
   });
   if (matches.length === 0) return null;
   /* Cheaper: the cheapest that still scores decently. Otherwise: best match. */
   const sorted = variant.cheaper
-    ? [...matches].sort((a, b) => (placeCents(a.item) ?? 0) - (placeCents(b.item) ?? 0) || b.match - a.match)
+    ? [...matches].sort((a, b) => priceBand(a.item) - priceBand(b.item) || b.match - a.match)
     : matches;
   return sorted[0];
 }
@@ -169,11 +199,13 @@ export function buildMission(input: {
         const found = pickPlace(step, candidates.places, used, ratio, variant);
         if (found) {
           used.add(found.item.id);
-          const cents = step.priceCents !== undefined ? scaled(step.priceCents, ratio) : (placeCents(found.item) ?? 0);
+          /* The template's own price, scaled to this city, or zero — because
+             a place commits no money by being on a plan. */
+          const cents = step.priceCents !== undefined ? scaled(step.priceCents, ratio) : 0;
           steps.push({
             ...base,
             label: `${step.label}: ${found.item.name}`,
-            detail: `${found.item.why} · ${found.item.walkMinutes} min walk`,
+            detail: `${found.item.value.reasons.join(" · ") || found.item.category} · ${describeProximity(found.item.proximity)}`,
             priceCents: cents,
             refKind: "place",
             refId: found.item.id,

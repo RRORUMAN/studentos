@@ -32,16 +32,16 @@ const SNAP_TOP: Record<Snap, number> = { half: 0.5, full: 0 };
 
 export function DiscoverLayout({
   places,
-  seed,
-  where,
+  centre,
+  attribution,
   eventCount,
   aside,
   filters,
   children,
 }: {
   places: readonly MapPlace[];
-  seed: number;
-  where: { currency: string; locale: string };
+  centre: { lat: number; lng: number };
+  attribution?: string | null;
   eventCount: number;
   /** Rendered above the map (the trip picker, a trip note). */
   aside?: ReactNode;
@@ -119,8 +119,8 @@ export function DiscoverLayout({
           places={places}
           selectedId={selectedId}
           onSelect={select}
-          seed={seed}
-          where={where}
+          centre={centre}
+          attribution={attribution}
           eventCount={eventCount}
         />
       </div>

@@ -50,11 +50,21 @@ export function firstWeekPlan(input: {
   const freeThing = best("free");
   const firstEvent = input.freeEvents[0];
 
-  const days: Omit<FirstWeekDay, "dateIso" | "offset">[] = [
+  /**
+ * The sentence under a place on the checklist.
+ *
+ * A place used to carry a hand-written `why`. It now carries the reasons its
+ * value band was built from, each traceable to one signal, and its category.
+ * Where there is nothing to say — a new city with no student signal — the
+ * category alone is honest and the day's own copy carries the rest.
+ */
+const placeWhy = (place: Place) => place.value.reasons.join(" · ") || place.category;
+
+const days: Omit<FirstWeekDay, "dateIso" | "offset">[] = [
     {
       label: "Day 1",
       title: supermarket ? `Find your supermarket: ${supermarket.item.name}` : "Find your supermarket",
-      detail: supermarket ? supermarket.item.why : "The cheap one, not the close one. It sets the food budget for the whole term.",
+      detail: supermarket ? placeWhy(supermarket.item) : "The cheap one, not the close one. It sets the food budget for the whole term.",
       href: supermarket ? `/discover/${supermarket.item.id}` : "/discover?tab=groceries",
       kind: "place",
       done: input.doneTaskIds.has("find-supermarket"),
@@ -70,7 +80,7 @@ export function firstWeekPlan(input: {
     {
       label: "Day 3",
       title: lunch ? `Campus walk, then lunch at ${lunch.item.name}` : "Campus walk, then a cheap lunch",
-      detail: lunch ? lunch.item.why : "Find the library, the student office and where people actually eat.",
+      detail: lunch ? placeWhy(lunch.item) : "Find the library, the student office and where people actually eat.",
       href: lunch ? `/discover/${lunch.item.id}` : "/discover?tab=food",
       kind: "place",
       done: input.doneTaskIds.has("campus-orientation"),
@@ -88,7 +98,7 @@ export function firstWeekPlan(input: {
     {
       label: "Day 5",
       title: gym ? `Set up the gym: ${gym.item.name}` : study ? `Find where you will work: ${study.item.name}` : "Set up a routine",
-      detail: gym ? gym.item.why : study ? study.item.why : "A gym or a study spot. Either gives the week a shape.",
+      detail: gym ? placeWhy(gym.item) : study ? placeWhy(study.item) : "A gym or a study spot. Either gives the week a shape.",
       href: gym ? `/discover/${gym.item.id}` : study ? `/discover/${study.item.id}` : "/discover?tab=fitness",
       kind: "place",
       done: false,
@@ -99,7 +109,7 @@ export function firstWeekPlan(input: {
       detail: input.social
         ? "Someone in your city is short a person for something. Join one, or post your own."
         : freeThing
-          ? freeThing.item.why
+          ? placeWhy(freeThing.item)
           : "Somewhere in the city that costs nothing.",
       href: input.social ? "/anyone-down" : freeThing ? `/discover/${freeThing.item.id}` : "/events?tab=free",
       kind: input.social ? "social" : "place",
@@ -108,7 +118,7 @@ export function firstWeekPlan(input: {
     {
       label: "Weekend",
       title: night ? `First night out: ${night.item.name}` : `Your ${input.cityName} starter plan`,
-      detail: night ? night.item.why : "A cheap evening built from what you have found this week.",
+      detail: night ? placeWhy(night.item) : "A cheap evening built from what you have found this week.",
       href: night ? `/discover/${night.item.id}` : "/ask?q=Plan%20Saturday",
       kind: "place",
       done: false,

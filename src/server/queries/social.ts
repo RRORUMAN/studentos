@@ -2,7 +2,8 @@ import "server-only";
 
 import { cache } from "react";
 
-import { placesForCity } from "@/data/places";
+import { describeProximity } from "@/domain/places";
+import { loadPlacesByIds } from "@/server/queries/places";
 import type { Invite, Profile } from "@/domain/types";
 import { findMany, findOne } from "@/server/db";
 import { fmtWhen } from "@/lib/dates";
@@ -215,13 +216,16 @@ export async function resolveInviteAnchor(
       };
     }
     case "place": {
-      const place = placesForCity(invite.citySlug).find((row) => row.id === id);
+      const { places } = await loadPlacesByIds([id], invite.citySlug);
+      const place = places.get(id);
+      /* A place that no longer resolves returns null, and the invite renders
+         without an anchor card rather than with a name we cached. */
       if (!place) return null;
       return {
         kind: "place",
         id,
         title: place.name,
-        meta: `${place.category} · ${place.priceLabel} · ${place.walkMinutes} min walk`,
+        meta: `${place.category} · ${describeProximity(place.proximity)}`,
         venue: place.name,
         href: `/discover/${id}`,
       };

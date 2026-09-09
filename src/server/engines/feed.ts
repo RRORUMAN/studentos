@@ -1,4 +1,5 @@
 import type { Place } from "@/data/types";
+import { describeProximity } from "@/domain/places";
 import type { Cents, CityEvent, CommunityPost, Deal, Invite } from "@/domain/types";
 import type { Scored } from "@/server/engines/recommend";
 
@@ -101,17 +102,23 @@ export function buildForYouFeed(input: FeedInput): FeedItem[] {
     items.push({
       kind: "place",
       id: place.id,
-      href: `/discover/${place.id}`,
+      href: `/discover/${encodeURIComponent(place.id)}`,
       title: place.name,
-      meta: `${place.category} · ${place.walkMinutes} min walk`,
-      priceCents: place.price === null ? null : Math.round(place.price * 100),
+      meta: `${place.category} · ${describeProximity(place.proximity)}`,
+      /* A place has no amount, only a band, and the band belongs in the
+         reasons rather than in a money slot. Null here means the card renders
+         no price at all, which is the truth. */
+      priceCents: null,
       match: scored.match,
       reasons: scored.reasons,
-      social: place.verifiedBy >= 10 ? `${place.verifiedBy} students confirmed this` : null,
+      social:
+        place.confirmations >= 10 ? `${place.confirmations} students confirmed this` : null,
       /* Places are evergreen, so they are held slightly below time-bound rows. */
       score: scored.match - 4,
       startsAt: null,
-      tag: place.price === 0 ? "free" : null,
+      /* "Free" is a claim about a ticket price. A park and a library are free
+         to walk into and the layer says so; a cheap café is not free. */
+      tag: place.layers.includes("free") ? "free" : null,
     });
   }
 

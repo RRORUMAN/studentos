@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
-import { placesForCity } from "@/data/places";
+import { placeExists } from "@/server/queries/places";
 import type { ChatAttachment } from "@/domain/types";
 import { findOne, insert, newId, nowIso, transaction } from "@/server/db";
 import { normalisePollOptions } from "@/server/engines/catch-up";
@@ -44,7 +44,7 @@ async function attachmentExists(attachment: ChatAttachment, citySlug: string, us
     case "event":
       return Boolean(await findOne("events", (row) => row.id === id));
     case "place":
-      return placesForCity(citySlug).some((place) => place.id === id);
+      return placeExists(id);
     case "plan":
       return Boolean(await findOne("plans", (row) => row.id === id));
     case "deal":

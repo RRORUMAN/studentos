@@ -19,8 +19,11 @@ import {
   cityStatusLabel,
   cityStatusNote,
   getCity,
+  resolveCity,
 } from "@/data/cities";
 import { sharePlansForCity } from "@/data/plans";
+import { requestDate } from "@/server/now";
+import { loadCityPlaces } from "@/server/queries/places";
 import { cn } from "@/lib/utils";
 
 export function generateStaticParams() {
@@ -43,6 +46,17 @@ export default async function CityPage(props: PageProps<"/city/[slug]">) {
   const { slug } = await props.params;
   const city = getCity(slug);
   if (!city) notFound();
+
+  const now = requestDate();
+  /* Coordinates come from the directory, which is where every city's geography
+     lives — the marketing `City` record deliberately does not carry a second
+     copy of them. */
+  const context = resolveCity(city.slug);
+  const cityCentre = { lat: context?.lat ?? 0, lng: context?.lng ?? 0 };
+  /* The map's rows, loaded here rather than inside the component: the map is a
+     client component and must not fetch. An outage becomes a stated message on
+     the canvas rather than an empty city. */
+  const mapPlaces = await loadCityPlaces({ citySlug: city.slug, radiusMetres: 2_500, limit: 60 });
 
   const campuses = campusesForCity(city.slug);
   const plans = sharePlansForCity(city.slug);
@@ -215,7 +229,15 @@ export default async function CityPage(props: PageProps<"/city/[slug]">) {
             </h2>
           </Reveal>
           <Reveal delay={0.05} className="mt-6">
-            <CityMap citySlug={city.slug} />
+            <CityMap
+              cityName={city.name}
+              places={mapPlaces.ok ? mapPlaces.places : []}
+              centre={{ lat: cityCentre.lat, lng: cityCentre.lng }}
+              unavailable={mapPlaces.ok ? null : { message: mapPlaces.message }}
+              attribution={mapPlaces.ok ? mapPlaces.attribution : null}
+              now={now}
+              timezone={city.timezone}
+            />
           </Reveal>
         </div>
       </Section>
