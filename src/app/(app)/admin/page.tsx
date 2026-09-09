@@ -9,6 +9,8 @@ import { cityDirectory } from "@/data/cities";
 import type { CityStatus } from "@/data/types";
 import { providerHealth } from "@/server/work/providers";
 import { loadAdminMetrics, loadInstitutionAdmin, loadUnmetNeeds, loadUpgradeTriggerStats } from "@/server/queries/admin";
+import { DataHealth } from "@/components/app/data-health";
+import { loadDataHealth } from "@/server/queries/data-health";
 import { loadInfrastructure } from "@/server/queries/infrastructure";
 import { aiConfig, degradedCopy, spendSince } from "@/server/ai/config";
 import { toolMeta, type ToolName, toolSchemas } from "@/server/ai/tools";
@@ -37,7 +39,7 @@ export const metadata: Metadata = {
 export default async function AdminPage() {
   await requireAdmin();
 
-  const [metrics, needs, triggers, settings, ai, health, infrastructure, register] = await Promise.all([
+  const [metrics, needs, triggers, settings, ai, health, infrastructure, register, dataHealth] = await Promise.all([
     loadAdminMetrics(),
     loadUnmetNeeds(),
     loadUpgradeTriggerStats(),
@@ -46,6 +48,7 @@ export default async function AdminPage() {
     providerHealth(),
     loadInfrastructure(),
     loadInstitutionAdmin(),
+    loadDataHealth(new Date()),
   ]);
 
   const dayStart = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate())).toISOString();
@@ -603,6 +606,8 @@ export default async function AdminPage() {
           </ul>
         </div>
       ) : null}
+
+      <DataHealth report={dataHealth} />
 
       {/* ---- infrastructure -------------------------------------------------- */}
       <section className="mt-9 border-t border-ink-200 pt-5">

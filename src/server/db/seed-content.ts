@@ -53,6 +53,17 @@ export type SeedEvent = {
   lng: number;
   source: "students" | "official" | "venue";
   sourceUrl: string | null;
+  /**
+   * ALWAYS ZERO, and it is a field rather than a constant so that a real
+   * response can raise it.
+   *
+   * These carried invented numbers — 41 confirmations, 128 interested, on an
+   * event nobody had been to. Worse than standalone invention: the interface
+   * ADDS the real responses to the seeded figure, so three students going
+   * rendered as ninety-seven, and the three real ones were the part nobody
+   * could see. A count about other students is either counted or it is not
+   * shown.
+   */
   confirmations: number;
   interested: number;
   tags: string[];
@@ -76,8 +87,8 @@ export const seedEvents: readonly SeedEvent[] = [
     lng: -3.6921,
     source: "official",
     sourceUrl: "https://www.museodelprado.es/en/visit-the-museum/free-visits",
-    confirmations: 41,
-    interested: 128,
+    confirmations: 0,
+    interested: 0,
     tags: ["art", "museums", "culture", "free"],
   },
   {
@@ -96,8 +107,8 @@ export const seedEvents: readonly SeedEvent[] = [
     lng: -3.6996,
     source: "students",
     sourceUrl: null,
-    confirmations: 18,
-    interested: 27,
+    confirmations: 0,
+    interested: 0,
     tags: ["technology", "startups", "networking", "free"],
   },
   {
@@ -116,8 +127,8 @@ export const seedEvents: readonly SeedEvent[] = [
     lng: -3.6883,
     source: "students",
     sourceUrl: null,
-    confirmations: 22,
-    interested: 44,
+    confirmations: 0,
+    interested: 0,
     tags: ["running", "fitness", "free", "outdoor"],
   },
   {
@@ -136,8 +147,8 @@ export const seedEvents: readonly SeedEvent[] = [
     lng: -3.7283,
     source: "official",
     sourceUrl: "https://www.ucm.es/english",
-    confirmations: 12,
-    interested: 86,
+    confirmations: 0,
+    interested: 0,
     tags: ["university", "social", "free"],
   },
   {
@@ -156,8 +167,8 @@ export const seedEvents: readonly SeedEvent[] = [
     lng: -3.7009,
     source: "students",
     sourceUrl: null,
-    confirmations: 31,
-    interested: 63,
+    confirmations: 0,
+    interested: 0,
     tags: ["language-exchange", "social", "free"],
   },
   {
@@ -176,8 +187,8 @@ export const seedEvents: readonly SeedEvent[] = [
     lng: -3.7108,
     source: "venue",
     sourceUrl: null,
-    confirmations: 9,
-    interested: 51,
+    confirmations: 0,
+    interested: 0,
     tags: ["cinema", "culture", "free", "outdoor"],
   },
   {
@@ -196,8 +207,8 @@ export const seedEvents: readonly SeedEvent[] = [
     lng: -3.6947,
     source: "students",
     sourceUrl: null,
-    confirmations: 26,
-    interested: 19,
+    confirmations: 0,
+    interested: 0,
     tags: ["football", "sports"],
   },
   {
@@ -216,8 +227,8 @@ export const seedEvents: readonly SeedEvent[] = [
     lng: -3.7008,
     source: "venue",
     sourceUrl: null,
-    confirmations: 7,
-    interested: 38,
+    confirmations: 0,
+    interested: 0,
     tags: ["music", "concerts", "nightlife"],
   },
   {
@@ -236,8 +247,8 @@ export const seedEvents: readonly SeedEvent[] = [
     lng: -3.6944,
     source: "official",
     sourceUrl: "https://www.museoreinasofia.es/en/visit",
-    confirmations: 37,
-    interested: 94,
+    confirmations: 0,
+    interested: 0,
     tags: ["art", "museums", "culture", "free"],
   },
   {
@@ -256,8 +267,8 @@ export const seedEvents: readonly SeedEvent[] = [
     lng: -3.7076,
     source: "official",
     sourceUrl: null,
-    confirmations: 44,
-    interested: 71,
+    confirmations: 0,
+    interested: 0,
     tags: ["shopping", "culture", "free", "outdoor"],
   },
 
@@ -278,8 +289,8 @@ export const seedEvents: readonly SeedEvent[] = [
     lng: 2.1533,
     source: "official",
     sourceUrl: "https://www.museunacional.cat/en",
-    confirmations: 29,
-    interested: 82,
+    confirmations: 0,
+    interested: 0,
     tags: ["art", "museums", "culture", "free"],
   },
   {
@@ -298,8 +309,8 @@ export const seedEvents: readonly SeedEvent[] = [
     lng: 2.1925,
     source: "students",
     sourceUrl: null,
-    confirmations: 16,
-    interested: 47,
+    confirmations: 0,
+    interested: 0,
     tags: ["sports", "free", "outdoor"],
   },
   {
@@ -318,8 +329,8 @@ export const seedEvents: readonly SeedEvent[] = [
     lng: 2.1568,
     source: "students",
     sourceUrl: null,
-    confirmations: 23,
-    interested: 58,
+    confirmations: 0,
+    interested: 0,
     tags: ["language-exchange", "social", "free"],
   },
   {
@@ -338,8 +349,8 @@ export const seedEvents: readonly SeedEvent[] = [
     lng: 2.1998,
     source: "venue",
     sourceUrl: null,
-    confirmations: 11,
-    interested: 34,
+    confirmations: 0,
+    interested: 0,
     tags: ["food", "shopping", "social"],
   },
 
@@ -360,8 +371,8 @@ export const seedEvents: readonly SeedEvent[] = [
     lng: -0.0994,
     source: "official",
     sourceUrl: "https://www.tate.org.uk/visit/tate-modern",
-    confirmations: 52,
-    interested: 143,
+    confirmations: 0,
+    interested: 0,
     tags: ["art", "museums", "culture", "free"],
   },
   {
@@ -380,8 +391,8 @@ export const seedEvents: readonly SeedEvent[] = [
     lng: -0.1163,
     source: "students",
     sourceUrl: null,
-    confirmations: 14,
-    interested: 39,
+    confirmations: 0,
+    interested: 0,
     tags: ["free", "outdoor", "culture"],
   },
   {
@@ -400,8 +411,8 @@ export const seedEvents: readonly SeedEvent[] = [
     lng: -0.1312,
     source: "venue",
     sourceUrl: null,
-    confirmations: 33,
-    interested: 96,
+    confirmations: 0,
+    interested: 0,
     tags: ["nightlife", "clubbing", "social"],
   },
 
@@ -422,8 +433,8 @@ export const seedEvents: readonly SeedEvent[] = [
     lng: 4.8686,
     source: "students",
     sourceUrl: null,
-    confirmations: 19,
-    interested: 41,
+    confirmations: 0,
+    interested: 0,
     tags: ["running", "fitness", "free", "outdoor"],
   },
   {
@@ -442,8 +453,8 @@ export const seedEvents: readonly SeedEvent[] = [
     lng: 4.9123,
     source: "official",
     sourceUrl: "https://www.nemosciencemuseum.nl/en/",
-    confirmations: 27,
-    interested: 68,
+    confirmations: 0,
+    interested: 0,
     tags: ["free", "outdoor", "culture"],
   },
 
@@ -464,8 +475,8 @@ export const seedEvents: readonly SeedEvent[] = [
     lng: 13.4025,
     source: "official",
     sourceUrl: "https://gruen-berlin.de/en/tempelhofer-feld",
-    confirmations: 48,
-    interested: 112,
+    confirmations: 0,
+    interested: 0,
     tags: ["free", "outdoor", "cycling"],
   },
   {
@@ -484,8 +495,8 @@ export const seedEvents: readonly SeedEvent[] = [
     lng: 13.4016,
     source: "official",
     sourceUrl: "https://www.museumssonntag.berlin/en",
-    confirmations: 61,
-    interested: 154,
+    confirmations: 0,
+    interested: 0,
     tags: ["art", "museums", "culture", "free"],
   },
   {
@@ -504,8 +515,8 @@ export const seedEvents: readonly SeedEvent[] = [
     lng: 13.4283,
     source: "students",
     sourceUrl: null,
-    confirmations: 24,
-    interested: 57,
+    confirmations: 0,
+    interested: 0,
     tags: ["shopping", "free", "outdoor"],
   },
 ];
@@ -862,7 +873,7 @@ export const seedGuides: readonly SeedGuide[] = [
     ],
     source: "students",
     sourceUrl: null,
-    confirmations: 34,
+    confirmations: 0,
   },
   {
     slug: "madrid-menu-del-dia",
@@ -879,7 +890,7 @@ export const seedGuides: readonly SeedGuide[] = [
     ],
     source: "students",
     sourceUrl: null,
-    confirmations: 47,
+    confirmations: 0,
   },
   {
     slug: "generic-first-week-money",
@@ -913,7 +924,7 @@ export const seedGuides: readonly SeedGuide[] = [
     ],
     source: "students",
     sourceUrl: null,
-    confirmations: 28,
+    confirmations: 0,
   },
   {
     slug: "generic-phone-plan",
@@ -980,7 +991,7 @@ export const seedGuides: readonly SeedGuide[] = [
     ],
     source: "students",
     sourceUrl: null,
-    confirmations: 12,
+    confirmations: 0,
   },
 ];
 
@@ -996,21 +1007,30 @@ export type SeedCommunity = {
   name: string;
   blurb: string;
   emoji: string;
+  /**
+   * ALWAYS ZERO at seed time. A group exists as a room somebody can walk into;
+   * how many people are in it is counted by them walking in.
+   *
+   * These carried numbers between seventy-one and three hundred and two, on
+   * groups with no members. Nothing rendered them yet, which made it the most
+   * dangerous kind of invented figure: it would have become true-looking on
+   * the day somebody built the screen for it.
+   */
   memberCount: number;
 };
 
 export const seedCommunities: readonly SeedCommunity[] = [
-  { slug: "madrid-newcomers", citySlug: "madrid", campusSlug: null, kind: "neighbourhood", name: "New in Madrid", blurb: "Arrived in the last few months. Ask anything.", emoji: "🧭", memberCount: 214 },
-  { slug: "madrid-football", citySlug: "madrid", campusSlug: null, kind: "sport", name: "Madrid football", blurb: "Five-a-side, pitches and people short a player.", emoji: "⚽", memberCount: 96 },
-  { slug: "madrid-language", citySlug: "madrid", campusSlug: null, kind: "language", name: "Spanish practice", blurb: "Tandem partners and intercambio nights.", emoji: "💬", memberCount: 152 },
-  { slug: "madrid-cheap-eats", citySlug: "madrid", campusSlug: null, kind: "hobby", name: "Cheap eats Madrid", blurb: "Where the €10 lunch actually is.", emoji: "🍽️", memberCount: 188 },
-  { slug: "ucm", citySlug: "madrid", campusSlug: "ucm", kind: "campus", name: "UCM", blurb: "Complutense students.", emoji: "🎓", memberCount: 143 },
-  { slug: "uam", citySlug: "madrid", campusSlug: "uam", kind: "campus", name: "UAM", blurb: "Autónoma students.", emoji: "🎓", memberCount: 88 },
-  { slug: "bcn-newcomers", citySlug: "barcelona", campusSlug: null, kind: "neighbourhood", name: "New in Barcelona", blurb: "First months in the city.", emoji: "🧭", memberCount: 176 },
-  { slug: "bcn-beach-sport", citySlug: "barcelona", campusSlug: null, kind: "sport", name: "Beach sport", blurb: "Volleyball, running, swimming.", emoji: "🏐", memberCount: 71 },
-  { slug: "london-newcomers", citySlug: "london", campusSlug: null, kind: "neighbourhood", name: "New in London", blurb: "Getting set up without spending a fortune.", emoji: "🧭", memberCount: 302 },
-  { slug: "ams-cycling", citySlug: "amsterdam", campusSlug: null, kind: "hobby", name: "Bikes in Amsterdam", blurb: "Buying, fixing and not getting one stolen.", emoji: "🚲", memberCount: 119 },
-  { slug: "berlin-newcomers", citySlug: "berlin", campusSlug: null, kind: "neighbourhood", name: "New in Berlin", blurb: "Anmeldung, flats and the first winter.", emoji: "🧭", memberCount: 247 },
+  { slug: "madrid-newcomers", citySlug: "madrid", campusSlug: null, kind: "neighbourhood", name: "New in Madrid", blurb: "Arrived in the last few months. Ask anything.", emoji: "🧭", memberCount: 0 },
+  { slug: "madrid-football", citySlug: "madrid", campusSlug: null, kind: "sport", name: "Madrid football", blurb: "Five-a-side, pitches and people short a player.", emoji: "⚽", memberCount: 0 },
+  { slug: "madrid-language", citySlug: "madrid", campusSlug: null, kind: "language", name: "Spanish practice", blurb: "Tandem partners and intercambio nights.", emoji: "💬", memberCount: 0 },
+  { slug: "madrid-cheap-eats", citySlug: "madrid", campusSlug: null, kind: "hobby", name: "Cheap eats Madrid", blurb: "Where the €10 lunch actually is.", emoji: "🍽️", memberCount: 0 },
+  { slug: "ucm", citySlug: "madrid", campusSlug: "ucm", kind: "campus", name: "UCM", blurb: "Complutense students.", emoji: "🎓", memberCount: 0 },
+  { slug: "uam", citySlug: "madrid", campusSlug: "uam", kind: "campus", name: "UAM", blurb: "Autónoma students.", emoji: "🎓", memberCount: 0 },
+  { slug: "bcn-newcomers", citySlug: "barcelona", campusSlug: null, kind: "neighbourhood", name: "New in Barcelona", blurb: "First months in the city.", emoji: "🧭", memberCount: 0 },
+  { slug: "bcn-beach-sport", citySlug: "barcelona", campusSlug: null, kind: "sport", name: "Beach sport", blurb: "Volleyball, running, swimming.", emoji: "🏐", memberCount: 0 },
+  { slug: "london-newcomers", citySlug: "london", campusSlug: null, kind: "neighbourhood", name: "New in London", blurb: "Getting set up without spending a fortune.", emoji: "🧭", memberCount: 0 },
+  { slug: "ams-cycling", citySlug: "amsterdam", campusSlug: null, kind: "hobby", name: "Bikes in Amsterdam", blurb: "Buying, fixing and not getting one stolen.", emoji: "🚲", memberCount: 0 },
+  { slug: "berlin-newcomers", citySlug: "berlin", campusSlug: null, kind: "neighbourhood", name: "New in Berlin", blurb: "Anmeldung, flats and the first winter.", emoji: "🧭", memberCount: 0 },
 ];
 
 /* -------------------------------------------------------------------------- */

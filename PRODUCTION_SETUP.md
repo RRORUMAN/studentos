@@ -399,41 +399,102 @@ load-bearing.
 
 ---
 
-## 10. Maps
+## 10. Places and maps
 
-**STATUS:** Missing
+**STATUS:** **Working with nothing configured.** Everything below is an upgrade.
 
 **PURPOSE**
-The Discover map. Without a key, Discover falls back to the list view.
+Real shops, cafés, pharmacies and libraries, at real coordinates, in every city
+StudentOS lists.
 
-**REQUIRED ENV VARIABLES**
+**WHAT ALREADY WORKS, WITH NO KEY**
+OpenStreetMap through the public Overpass API. Names, categories, coordinates,
+addresses, opening hours, phone numbers and brands — real data, everywhere.
+Check it yourself:
+
+```bash
+pnpm places:verify madrid berlin
 ```
-NEXT_PUBLIC_MAPS_PROVIDER=google
-MAPS_API_KEY
-```
 
-**DASHBOARD SETUP** Enable only Maps JavaScript, Places and Geocoding. Restrict
-the browser key by HTTP referrer to your domain, and any server key by IP.
-Set a billing budget alert — an unrestricted Maps key found in a public repo is
-one of the more expensive mistakes available.
+**WHAT EACH VARIABLE ADDS**
 
-**REQUIRED FOR MVP?** **No.**
+| Variable | Adds | Required? |
+| --- | --- | --- |
+| `GOOGLE_PLACES_API_KEY` | Ratings, review counts, a price band | No |
+| `OVERPASS_URL` | Your own OSM instance instead of the public ones | No, until you have volume |
+| `ROUTING_OSRM_URL` | "8 min walk" instead of "600 m away" | No |
+| `NEXT_PUBLIC_MAP_TILE_URL` | Streets under the map markers | No |
+
+**GOOGLE PLACES — EXACT STEPS**
+
+1. Google Cloud console → select or create a project.
+2. **APIs & Services → Library** → enable **Places API (New)**. Not the legacy
+   "Places API": the adapter uses `places:searchNearby` and
+   `places:searchText`, which only the new one serves.
+3. Enable **Routes API** on the same project if you want walking times from
+   Google rather than running OSRM.
+4. **Credentials → Create credentials → API key.**
+5. **Restrict the key.** Application restriction: **IP addresses**, listing your
+   Vercel function egress IPs — *not* HTTP referrer, because this key is used
+   server-side only. API restriction: Places API (New) and Routes API, nothing
+   else.
+6. **Billing → Budgets & alerts.** Set one. An unrestricted Maps key in a public
+   repository is one of the more expensive mistakes available.
+7. Set `GOOGLE_PLACES_API_KEY` in Vercel. **Never** prefix it with
+   `NEXT_PUBLIC_` — that would ship it to every browser.
+
+**OVERPASS — WHEN AND HOW**
+The public instances are volunteer-run and their usage policy asks for
+moderation. The cache in front of them means a warm city costs no requests at
+all, so this is not urgent on day one. When it is: run
+[the Overpass Docker image](https://github.com/wiktorn/Overpass-API) against a
+regional extract from [Geofabrik](https://download.geofabrik.de/), and set
+`OVERPASS_URL` to `https://your-host/api/interpreter`.
+
+**OSRM — WHEN AND HOW**
+`docker run -p 5000:5000 osrm/osrm-backend` against a Geofabrik extract, then
+`ROUTING_OSRM_URL=https://your-host`. The public demo at
+router.project-osrm.org is **not** a default and should not be used: its usage
+policy is development only.
+
+**MAP TILES**
+Any raster `{z}/{x}/{y}` template — MapTiler, Stadia, Thunderforest. Set
+`NEXT_PUBLIC_MAP_TILE_ATTRIBUTION` to whatever that provider requires. Without
+tiles the map draws real markers on a plain grid, which is honest and free.
+There is no default because OpenStreetMap's own tile servers are for the map on
+their website and their usage policy does not cover an application.
+
+**REQUIRED FOR LAUNCH?** **No.** Places work without any of it.
 
 ---
 
 ## 11. Event sources
 
-**STATUS:** Missing — no `event_sources` rows for any city
+**STATUS:** Missing. No adapter exists yet.
 
 **PURPOSE**
-Real events instead of seeded ones. Until these exist, every city's events are
-sample content and the standing notice says so.
+Real events beyond what students post and the 32 seeded recurring facts.
 
-**SETUP** Add `event_sources` rows per launch city, then review
-`/admin` → Cities. **Nothing should be marked Live that does not have an active
-community** — "Open" is the honest default and the UI prints that word.
+**WHAT IS ACTUALLY THERE TODAY**
+- Students can create events, and those are real.
+- 32 seeded rows for the deep five, each a genuinely recurring thing with a real
+  venue, real coordinates and a real `sourceUrl` — the Prado's free evening
+  window, linking to the museum's own page saying so.
+- **Every social count on those rows is zero.** They used to carry invented
+  confirmations and interest, and the interface *adds* real responses to them,
+  so three students going rendered as ninety-seven.
 
-**REQUIRED FOR MVP?** **Yes, for any city you mark Live.**
+**WHAT IS MISSING**
+An `EventProvider` adapter. The shape to copy is
+`src/server/work/providers.ts`: a typed adapter that reads a declared feed,
+normalises without inventing a field, and records a `ProviderRun` carrying the
+real error text on failure. Candidates worth pursuing, in order of how likely
+they are to say yes: university event calendars (usually ICS, usually public),
+municipal culture feeds, then a commercial ticketing API.
+
+**REQUIRED FOR LAUNCH?** **No** — but do not mark a city Live on the strength of
+its events until one exists. "Open" is the honest default and the interface
+prints that word.
 
 ---
 

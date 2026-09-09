@@ -90,17 +90,42 @@ the shape and where it stops.
 
 ## 5. Content and coverage
 
-- [ ] City statuses reviewed in `/admin`. **Nothing is marked Live that does not
-      have an active community.** "Open" is the honest default and the UI prints
-      that word.
-- [ ] `event_sources` rows added for the launch cities
+Places are no longer on this list as a blocker, and that is the change that
+matters: they come from a provider and work in every city with nothing
+configured. Run `pnpm places:verify <city>` for each launch city and read what
+it says. What remains here is everything a provider cannot supply.
+
+- [ ] City statuses reviewed in `/admin` → **City coverage**. **Nothing is
+      marked Live that does not have an active community.** "Open" is the honest
+      default and the UI prints that word. The screen shows, per city, real
+      counts of students, institutions, upcoming events, open work, verified
+      deals and Pulse posts — and names the weakest one.
+- [ ] `pnpm places:verify` run for every launch city, exiting 0. It checks that
+      rows come back, that each carries provenance, that each is inside the
+      radius asked for, and that no OpenStreetMap row carries a rating something
+      invented.
+- [ ] Institutions imported for every launch **country**, not just Spain:
+      `node scripts/import-institutions.mjs FR DE NL`. Outside Spain a student
+      can only find their university if somebody submitted it.
+- [ ] `node scripts/import-cities.mjs` re-run if any city was added, and its
+      output read. The script prints what each name resolved to, and that print
+      is the only review step between Wikidata and the map.
+- [ ] Institution submissions queue in `/admin` has somebody who reads it
 - [ ] Official facts re-checked against their sources, and `checked_at` updated
-- [ ] `STUDENTOS_CONTENT_MODE` left at `sample` until the seeded events, deals
-      and places have actually been replaced. While it is `sample` the app
-      carries a standing "sample city data" notice, which is correct and must
-      not be switched off early. Connecting a database does not make an invented
-      event real, which is why this is a separate declaration from the
-      Supabase variables.
+- [ ] Events: understood that there is **no event provider adapter**, so beyond
+      the 32 seeded recurring facts and whatever students post, a city's events
+      are empty. Do not market Event Radar in a city on the strength of it.
+- [ ] `STUDENTOS_CONTENT_MODE` left at `sample` until the seeded events and
+      deals have actually been replaced. While it is `sample` the app carries a
+      standing "sample city data" notice, which is correct and must not be
+      switched off early. Connecting a database does not make a seeded event
+      real, which is why this is a separate declaration from the Supabase
+      variables.
+- [ ] Optional, in rough order of value:
+      `ROUTING_OSRM_URL` (turns distances into walking times),
+      `GOOGLE_PLACES_API_KEY` (adds ratings and price bands),
+      `NEXT_PUBLIC_MAP_TILE_URL` (puts streets under the map),
+      `OVERPASS_URL` (your own OSM instance, once you have volume).
 
 ## 6. Safety
 
@@ -122,6 +147,10 @@ the shape and where it stops.
 - [ ] `NEXT_PUBLIC_SENTRY_DSN` and `SENTRY_ENVIRONMENT` set
 - [ ] PostHog set, or a deliberate decision not to
 - [ ] Uptime check on `/` and on `/api/stripe/webhook`
+- [ ] Both cron jobs confirmed running in Vercel: `/api/cron/work-sync` (04:17)
+      and `/api/cron/data-upkeep` (04:42). `CRON_SECRET` must be set or both
+      refuse every request — which is the correct closed default, and also means
+      an unset secret looks exactly like a working schedule that does nothing.
 - [ ] A deploy rollback tested once
 
 ## 8. The product itself
