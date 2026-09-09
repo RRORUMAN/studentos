@@ -8,7 +8,12 @@ import {
   searchInstitutions,
   type Institution,
 } from "../../src/domain/institutions.ts";
-import { institutions, institutionForCampus, institutionsInCity } from "../../src/data/institutions/index.ts";
+import {
+  institutions,
+  institutionForCampus,
+  institutionsInCity,
+  IMPORTED_COUNTRIES,
+} from "../../src/data/institutions/index.ts";
 import { campuses } from "../../src/data/cities.ts";
 
 /**
@@ -230,5 +235,79 @@ describe("a dataset that does not exist yet", () => {
     };
     assert.equal(searchInstitutions([bare], "tallinna")[0]?.institution.id, "xx-1");
     assert.equal(searchInstitutions([bare], "tehnikaulikool")[0]?.institution.id, "xx-1");
+  });
+});
+
+/**
+ * ============================================================================
+ * THE REGISTRY ACROSS EIGHTEEN COUNTRIES
+ * ----------------------------------------------------------------------------
+ * These pin two things that broke while the registry grew from one country to
+ * eighteen, both of which were silent.
+ * ============================================================================
+ */
+describe("the multi-country registry", () => {
+  it("holds more than one country, and says which", () => {
+    /* `IMPORTED_COUNTRIES` was the literal ["ES"] and stayed that way while
+       seventeen more countries were imported, so the product would have told a
+       French student their country was not covered while holding four hundred
+       French universities. It is derived from the data now. */
+    assert.ok(IMPORTED_COUNTRIES.length > 1);
+    assert.ok(IMPORTED_COUNTRIES.includes("ES"));
+    assert.ok(IMPORTED_COUNTRIES.includes("FR"));
+    assert.deepEqual([...IMPORTED_COUNTRIES].sort(), [...IMPORTED_COUNTRIES]);
+
+    /* Every declared country must actually have rows behind it. */
+    for (const code of IMPORTED_COUNTRIES) {
+      assert.ok(
+        institutions.some((row) => row.countryCode === code),
+        `${code} is declared imported but has no institutions`,
+      );
+    }
+  });
+
+  it("never puts a whole country's universities in one city by accident", () => {
+    /**
+     * THE GREEK BUG. `fold` keeps only [a-z0-9], so any name in a non-Latin
+     * script folds to the empty string: "Αθήνα" and "Θεσσαλονίκη" both become
+     * "". The city matcher compares folded strings for equality, so without a
+     * guard `"" === ""` is true and EVERY Greek institution is assigned to
+     * whichever Greek city is listed first — silently, and looking entirely
+     * plausible on screen.
+     *
+     * Athens therefore has no institutions attached, which is the honest
+     * answer: we cannot read the town, so we do not claim to know it.
+     */
+    assert.equal(fold("Αθήνα"), "");
+    assert.equal(institutionsInCity("athens").length, 0);
+
+    /* And no city has absorbed an implausible share of one country. */
+    const greek = institutions.filter((row) => row.countryCode === "GR");
+    assert.ok(greek.length > 0, "Greece should still be searchable");
+    assert.equal(
+      greek.filter((row) => row.citySlug !== null).length,
+      0,
+      "no Greek institution should be attached to a city while fold() cannot read Greek",
+    );
+  });
+
+  it("attaches universities to the cities students actually name them by", () => {
+    /* The registry labels municipalities in the local language, so the metro
+       table has to say Praha and Warszawa rather than Prague and Warsaw. A
+       wrong name here is invisible: the city simply looks like it has no
+       universities. */
+    for (const [city, atLeast] of [
+      ["paris", 20],
+      ["rome", 10],
+      ["prague", 10],
+      ["warsaw", 10],
+      ["dublin", 5],
+      ["lisbon", 5],
+    ] as const) {
+      assert.ok(
+        institutionsInCity(city).length >= atLeast,
+        `${city} has ${institutionsInCity(city).length} institutions, expected at least ${atLeast}`,
+      );
+    }
   });
 });

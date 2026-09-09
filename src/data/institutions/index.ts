@@ -1,6 +1,23 @@
 import { fold, type Institution } from "@/domain/institutions";
 import { curated } from "@/data/institutions/curated";
+import { institutions as austria } from "@/data/institutions/at.generated";
+import { institutions as belgium } from "@/data/institutions/be.generated";
+import { institutions as czechia } from "@/data/institutions/cz.generated";
+import { institutions as germany } from "@/data/institutions/de.generated";
+import { institutions as denmark } from "@/data/institutions/dk.generated";
+import { institutions as estonia } from "@/data/institutions/ee.generated";
 import { institutions as spain } from "@/data/institutions/es.generated";
+import { institutions as finland } from "@/data/institutions/fi.generated";
+import { institutions as france } from "@/data/institutions/fr.generated";
+import { institutions as britain } from "@/data/institutions/gb.generated";
+import { institutions as greece } from "@/data/institutions/gr.generated";
+import { institutions as hungary } from "@/data/institutions/hu.generated";
+import { institutions as ireland } from "@/data/institutions/ie.generated";
+import { institutions as italy } from "@/data/institutions/it.generated";
+import { institutions as netherlands } from "@/data/institutions/nl.generated";
+import { institutions as poland } from "@/data/institutions/pl.generated";
+import { institutions as portugal } from "@/data/institutions/pt.generated";
+import { institutions as sweden } from "@/data/institutions/se.generated";
 
 /**
  * ============================================================================
@@ -84,10 +101,115 @@ const METROS: readonly Metro[] = [
   { citySlug: "london", countryCode: "GB", towns: ["London", "City of London"] },
   { citySlug: "amsterdam", countryCode: "NL", towns: ["Amsterdam", "Amstelveen", "Diemen"] },
   { citySlug: "berlin", countryCode: "DE", towns: ["Berlin"] },
+
+  /* ---- the rest of Europe -----------------------------------------------
+     THE TOWN NAME IS THE LOCAL ONE, because that is what the registry holds:
+     the importer asks Wikidata for labels in the country's own language, so
+     Prague is "Praha", Vienna is "Wien" and Warsaw is "Warszawa". Writing
+     "Prague" here would match nothing and would look like the city simply
+     having no universities.
+
+     Several countries label a municipality as a `kommun`/`Kommune` as well as
+     a bare name, and the same city appears under both, so both are listed.
+     `fold()` handles the accents; it does not handle a different word.
+
+     These are single-town claims on purpose. A metro that swallows the
+     surrounding region -- the Comunidad de Madrid above is the one case where
+     that is genuinely one travel area -- would attach a student two hours away
+     to a transport card they cannot use. An institution in a town not listed
+     here keeps `citySlug: null`, stays searchable and pickable, and simply has
+     no local content behind it. That is the documented, honest degradation.
+     ---------------------------------------------------------------------- */
+
+  /* Spain */
+  { citySlug: "valencia", countryCode: "ES", towns: ["Valencia", "València"] },
+  { citySlug: "seville", countryCode: "ES", towns: ["Sevilla"] },
+  { citySlug: "malaga", countryCode: "ES", towns: ["Málaga"] },
+  { citySlug: "bilbao", countryCode: "ES", towns: ["Bilbao", "Bilbo"] },
+  { citySlug: "granada", countryCode: "ES", towns: ["Granada"] },
+  { citySlug: "salamanca", countryCode: "ES", towns: ["Salamanca"] },
+
+  /* France */
+  { citySlug: "paris", countryCode: "FR", towns: ["Paris"] },
+  { citySlug: "lyon", countryCode: "FR", towns: ["Lyon"] },
+  { citySlug: "toulouse", countryCode: "FR", towns: ["Toulouse"] },
+
+  /* Germany */
+  { citySlug: "munich", countryCode: "DE", towns: ["München"] },
+  { citySlug: "hamburg", countryCode: "DE", towns: ["Hamburg"] },
+  { citySlug: "frankfurt", countryCode: "DE", towns: ["Frankfurt am Main"] },
+  { citySlug: "cologne", countryCode: "DE", towns: ["Köln"] },
+
+  /* Italy */
+  { citySlug: "rome", countryCode: "IT", towns: ["Roma"] },
+  { citySlug: "milan", countryCode: "IT", towns: ["Milano"] },
+  { citySlug: "florence", countryCode: "IT", towns: ["Firenze"] },
+  { citySlug: "bologna", countryCode: "IT", towns: ["Bologna"] },
+  { citySlug: "turin", countryCode: "IT", towns: ["Torino"] },
+
+  /* Portugal */
+  { citySlug: "lisbon", countryCode: "PT", towns: ["Lisboa"] },
+  { citySlug: "porto", countryCode: "PT", towns: ["Porto", "Paranhos"] },
+
+  /* Netherlands, Belgium */
+  { citySlug: "rotterdam", countryCode: "NL", towns: ["Rotterdam"] },
+  { citySlug: "utrecht", countryCode: "NL", towns: ["Utrecht"] },
+  { citySlug: "brussels", countryCode: "BE", towns: ["Brussel", "Bruxelles"] },
+
+  /* Britain and Ireland */
+  { citySlug: "manchester", countryCode: "GB", towns: ["Manchester"] },
+  { citySlug: "edinburgh", countryCode: "GB", towns: ["Edinburgh"] },
+  { citySlug: "dublin", countryCode: "IE", towns: ["Dublin"] },
+
+  /* Central Europe */
+  { citySlug: "vienna", countryCode: "AT", towns: ["Wien"] },
+  { citySlug: "prague", countryCode: "CZ", towns: ["Praha"] },
+  { citySlug: "budapest", countryCode: "HU", towns: ["Budapest"] },
+  { citySlug: "warsaw", countryCode: "PL", towns: ["Warszawa"] },
+  { citySlug: "krakow", countryCode: "PL", towns: ["Kraków"] },
+
+  /* Nordics and the Baltic */
+  { citySlug: "copenhagen", countryCode: "DK", towns: ["København", "Københavns Kommune"] },
+  { citySlug: "stockholm", countryCode: "SE", towns: ["Stockholm", "Stockholms kommun"] },
+  { citySlug: "helsinki", countryCode: "FI", towns: ["Helsinki"] },
+  { citySlug: "tallinn", countryCode: "EE", towns: ["Tallinn"] },
+
+  /**
+   * Greece is listed and currently matches nothing, which is deliberate and
+   * worth stating rather than hiding.
+   *
+   * The registry labels Greek municipalities in Greek — "Αθήνα", not "Athens" —
+   * and `fold` keeps only `[a-z0-9]`, so every Greek name folds to the empty
+   * string. The guard in `citySlugFor` turns that into "unknown" instead of
+   * "matches everything", so Greek institutions stay searchable with
+   * `citySlug: null` and no local content, exactly as any unlisted town does.
+   *
+   * Fixing it properly means transliterating Greek in `fold`, which is a change
+   * to how every name in the product is matched and is not worth making
+   * blind. This line is here so the next person finds the reason instead of
+   * the symptom.
+   */
+  { citySlug: "athens", countryCode: "GR", towns: ["Athens"] },
 ];
 
 function citySlugFor(countryCode: string, city: string, region: string | null): string | null {
   const town = fold(city);
+
+  /**
+   * AN EMPTY FOLD MATCHES NOTHING, and this guard is the whole reason Greek
+   * institutions are not all in Athens.
+   *
+   * `fold` keeps `[a-z0-9]` and drops everything else, so any name written in a
+   * non-Latin script folds to the empty string: "Αθήνα" and "Θεσσαλονίκη" both
+   * become "". Without this line the equality below is `"" === ""`, and every
+   * institution in Greece would be assigned to whichever Greek city happened to
+   * be listed first — silently, and looking entirely plausible on the screen.
+   *
+   * Returning null is correct rather than merely safe: an institution whose
+   * town we cannot read is one whose town we do not know.
+   */
+  if (town.length === 0) return null;
+
   for (const metro of METROS) {
     if (metro.countryCode !== countryCode) continue;
     if (metro.towns?.some((candidate) => fold(candidate) === town)) return metro.citySlug;
@@ -117,7 +239,33 @@ function namesOf(row: { officialName: string; shortName?: string | null; aliases
  */
 const CURATED_REVIEWED_ON = "2026-09-08";
 
-const GENERATED: readonly (readonly Institution[])[] = [spain];
+/**
+ * Every imported country registry.
+ *
+ * One line per country, and adding one is one line here plus one import. The
+ * order does not matter: rows are merged by folded name against the curated
+ * list, and a student searches across all of them at once.
+ */
+const GENERATED: readonly (readonly Institution[])[] = [
+  austria,
+  belgium,
+  czechia,
+  germany,
+  denmark,
+  estonia,
+  spain,
+  finland,
+  france,
+  britain,
+  greece,
+  hungary,
+  ireland,
+  italy,
+  netherlands,
+  poland,
+  portugal,
+  sweden,
+];
 
 function build(): Institution[] {
   const imported: readonly Institution[] = GENERATED.flat();
@@ -208,5 +356,15 @@ export function institutionForCampus(campusSlug: string): Institution | undefine
   return institutions.find((row) => row.campusSlug === campusSlug);
 }
 
-/** Countries the registry has been imported for, for the "not listed" copy. */
-export const IMPORTED_COUNTRIES: readonly string[] = ["ES"];
+/**
+ * Countries the registry has been imported for, for the "not listed" copy.
+ *
+ * DERIVED, not hand-written. This was a literal `["ES"]` and stayed that way
+ * when seventeen more countries were imported, so the product would have gone
+ * on telling a French student their country was not covered while holding four
+ * hundred French universities. A list of what we have should be read off what
+ * we have.
+ */
+export const IMPORTED_COUNTRIES: readonly string[] = Object.freeze([
+  ...new Set(GENERATED.flatMap((rows) => rows.map((row) => row.countryCode))),
+].sort());

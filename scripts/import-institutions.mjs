@@ -158,15 +158,65 @@ SELECT ?item ?alias WHERE {
 }`;
 }
 
+/**
+ * Query Wikidata, retrying the failures that are the service having a moment.
+ *
+ * The public SPARQL endpoint answers 429 under load and 504 when a country's
+ * query takes longer than its gateway allows -- and the big countries are
+ * exactly the ones that do. Italy timed out once mid-run, and because a throw
+ * here aborted the whole invocation, twelve countries that had nothing wrong
+ * with them were never attempted.
+ *
+ * Three attempts with a widening pause. A 504 on a large country is usually
+ * the same query succeeding thirty seconds later.
+ */
+/**
+ * Every C0 control character. JSON allows none of them inside a string, and
+ * tab/newline/carriage return are only legal BETWEEN tokens -- where a space
+ * does the same job -- so replacing all of them repairs a malformed string
+ * without changing the structure of a valid document.
+ */
+const CONTROL_CHARS = new RegExp("[\u0000-\u001f]", "g");
+
 async function sparql(query) {
-  const response = await fetch(`${ENDPOINT}?query=${encodeURIComponent(query)}`, {
-    headers: { Accept: "application/sparql-results+json", "User-Agent": USER_AGENT },
-  });
-  if (!response.ok) {
-    throw new Error(`SPARQL ${response.status} ${response.statusText}: ${(await response.text()).slice(0, 400)}`);
+  let lastError;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      const response = await fetch(`${ENDPOINT}?query=${encodeURIComponent(query)}`, {
+        headers: { Accept: "application/sparql-results+json", "User-Agent": USER_AGENT },
+      });
+      if (!response.ok) {
+        throw new Error(
+          `SPARQL ${response.status} ${response.statusText}: ${(await response.text()).slice(0, 400)}`,
+        );
+      }
+      /**
+       * Parsed from text, after stripping raw control characters.
+       *
+       * Italy failed here with "Bad control character in string literal at
+       * position 1776018". JSON forbids unescaped C0 control characters inside
+       * strings, and some Wikidata labels contain one -- a stray newline or
+       * vertical tab typed into a label years ago and never noticed, because
+       * nothing else parses that field strictly.
+       *
+       * `response.json()` gives no way to recover from it and takes the whole
+       * country down. Stripping the characters that cannot legally be there is
+       * a repair rather than a guess: none of them carries meaning in an
+       * institution's name, and the alternative is having no Italian
+       * universities at all.
+       */
+      const text = await response.text();
+      const body = JSON.parse(text.replace(CONTROL_CHARS, " "));
+      return body.results.bindings;
+    } catch (error) {
+      lastError = error;
+      if (attempt < 3) {
+        process.stdout.write(`    retrying after ${error.message.slice(0, 60)}\n`);
+        await new Promise((resolve) => setTimeout(resolve, attempt * 5_000));
+      }
+    }
   }
-  const body = await response.json();
-  return body.results.bindings;
+  throw lastError;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -349,7 +399,7 @@ const SUB_CITY =
 
 /** Units bigger than a city. "Provincia de Barcelona" is not where you study. */
 const ABOVE_A_CITY =
-  /(province|provincia|comarca|autonomous community|county|federal state|voivodeship|prefecture|departement|département)/i;
+  /\b(province|provincia|comarca|autonomous community|county|federal state|voivodeship|prefecture|departement|département)\b/i;
 
 /**
  * The town a student would name.
@@ -626,8 +676,33 @@ async function main() {
     process.exit(1);
   }
 
+  /**
+   * ONE COUNTRY'S FAILURE MUST NOT TAKE THE OTHERS WITH IT.
+   *
+   * This used to be a bare loop, so a single 504 on Italy ended the run and
+   * twelve countries after it were never attempted -- and the ones that HAD
+   * succeeded were already written, which made the result look like a
+   * deliberate partial import rather than an interrupted one.
+   *
+   * Each country is now independent. Failures are collected, named at the end,
+   * and make the exit code non-zero so this can still gate anything.
+   */
+  const failed = [];
+
   for (const cc of codes) {
-    await importCountry(cc, { dryRun });
+    try {
+      await importCountry(cc, { dryRun });
+    } catch (error) {
+      failed.push({ cc, message: error.message });
+      process.stdout.write(`${cc}  FAILED: ${error.message.slice(0, 120)}\n`);
+    }
+  }
+
+  if (failed.length > 0) {
+    process.stderr.write(`\n${failed.length} of ${codes.length} countries failed:\n`);
+    for (const row of failed) process.stderr.write(`  ${row.cc}  ${row.message.slice(0, 200)}\n`);
+    process.stderr.write(`\nThe rest were imported. Re-run just these: ` + `node scripts/import-institutions.mjs ${failed.map((r) => r.cc).join(" ")}\n`);
+    process.exit(1);
   }
 }
 
