@@ -20,7 +20,7 @@ import { describe as describeRelation, relate } from "@/domain/graph";
 import { isStudentVerified } from "@/services/db/schema";
 import { betterOption } from "@/server/engines/better-option";
 import { loadPlaces, loadRecommendContext } from "@/server/queries/discovery";
-import { loadCityGraph, viewerNode } from "@/server/queries/graph";
+import { areaSlugForPlace, loadCityGraph, viewerNode } from "@/server/queries/graph";
 import { loadMoney } from "@/server/queries/money";
 import { loadPlanChoices } from "@/server/queries/plans";
 import { findMany, findOne } from "@/server/db";
@@ -110,8 +110,17 @@ export default async function PlacePage(props: PageProps<"/discover/[...id]">) {
   /* Everything the city graph can honestly say about this student and this
      place: a friend's save, a floored campus count, the area it is in, the
      commute from that area to their campus. Facts, not a score — the match
-     percentage above is the score, and it does not explain itself. */
-  const relations = relate(graph, viewerNode(graph, viewer.user.id), { kind: "place", id: place.id });
+     percentage above is the score, and it does not explain itself.
+
+     The area comes from this place's own coordinates. The graph does not know
+     it: it holds saves, friendships and claims, and asking it where a place is
+     would mean it fetching the city's places on every build. */
+  const relations = relate(
+    graph,
+    viewerNode(graph, viewer.user.id),
+    { kind: "place", id: place.id },
+    { areaSlug: areaSlugForPlace(place) },
+  );
 
   const scored = scoredAll.places.find((entry) => entry.item.id === id);
   const better = betterOption({

@@ -2,6 +2,7 @@ import type { Place } from "@/data/types";
 import { WALK_METRES_PER_MINUTE } from "@/server/engines/recommend";
 import type { PriceObservation } from "@/domain/knowledge";
 import { summarisePrices } from "@/domain/knowledge";
+import { isCheapPlace } from "@/domain/places";
 import type { Cents, Transaction } from "@/domain/types";
 import { categoryLabel, isDiscretionary, layersForCategory } from "@/server/engines/budget";
 
@@ -253,9 +254,11 @@ function cheaperPlaces(input: {
       const reported = input.observed?.get(place.id);
       /* A reported price has to actually beat the ceiling. With no report the
          cheap band is the qualification — weaker evidence, which the
-         confidence band already reflects. */
+         confidence band already reflects. `isCheapPlace` is that band, and it
+         reads the category as well as the price level so a real cheap-eat is
+         not disqualified by OpenStreetMap having no price field. */
       if (reported !== undefined) return reported <= ceiling;
-      return place.priceLevel !== null && place.priceLevel <= 1;
+      return isCheapPlace(place);
     })
     .filter((place) => place.proximity.metres <= input.maxMetres)
     /* Confirmed places first: recommending a swap nobody has verified is how a

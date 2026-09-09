@@ -69,22 +69,53 @@ test("a student count is withheld rather than shown for too small a group", asyn
 
 test("the place page explains the relationship, not just the score", async ({ page }) => {
   await signUpAndOnboard(page);
-  await page.goto("/discover");
 
-  /* Addressed by href rather than by copy: a selector that matches on the
-     card's text goes stale the first time someone rewords a price label, and
-     the failure mode is a test that skips itself and reports green. */
-  const first = page.locator('a[href^="/discover/"]').first();
-  await expect(first).toBeVisible();
-  await first.click();
-  await expect(page).toHaveURL(/\/discover\/.+/);
+  /**
+   * THIS TEST USED TO SKIP ITSELF, and it skipped every run for a month.
+   *
+   * The section it checks only renders when the graph can relate the place to
+   * something — most usefully the neighbourhood it is in. That lookup used to
+   * read the area off the end of the place's own name ("Ramen counter,
+   * Malasaña"), which was true of the twenty-five invented places and of no
+   * real one. When the invented places were deleted the lookup started
+   * returning null for every place in every city, the section stopped
+   * rendering, and this test's `test.skip` swallowed it and reported green.
+   * The area is geographic now, so the section is expected rather than hoped
+   * for, and a regression fails here instead of disappearing.
+   *
+   * WHY IT WALKS SEVERAL PLACES. Which place ranks first depends on the
+   * student's interests and on what the provider returned, and a place can
+   * legitimately sit outside every area the product has a row for — a shop by
+   * the airport is in no neighbourhood, and saying so is correct. What must
+   * not happen is that NONE of them can be placed, which is exactly the state
+   * the bug produced.
+   */
+  const CANDIDATES = 4;
+  let explained = 0;
 
-  const section = page.getByRole("heading", { name: "How this sits in your city" });
-  if (!(await section.isVisible().catch(() => false))) {
-    /* A place with no area row and no saves has nothing honest to say, and
-       showing an empty section would be worse than showing none. */
-    test.skip(true, "the city graph has no edges for this place yet");
+  for (let index = 0; index < CANDIDATES; index += 1) {
+    await page.goto("/discover");
+
+    /* Addressed by href rather than by copy: a selector that matches on the
+       card's text goes stale the first time someone rewords a price label. */
+    const link = page.locator('a[href^="/discover/"]').nth(index);
+    if (!(await link.isVisible().catch(() => false))) break;
+
+    await link.click();
+    await expect(page).toHaveURL(/\/discover\/.+/);
+
+    const section = page.getByRole("heading", { name: "How this sits in your city" });
+    if (await section.isVisible().catch(() => false)) {
+      explained += 1;
+      /* The facts themselves, not just the heading: an area, a commute, or a
+         save. A section rendered with nothing under it would pass a check on
+         the heading alone. */
+      await expect(page.getByText(/In your area|In [A-Z]|min from |Saved by/).first()).toBeVisible();
+    }
   }
 
-  await expect(page.getByText(/In your area|In [A-Z]|min from |Saved by/).first()).toBeVisible();
+  expect(
+    explained,
+    "no place among the first few could be related to anything in the city graph",
+  ).toBeGreaterThan(0);
 });

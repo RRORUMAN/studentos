@@ -364,4 +364,19 @@ export type Neighbourhood = {
   commuteMinutes: Readonly<Record<string, number>>;
   rent: RentBand;
   traits: Readonly<Record<NeighbourhoodTrait, TraitBand>>;
+  /**
+   * The area's own centre, from Wikidata via `scripts/import-neighbourhoods.mjs`.
+   *
+   * NULLABLE, AND THAT IS THE POINT. It is what decides which neighbourhood a
+   * real place sits in — nearest centre, inside a radius — and the honest
+   * answer for an area nobody has a coordinate for is that no place is ever
+   * claimed to be in it. Madrid's La Latina is the live example: Wikidata has
+   * a metro station of that name and a district several kilometres away that
+   * is a different place, so it has no point and makes no claim.
+   *
+   * `wikidataId` is the provenance: https://www.wikidata.org/wiki/<id>
+   */
+  lat: number | null;
+  lng: number | null;
+  wikidataId: string | null;
 };

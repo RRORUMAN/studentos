@@ -342,3 +342,74 @@ export function standoutTrait(area: Neighbourhood): { trait: NeighbourhoodTrait;
     { trait: entries[0][0], band: entries[0][1] },
   );
 }
+
+/* -------------------------------------------------------------------------- */
+/* Which area a point is in                                                    */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * How far from an area's centre a place may be and still be said to be in it.
+ *
+ * A city neighbourhood is roughly a kilometre across, so 1200 m from the
+ * centre point covers it and a little of the edge. It is deliberately not
+ * generous: the claim "this is in Malasana" is one a student can check by
+ * walking, and being wrong about it is worse than saying nothing. Anything
+ * further away gets no area at all rather than the nearest one.
+ */
+export const AREA_RADIUS_METRES = 1_200;
+
+/**
+ * The neighbourhood a point sits in, or null.
+ *
+ * NEAREST CENTRE INSIDE A RADIUS, which is an approximation and is worth being
+ * honest about: a real neighbourhood is a polygon with a jagged edge, and this
+ * is a circle around a single point. It is right in the middle of an area and
+ * can be wrong at the boundary between two, where a street belongs to whichever
+ * centre it happens to be nearer. Boundary polygons would fix that and are a
+ * much larger dataset to hold and keep current; for the claim being made here —
+ * "this cafe is in Gracia, twenty minutes from your campus" — a centre and a
+ * radius is the resolution the answer actually needs.
+ *
+ * REPLACES A STRING MATCH, and that is the point of it. This used to read the
+ * area off the end of the place's own name: "Ramen counter, Malasana" was in
+ * Malasana because the text said so. Every invented place was written that way
+ * and no real one is, so when the invented places were deleted this silently
+ * returned null for everything and a whole section of the place page stopped
+ * rendering with nothing failing.
+ *
+ * Areas with no coordinate are skipped, so an area nobody could geolocate
+ * never claims a place.
+ */
+export function areaForPoint(
+  areas: readonly Neighbourhood[],
+  point: { lat: number; lng: number },
+): Neighbourhood | null {
+  let best: { area: Neighbourhood; metres: number } | null = null;
+
+  for (const area of areas) {
+    if (area.lat === null || area.lng === null) continue;
+    const metres = metresBetween(point, { lat: area.lat, lng: area.lng });
+    if (metres > AREA_RADIUS_METRES) continue;
+    if (best === null || metres < best.metres) best = { area, metres };
+  }
+
+  return best?.area ?? null;
+}
+
+/**
+ * Great-circle distance in metres.
+ *
+ * Written here rather than imported from `@/domain/places` so this engine keeps
+ * the property every engine in this directory has: it depends on nothing but
+ * its arguments and arithmetic.
+ */
+function metresBetween(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
+  const R = 6_371_008.8;
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+}

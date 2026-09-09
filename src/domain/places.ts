@@ -655,6 +655,36 @@ export function categoriesFor(query: string): PlaceCategory[] {
   return [...new Set(hits.map((hit) => hit.key))];
 }
 
+/**
+ * Whether a place is evidence of being at the cheap end.
+ *
+ * ONE DEFINITION, because there were two and one of them was dead. Every
+ * "somewhere cheaper" path used to test `priceLevel !== null && priceLevel <= 1`
+ * on its own. That is right against a provider that publishes price levels and
+ * empty against the one this product runs on by default: OpenStreetMap has no
+ * price field at all, so the OSM adapter sets `priceLevel: null` on every row
+ * and the test could never pass. Explore's cheap filter and Ask's "somewhere
+ * cheaper" both returned nothing, in every city, for every deployment without
+ * a Google Places key — and an empty list reads as "there is nowhere cheap
+ * here", which is a claim about the city rather than about our data.
+ *
+ * The category is the honest substitute. `cheap-food` comes from what the
+ * place IS — a fast-food counter, a canteen, a bakery — which OpenStreetMap
+ * does record. A provider price level still counts where one exists, so a
+ * Google-backed deployment keeps the stronger signal.
+ *
+ * What this is NOT is a claim about an amount. It qualifies a place as worth
+ * offering; it never licenses printing a saving. A figure in euro still
+ * requires prices students actually reported.
+ */
+export function isCheapPlace(place: {
+  layers: readonly string[];
+  priceLevel: number | null;
+}): boolean {
+  if (place.layers.includes("cheap-food")) return true;
+  return place.priceLevel !== null && place.priceLevel <= 1;
+}
+
 /** Whether the query asks for the cheap end, which changes the sort. */
 export function wantsCheap(query: string): boolean {
   const needle = foldName(query);

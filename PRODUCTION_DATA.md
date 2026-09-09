@@ -292,13 +292,43 @@ always labelled as an estimate.
 
 | | |
 | --- | --- |
-| **Source** | `src/data/neighbourhoods.ts`, hand-written for five cities |
+| **Editorial rows** | `src/data/neighbourhoods.ts`, hand-written for five cities |
+| **Coordinates** | Wikidata (P625), via `scripts/import-neighbourhoods.mjs` |
+| **Generated** | `src/data/neighbourhoods/geo.generated.ts` — 25 of 26 rows |
 | **Rent figures** | `basis: "seed-estimate"` on every row, rendered beside the figure |
 
 26 rows across the deep five, with commute minutes per campus and a room rent
 band. Every rent band carries its basis and the interface must render it. The
 exit from "estimate" is a verified `price` claim with `targetKind:
 "neighbourhood"` — a real student reporting real rent.
+
+**Two sources, kept apart.** What an area is *like* is a judgement somebody
+made and maintains. Where it *is* is a fact from Wikidata that nobody here has
+an opinion about, and it carries the QID it resolved to. Mixing them into one
+hand-written table is how a coordinate ends up being nudged to make a result
+look better.
+
+The coordinate is what decides which neighbourhood a real place sits in —
+nearest centre within `AREA_RADIUS_METRES` (1.2 km), in
+`server/engines/neighbourhood.ts`. It is an approximation of a jagged polygon
+by a circle, right in the middle of an area and arguable at the boundary
+between two; for the claim being made — "this café is in Gràcia, twenty minutes
+from your campus" — that is the resolution the answer needs.
+
+This replaced a **string match on the place's own name**. Places used to be
+written "Ramen counter, Malasaña" and the area was read off the end. Every
+invented place had that shape and no real one does, so when the invented places
+were deleted the lookup silently returned null for every place in every city:
+the place page's "How this sits in your city" section stopped rendering, and the
+e2e test covering it skipped itself and reported green. Both are fixed, and the
+test now fails instead of skipping.
+
+**One row has no coordinate, deliberately.** Madrid's *La Latina* is a
+colloquial area inside the Centro district; Wikidata has a metro station of that
+name and a *Latina* district several kilometres southwest that is a different
+place. Resolving to either would attach places to the wrong part of the city, so
+it resolves to neither, `lat`/`lng` are null, and no place is ever said to be in
+it. Everything else about the row — rent, commute, character — still works.
 
 ---
 
@@ -373,6 +403,15 @@ pnpm places:verify        # real searches through the real service
 pnpm places:verify berlin krakow
 pnpm ai:verify            # two real model calls through the gateway
 pnpm db:verify            # a probe write, a read back, a stale write that must be refused
+```
+
+The two geography imports are re-runnable and print their reasoning rather than
+just their result. Both take `--dry-run`, which resolves everything and writes
+nothing:
+
+```bash
+pnpm cities:import        # rebuilds src/data/cities/geo.generated.ts
+pnpm areas:import         # rebuilds src/data/neighbourhoods/geo.generated.ts
 ```
 
 Each makes real calls and exits non-zero on failure, so each can gate a deploy.

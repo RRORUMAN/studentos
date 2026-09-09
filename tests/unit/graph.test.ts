@@ -8,7 +8,6 @@ import {
   buildCityGraph,
   cohortCount,
   describe as describeRelation,
-  key,
   relate,
   type GraphInput,
   type GraphStudent,
@@ -88,7 +87,6 @@ function graphOf(over: Partial<GraphInput> = {}) {
     citySlug: "madrid",
     campuses: campusesFor("madrid"),
     areas: neighbourhoodsForCity("madrid"),
-    areaOf: new Map([[key("place", "p1"), "malasana"]]),
     students: [],
     saves: [],
     friendships: [],
@@ -207,7 +205,9 @@ describe("relations", () => {
   it("says the place is in the viewer's own area rather than naming it neutrally", () => {
     const viewer = student("me", { areaSlug: "malasana" });
     const graph = graphOf({ students: [viewer] });
-    const kinds = relate(graph, viewer, { kind: "place", id: "p1" }).map((r) => r.kind);
+    const kinds = relate(graph, viewer, { kind: "place", id: "p1" }, { areaSlug: "malasana" }).map(
+      (r) => r.kind,
+    );
     assert.ok(kinds.includes("home-area"));
     assert.ok(!kinds.includes("in-area"));
   });
@@ -215,7 +215,7 @@ describe("relations", () => {
   it("gives a commute from the area to the viewer's campus", () => {
     const viewer = student("me", { areaSlug: "lavapies", campusSlug: "ucm" });
     const graph = graphOf({ students: [viewer] });
-    const commute = relate(graph, viewer, { kind: "place", id: "p1" }).find(
+    const commute = relate(graph, viewer, { kind: "place", id: "p1" }, { areaSlug: "malasana" }).find(
       (r): r is Extract<Relation, { kind: "commute" }> => r.kind === "commute",
     );
     assert.equal(commute?.minutes, neighbourhoods.find((a) => a.slug === "malasana")!.commuteMinutes.ucm);
@@ -223,7 +223,7 @@ describe("relations", () => {
 
   it("returns nothing rather than guessing when the node has no area", () => {
     const viewer = student("me");
-    const graph = graphOf({ students: [viewer], areaOf: new Map() });
+    const graph = graphOf({ students: [viewer] });
     const kinds = relate(graph, viewer, { kind: "place", id: "p1" }).map((r) => r.kind);
     assert.ok(!kinds.includes("in-area"));
     assert.ok(!kinds.includes("commute"));

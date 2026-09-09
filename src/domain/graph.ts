@@ -125,8 +125,6 @@ export type GraphInput = {
   citySlug: string;
   campuses: readonly Campus[];
   areas: readonly Neighbourhood[];
-  /** Which area each place, event or deal sits in. Absent is normal. */
-  areaOf: ReadonlyMap<NodeKey, string>;
   students: readonly GraphStudent[];
   saves: readonly GraphSave[];
   /** Undirected pairs. Both directions are indexed on build. */
@@ -145,8 +143,6 @@ export type CityGraph = {
   builtAt: Date;
   areas: ReadonlyMap<string, Neighbourhood>;
   campuses: ReadonlyMap<string, Campus>;
-  /** node -> the area it sits in. */
-  areaOf: ReadonlyMap<NodeKey, string>;
   /** node -> the students who saved it. */
   saversOf: ReadonlyMap<NodeKey, ReadonlySet<string>>;
   /** student -> their friends. Both directions. */
@@ -213,7 +209,6 @@ export function buildCityGraph(input: GraphInput): CityGraph {
     builtAt: input.now,
     areas: new Map(input.areas.map((area) => [area.slug, area])),
     campuses: new Map(input.campuses.map((campus) => [campus.slug, campus])),
-    areaOf: input.areaOf,
     saversOf,
     friendsOf,
     studentsById,
@@ -229,7 +224,6 @@ export function emptyGraph(citySlug: string, now: Date): CityGraph {
     citySlug,
     campuses: [],
     areas: [],
-    areaOf: new Map(),
     students: [],
     saves: [],
     friendships: [],
@@ -271,6 +265,21 @@ export type Relation =
 export type RelateOptions = {
   /** Cap on how many relations come back, strongest first. */
   limit?: number;
+  /**
+   * The area this target is in, supplied by the caller.
+   *
+   * The graph used to carry an `areaOf` index instead, built by fetching three
+   * hundred of the city's places on every graph build and looking up each
+   * one's area. That cost a provider round trip on every page that touched the
+   * graph, answered nothing for any place outside the sample, and — once the
+   * area lookup itself broke — answered nothing for any place at all.
+   *
+   * A caller rendering a place already holds it and its coordinates, so it can
+   * answer the question directly and for free. Omitted or null means "not
+   * known", and the area, commute and density relations are simply not
+   * produced. They are never guessed.
+   */
+  areaSlug?: string | null;
 };
 
 /**
@@ -322,7 +331,7 @@ export function relate(
     });
   }
 
-  const areaSlug = graph.areaOf.get(node);
+  const areaSlug = options.areaSlug;
   const area = areaSlug ? graph.areas.get(areaSlug) : undefined;
   if (area) {
     if (viewer.areaSlug === area.slug) {

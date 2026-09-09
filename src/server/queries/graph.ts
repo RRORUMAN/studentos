@@ -4,17 +4,15 @@ import { cache } from "react";
 
 import { campusesForCity } from "@/data/cities";
 import { findNeighbourhood, neighbourhoodsForCity } from "@/data/neighbourhoods";
-import { loadCityPlaces } from "@/server/queries/places";
+import { areaForPoint } from "@/server/engines/neighbourhood";
 import type { Place } from "@/data/types";
 import {
   buildCityGraph,
-  key,
   type CityGraph,
   type GraphClaim,
   type GraphNodeKind,
   type GraphSave,
   type GraphStudent,
-  type NodeKey,
 } from "@/domain/graph";
 import { findMany } from "@/server/db";
 import { loadPublishedClaims } from "@/server/queries/truth";
@@ -47,22 +45,34 @@ import { loadPublishedClaims } from "@/server/queries/truth";
  */
 
 /**
- * Which neighbourhood a seeded place sits in.
+ * Which neighbourhood a place sits in, from its coordinates.
  *
- * Derived from the name, because that is genuinely where the information is:
- * the seeded rows are written as "Fruit market, Lavapiés". Deriving beats
- * adding an `area` column and filling it with the same string twice.
+ * IT USED TO READ THE NAME, and that is worth recording because of how it
+ * failed. The twenty-five seeded places were written as "Fruit market,
+ * Lavapiés", so the area was genuinely in the string and deriving it beat
+ * storing it twice. Then the seeded places were deleted and replaced with a
+ * real provider, OpenStreetMap called the shop "Mercadona", and this function
+ * began returning null for every place in every city. Nothing threw. The
+ * "How this sits in your city" section simply stopped appearing, the city
+ * graph lost every place-to-area edge, and the test that covered it skipped
+ * itself and reported green.
  *
- * The failure mode is stated rather than papered over. A place whose suffix is
- * an area with no row of its own — "Mensa, Mitte", "University canteen,
- * Strand" — resolves to nothing, and every consumer treats a missing area as
- * "we do not know" rather than guessing the nearest one. A wrong area is worse
- * than no area: it produces a confident commute figure for the wrong journey.
+ * Now it is geography: the place has a real coordinate and so does the area,
+ * so the question is answered by arithmetic rather than by punctuation.
+ * `areaForPoint` is pure and lives with the other neighbourhood maths.
+ *
+ * The failure mode is unchanged and still stated: a place outside every area's
+ * radius resolves to nothing, and every consumer treats a missing area as "we
+ * do not know" rather than guessing the nearest one. A wrong area is worse
+ * than no area — it produces a confident commute figure for the wrong journey.
  */
 export function areaSlugForPlace(place: Place): string | null {
-  const suffix = place.name.split(",").pop()?.trim();
-  if (!suffix || suffix === place.name.trim()) return null;
-  return findNeighbourhood(place.citySlug, suffix)?.slug ?? null;
+  if (place.lat === null || place.lng === null) return null;
+  const area = areaForPoint(neighbourhoodsForCity(place.citySlug), {
+    lat: place.lat,
+    lng: place.lng,
+  });
+  return area?.slug ?? null;
 }
 
 /** Saved kinds the graph has nodes for. Plans and posts are not city objects. */
@@ -103,18 +113,6 @@ export const loadCityGraph = cache(async (citySlug: string): Promise<CityGraph> 
       targetId: row.targetId,
     }));
 
-  /* Which neighbourhood each place sits in, so the graph can relate a place to
-     an area. Provider-backed now, so a provider outage means the graph simply
-     has no place-to-area edges this request rather than a stale set of them. */
-  const areaOf = new Map<NodeKey, string>();
-  const nearby = await loadCityPlaces({ citySlug, radiusMetres: 5_000, limit: 300 });
-  if (nearby.ok) {
-    for (const place of nearby.places) {
-      const slug = areaSlugForPlace(place);
-      if (slug) areaOf.set(key("place", place.id), slug);
-    }
-  }
-
   const claims: GraphClaim[] = claimViews.map((view) => ({
     id: view.claim.id,
     targetKind: view.claim.targetKind as GraphNodeKind | null,
@@ -129,7 +127,6 @@ export const loadCityGraph = cache(async (citySlug: string): Promise<CityGraph> 
     citySlug,
     campuses: campusesForCity(citySlug),
     areas,
-    areaOf,
     students,
     saves,
     friendships: friendships

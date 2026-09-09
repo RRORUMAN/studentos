@@ -31,9 +31,27 @@ the shape and where it stops.
 - [ ] Authorisation reviewed as **application-level**, which is what it is. The
       row store has RLS on with no policies, so nothing but the service role
       reads anything; there is no per-row database policy protecting one student
-      from another. Sign in as two accounts and confirm through the UI and the
-      API that B cannot read A's budget, transactions, private plan, DM channel
-      or `home_point`. The e2e suite covers the first four.
+      from another. Every check that separates two students lives in
+      `src/server/**` — `canReadChannel`, `loadPlan`'s membership test,
+      `requireViewer`, `visibleProfile` — and the store cannot catch a route
+      that forgets one.
+
+      `tests/e2e/isolation.spec.ts` drives two students in two browser contexts
+      and proves, rather than asserts, that B cannot open A's private plan (as a
+      signed-in stranger or through the public share link), cannot open a DM
+      channel they are not in, and sees none of A's money. It looks A's user id
+      up in the store rather than guessing URLs, because "they could not guess
+      it" is not access control. It also covers the signed-out cases: eight
+      private routes redirect, the calendar export answers 401, and all three
+      cron routes are closed with no `CRON_SECRET` set.
+
+      **Not covered by a test, verified by reading:** the home area and home
+      point. `PublicProfile` in `src/server/queries/social.ts` is a whitelist —
+      `project()` copies ten named fields and neither location field is among
+      them — so there is no path by which one student's neighbourhood reaches
+      another's screen. That is a stronger guarantee than a test would give, but
+      it holds only as long as the projection stays a whitelist. If a field is
+      ever added there, add the test.
 - [ ] Point-in-time recovery on
 - [ ] A restore actually tested once, into a scratch project
 - [ ] Migrations `0001`–`0004` deliberately **not** applied. They describe the
@@ -110,6 +128,14 @@ it says. What remains here is everything a provider cannot supply.
 - [ ] `node scripts/import-cities.mjs` re-run if any city was added, and its
       output read. The script prints what each name resolved to, and that print
       is the only review step between Wikidata and the map.
+- [ ] `pnpm areas:import` re-run if any **neighbourhood** row was added, and its
+      output read the same way. It prints the entity and the distance from the
+      city centre for every area it resolved, and every choice it made between
+      candidates with the runners-up beside it — the first run of it picked a
+      district hall, two railway stations and a public park, each of which was
+      real, in the right city, and about a kilometre from the truth. An area it
+      cannot resolve keeps its row and simply never claims a place is in it, so
+      an unresolved name is a coverage gap and not a failure.
 - [ ] Institution submissions queue in `/admin` has somebody who reads it
 - [ ] Official facts re-checked against their sources, and `checked_at` updated
 - [ ] At least one `STUDENTOS_EVENT_FEEDS` calendar per launch city, and

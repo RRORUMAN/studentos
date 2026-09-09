@@ -1,3 +1,4 @@
+import { neighbourhoodGeo } from "@/data/neighbourhoods/geo.generated";
 import type { Neighbourhood, NeighbourhoodTrait, TraitBand } from "./types";
 
 /**
@@ -43,7 +44,9 @@ function traits(
   return { nightlife, quiet, groceries, transport, studentDensity, green, eatingOut };
 }
 
-export const neighbourhoods: readonly Neighbourhood[] = [
+type Editorial = Omit<Neighbourhood, "lat" | "lng" | "wikidataId">;
+
+const EDITORIAL: readonly Editorial[] = [
   /* --- Madrid ------------------------------------------------------------ */
   {
     slug: "malasana",
@@ -288,6 +291,36 @@ export const neighbourhoods: readonly Neighbourhood[] = [
     traits: traits(1, 4, 4, 4, 3, 3, 3),
   },
 ] as const;
+
+/* -------------------------------------------------------------------------- */
+/* Assembly                                                                    */
+/* -------------------------------------------------------------------------- */
+
+const GEO = new Map(neighbourhoodGeo.map((row) => [row.slug, row]));
+
+/**
+ * The editorial rows above, each joined to its coordinate.
+ *
+ * Two sources, kept apart on purpose. Everything above is a judgement somebody
+ * made and has to maintain — what an area is like, what a room costs there,
+ * how long the metro takes. Everything joined here is a fact from Wikidata
+ * that no one here gets to have an opinion about. Mixing them into one hand-
+ * written table is how a coordinate ends up being "adjusted" to make a result
+ * look better.
+ *
+ * A missing coordinate is not an error. `lat` and `lng` are null and every
+ * geographic question about that area answers "I don't know" instead of
+ * guessing — which is why this join does not throw the way the city one does.
+ */
+export const neighbourhoods: readonly Neighbourhood[] = EDITORIAL.map((area) => {
+  const geo = GEO.get(area.slug);
+  return {
+    ...area,
+    lat: geo?.lat ?? null,
+    lng: geo?.lng ?? null,
+    wikidataId: geo?.wikidataId ?? null,
+  };
+});
 
 /* -------------------------------------------------------------------------- */
 /* Lookups                                                                     */

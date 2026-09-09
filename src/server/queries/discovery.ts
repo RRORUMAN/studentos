@@ -3,7 +3,7 @@ import "server-only";
 import { cache } from "react";
 
 import type { Place } from "@/data/types";
-import type { PlaceCategory, PlaceLayer } from "@/domain/places";
+import { isCheapPlace, type PlaceCategory, type PlaceLayer } from "@/domain/places";
 import { dealConfidence, type Confidence } from "@/domain/knowledge";
 import type { Cents, CityEvent, Deal, Profile, SavedKind } from "@/domain/types";
 import { ensureFreshSeedData, findMany } from "@/server/db";
@@ -158,7 +158,7 @@ export const loadRecommendContext = cache(
 export type PlaceFilter = {
   layers?: readonly PlaceLayer[];
   categories?: readonly PlaceCategory[];
-  /** Only places whose provider price band is at the cheap end. */
+  /** Only places at the cheap end, by category or by provider price band. */
   cheapOnly?: boolean;
   /** Only places that are free to walk into: parks, public libraries. */
   freeOnly?: boolean;
@@ -232,8 +232,11 @@ export async function loadPlaces(
   if (filter.freeOnly) {
     candidates = candidates.filter((place) => place.layers.includes("free"));
   }
+  /* `isCheapPlace` rather than a price level here: OpenStreetMap publishes no
+     prices, so testing the price level alone emptied this filter — and Ask's
+     "somewhere cheaper" with it — on every deployment without a Google key. */
   if (filter.cheapOnly) {
-    candidates = candidates.filter((place) => place.priceLevel !== null && place.priceLevel <= 1);
+    candidates = candidates.filter(isCheapPlace);
   }
   if (filter.verifiedOnly) {
     candidates = candidates.filter((place) => place.confirmations >= 10);
