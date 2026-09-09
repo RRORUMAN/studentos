@@ -41,7 +41,9 @@ export default async function CityLoopPage(props: PageProps<"/city/[slug]/loop">
 
   return (
     <>
-      <CitySubnav city={city} active="pulse" />
+      {/* The route is `loop`; CitySubnav compares against the path suffix, so
+          "pulse" here meant the tab never highlighted as current. */}
+      <CitySubnav city={city} active="loop" />
 
       <PageHero
         crumbs={[

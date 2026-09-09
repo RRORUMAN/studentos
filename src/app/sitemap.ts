@@ -4,7 +4,29 @@ import { brand } from "@/brand/brand.config";
 import { campuses, cities } from "@/data/cities";
 import { env } from "@/services/env";
 
-const CITY_SECTIONS = ["pulse", "things-to-do", "free-events", "cheap-food", "student-deals", "starter-pack"];
+/**
+ * The section routes under `city/[slug]/`, and they must match the directories
+ * on disk exactly.
+ *
+ * `"pulse"` was listed here and there is no `pulse` route: the authenticated
+ * app was renamed Loop to Pulse and this list followed it, while the marketing
+ * route stayed `loop`. So the sitemap submitted five URLs that 404 and omitted
+ * the five real community pages entirely — the ones `city/[slug]/page.tsx`
+ * links to and that have their own `generateStaticParams`. A sixth of the
+ * sitemap was dead and the pages it should have been advertising were
+ * invisible to search.
+ *
+ * `tests/unit/sitemap.test.ts` asserts every entry resolves to a route file,
+ * so the next rename fails a test instead of quietly costing five pages.
+ */
+export const CITY_SECTIONS = [
+  "loop",
+  "things-to-do",
+  "free-events",
+  "cheap-food",
+  "student-deals",
+  "starter-pack",
+] as const;
 
 /**
  * Only pages with genuinely distinct content are listed. Empty permutations —

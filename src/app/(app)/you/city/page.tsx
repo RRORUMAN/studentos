@@ -6,6 +6,7 @@ import { CitySwitcher } from "@/components/app/city-switcher";
 import { Upsell } from "@/components/app/upsell";
 import { MascotArt } from "@/components/mascot/mascot-art";
 import { Badge } from "@/components/ui/primitives";
+import { fmtDayLabel, fmtTime } from "@/lib/dates";
 import { cityDirectory, cityStatusLabel, cityStatusNote } from "@/data/cities";
 import { describeProximity, priceLevelLabel } from "@/domain/places";
 import { loadPlacesByIds } from "@/server/queries/places";
@@ -112,7 +113,11 @@ export default async function MyCityPage() {
         </Block>
         <Block title="My events" icon={<CalendarDays className="size-4" />} href="/events" empty="Nothing you are going to yet.">
           {myEvents.slice(0, 4).map((event) => (
-            <Row key={event.id} href={`/events/${event.id}`} title={event.title} meta={new Date(event.startsAt).toLocaleString("en-GB", { weekday: "short", hour: "2-digit", minute: "2-digit" })} />
+            <Row key={event.id} href={`/events/${event.id}`} title={event.title} /* In the CITY's zone, which this page prints in its own header two
+                 blocks up. toLocaleString with no timeZone renders in whatever
+                 zone the server runs in -- UTC on Vercel -- so an 8pm gig in
+                 Madrid displayed as 18:00 all summer. */
+              meta={`${fmtDayLabel(event.startsAt, city.timezone)} ${fmtTime(event.startsAt, city.timezone)}`} />
           ))}
         </Block>
         <Block title="My deals" icon={<Tag className="size-4" />} href="/discover?tab=deals" empty="Deals in the categories you budget for show up here.">

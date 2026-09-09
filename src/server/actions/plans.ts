@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
+import { resolveCity } from "@/data/cities";
+import { fmtTime } from "@/lib/dates";
 import { loadPlacesByIds } from "@/server/queries/places";
 import type { SavedPlanItem } from "@/domain/types";
 import { findOne, insert, newId, nowIso, remove, transaction, update } from "@/server/db";
@@ -102,7 +104,9 @@ async function trustedLine(
     const event = await findOne("events", (row) => row.id === line.refId);
     if (event) {
       return {
-        time: new Date(event.startsAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }),
+        /* The plan's city, not the server's. An itinerary line is a time you turn
+           up somewhere, so it has to be that place's clock. */
+        time: fmtTime(event.startsAt, resolveCity(citySlug)?.timezone ?? "UTC"),
         title: event.title,
         detail: event.venue,
         priceCents: event.priceCents,

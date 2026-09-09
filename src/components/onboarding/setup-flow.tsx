@@ -589,30 +589,65 @@ function UniversityStep({ answers, update }: StepProps) {
 
 function HomeStep({ answers, update }: StepProps) {
   const city = answers.citySlug ? resolveCity(answers.citySlug) : null;
+  const neighbourhoods = city?.neighbourhoods ?? [];
 
   return (
     <>
+      {/* WHAT THIS ACTUALLY COLLECTS, said accurately. This box used to read
+          "Your exact address is never shown to another student... It only turns
+          distances into walking minutes", which promised two things that were
+          not true: the step never asks for an address, and `homePoint` is
+          never written by any screen in the product, so nothing here becomes a
+          walking minute. Describing the area name as an address also made the
+          ask sound far more invasive than it is. */}
       <div className="flex items-start gap-3 rounded-lg border border-flow-deep/20 bg-flow-soft/60 p-4">
         <Lock className="mt-0.5 size-4 shrink-0 text-flow-deep" />
         <p className="text-[0.875rem] leading-relaxed text-flow-deep">
-          Your exact address is never shown to another student, never attached to a post, and never
-          used for social matching. It only turns distances into walking minutes.
+          Just the area, never a street or a number. It is used to sort what is near you and to
+          work out commute times, and it is never attached to a post or used to match you with
+          anyone.
         </p>
       </div>
 
-      <span className="block pt-2 text-sm font-medium text-ink-800">
-        Pick the neighbourhood you are closest to
-      </span>
-      <div className="flex flex-wrap gap-2">
-        {(city?.neighbourhoods ?? []).map((area) => (
-          <SelectChip
-            key={area}
-            label={area}
-            selected={answers.homeArea === area}
-            onSelect={() => update({ homeArea: answers.homeArea === area ? "" : area })}
-          />
-        ))}
-      </div>
+      {neighbourhoods.length > 0 ? (
+        <>
+          <span className="block pt-2 text-sm font-medium text-ink-800">
+            Pick the neighbourhood you are closest to
+          </span>
+          <div className="flex flex-wrap gap-2">
+            {neighbourhoods.map((area) => (
+              <SelectChip
+                key={area}
+                label={area}
+                selected={answers.homeArea === area}
+                onSelect={() => update({ homeArea: answers.homeArea === area ? "" : area })}
+              />
+            ))}
+          </div>
+        </>
+      ) : null}
+
+      {/* FREE TEXT, ALWAYS, and this is the whole point of the change. The
+          city directory carries a neighbourhood list for five cities out of
+          eighty, so this screen used to be a heading telling a student in
+          Krakow to pick from an empty list, with nothing to tap and no way to
+          answer. The settings version of this control already had the input
+          and the comment naming the failure — "an empty step with nothing to
+          tap is how a student in Tallinn concluded the product was broken" —
+          and it was never ported to the screen where it matters most, which is
+          the first five minutes of the product. */}
+      <label className="mt-3 block">
+        <span className="mb-1.5 block text-sm font-medium text-ink-800">
+          {neighbourhoods.length > 0 ? "Or type it" : "Which area are you in?"}
+        </span>
+        <input
+          value={answers.homeArea}
+          onChange={(event) => update({ homeArea: event.target.value })}
+          placeholder="The area you live in"
+          maxLength={120}
+          className="h-11 w-full rounded-md border border-ink-200 bg-white px-3.5 text-[0.9375rem] text-ink-900 placeholder:text-ink-400"
+        />
+      </label>
     </>
   );
 }

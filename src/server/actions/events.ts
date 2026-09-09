@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
+import { resolveCity } from "@/data/cities";
+import { fmtDayLabel, fmtTime } from "@/lib/dates";
 import { findOne, insert, newId, nowIso, transaction } from "@/server/db";
 import { recordOutcome } from "@/server/actions/insight";
 import { limits, rateLimit } from "@/server/rate-limit";
@@ -25,6 +27,9 @@ import { requireUserId } from "@/server/viewer";
  * fewer place for the two to disagree.
  * ============================================================================
  */
+
+/** A city's timezone, falling back to UTC for a city we do not carry. */
+const zoneOf = (slug: string) => resolveCity(slug)?.timezone ?? "UTC";
 
 export type EventResponseResult =
   | { ok: true; status: "interested" | "going" | null }
@@ -83,11 +88,10 @@ export async function respondToEvent(
         userId: friendId,
         topic: "friends-plans",
         title: `${me?.displayName ?? "A friend"} is going to ${event.title}`,
-        body: `${new Date(event.startsAt).toLocaleString("en-GB", {
-          weekday: "short",
-          hour: "2-digit",
-          minute: "2-digit",
-        })} · ${event.venue}`,
+        /* The EVENT's city, not the server's. This is a push notification about a
+           specific gig in a specific place; formatting it in the server zone
+           told a student in Madrid to turn up two hours early all summer. */
+        body: `${fmtDayLabel(event.startsAt, zoneOf(event.citySlug))} ${fmtTime(event.startsAt, zoneOf(event.citySlug))} · ${event.venue}`,
         href: `/events/${event.id}`,
         readAt: null,
         createdAt: nowIso(),
