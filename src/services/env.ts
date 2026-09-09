@@ -250,6 +250,58 @@ export const env = {
   maps: {
     provider: optional(process.env.NEXT_PUBLIC_MAPS_PROVIDER),
     apiKey: optional(process.env.MAPS_API_KEY),
+
+    /**
+     * Raster tile URL template for the map basemap, with {z}/{x}/{y}.
+     *
+     * Unset is a supported state and not a broken one: the map renders real
+     * markers at real coordinates on a plain ground, which is honest and
+     * costs nothing. There is deliberately no default pointing at OSM's own
+     * tile servers — their usage policy does not cover an application, and
+     * shipping a default that quietly relies on somebody else's donated
+     * bandwidth is taking something that was not offered.
+     *
+     * env: optional — MapTiler, Stadia, Thunderforest or any raster source.
+     */
+    tileUrl: optional(process.env.NEXT_PUBLIC_MAP_TILE_URL),
+
+    /** Attribution the tile provider requires. Rendered on every map. */
+    tileAttribution: optional(process.env.NEXT_PUBLIC_MAP_TILE_ATTRIBUTION),
+  },
+
+  /**
+   * Real-world places. See `src/server/places` for the provider chain.
+   *
+   * Neither variable is required. With both unset the product searches
+   * OpenStreetMap through the public Overpass instances, which is real data
+   * everywhere StudentOS lists a city.
+   */
+  places: {
+    /**
+     * env: optional — Google Cloud key with the Places API (New) enabled.
+     * Adds ratings and a price level, which OpenStreetMap does not hold.
+     */
+    googleKey: optional(process.env.GOOGLE_PLACES_API_KEY),
+
+    /**
+     * env: optional — a private Overpass instance. Overrides the public list.
+     * A deployment doing real volume should run one; the public instances are
+     * volunteer-run and their usage policy asks for moderation.
+     */
+    overpassUrl: optional(process.env.OVERPASS_URL),
+  },
+
+  routing: {
+    /**
+     * env: optional — an OSRM instance, e.g. https://routing.example.com.
+     *
+     * Unset means the product shows DISTANCES rather than walking times, and
+     * says "600 m away" instead of "8 min walk". That is the honest state: a
+     * duration is only ever produced by something that routed. The public
+     * demo server at router.project-osrm.org is not a default because its
+     * usage policy is development only.
+     */
+    osrmUrl: optional(process.env.ROUTING_OSRM_URL),
   },
 
   stripe: {

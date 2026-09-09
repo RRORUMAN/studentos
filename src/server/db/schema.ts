@@ -22,6 +22,7 @@ import type { DealReport, Guide, OfficialFact, PriceObservation } from "@/domain
 import type { Claim, Verification } from "@/domain/truth";
 import type { InstitutionSubmission } from "@/domain/institutions";
 import type { LanguageProfile, PhraseProgress } from "@/domain/language";
+import type { PlaceCacheRow } from "@/domain/places";
 import type { Answer, Question } from "@/domain/questions";
 import type {
   Application,
@@ -211,6 +212,14 @@ export type Database = {
 
   /* --- waitlist ----------------------------------------------------------- */
   waitlist: WaitlistEntry[];
+
+  /* --- provider cache ------------------------------------------------------
+     Not user data and not content: results retrieved from a place provider,
+     held so that a pan of the map does not become a request, and a request
+     does not become a bill. Entries expire and are pruned by the cron; see
+     `src/server/places/cache.ts` for the lifetimes and why they are what the
+     provider's terms say rather than what would be convenient. */
+  placeCache: PlaceCacheRow[];
 };
 
 export const DATABASE_VERSION = 2;
@@ -294,6 +303,7 @@ export function emptyDatabase(): Database {
     phraseProgress: [],
     institutionSubmissions: [],
     waitlist: [],
+    placeCache: [],
   };
 }
 
