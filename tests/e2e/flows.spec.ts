@@ -86,10 +86,18 @@ test("Ask returns a real plan built from real rows, never an invented one", asyn
   const answer = page.getByRole("heading", { level: 2 }).first();
   await expect(answer).toBeVisible({ timeout: 20_000 });
 
-  /* The plan is priced and never exceeds the number the student gave. */
-  const total = page.getByText("Total", { exact: true }).locator("..");
-  await expect(total).toBeVisible();
-  expect(toCents(await total.innerText())).toBeLessThanOrEqual(2_000);
+  /* The money on the plan, and what it is allowed to claim.
+     The label is "Total" when every line was priced by its source and "Booked"
+     when some were only estimated from the city's anchors — because the known
+     money is then a floor rather than a total, and merging the two would make
+     a guess look like a figure. Either way it may not exceed what the student
+     said they had. */
+  const money = page
+    .getByText(/^(Total|Booked)$/)
+    .first()
+    .locator("..");
+  await expect(money).toBeVisible();
+  expect(toCents(await money.innerText())).toBeLessThanOrEqual(2_000);
 
   /* Provenance, the parse, and a way to reach real people. */
   await expect(page.getByText("Sources", { exact: true })).toBeVisible();

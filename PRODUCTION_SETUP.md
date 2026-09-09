@@ -470,7 +470,7 @@ their website and their usage policy does not cover an application.
 
 ## 11. Event sources
 
-**STATUS:** Missing. No adapter exists yet.
+**STATUS:** Adapter built. **No calendar configured.**
 
 **PURPOSE**
 Real events beyond what students post and the 32 seeded recurring facts.
@@ -484,13 +484,26 @@ Real events beyond what students post and the 32 seeded recurring facts.
   confirmations and interest, and the interface *adds* real responses to them,
   so three students going rendered as ninety-seven.
 
-**WHAT IS MISSING**
-An `EventProvider` adapter. The shape to copy is
-`src/server/work/providers.ts`: a typed adapter that reads a declared feed,
-normalises without inventing a field, and records a `ProviderRun` carrying the
-real error text on failure. Candidates worth pursuing, in order of how likely
-they are to say yes: university event calendars (usually ICS, usually public),
-municipal culture feeds, then a commercial ticketing API.
+**WHAT TO DO — EXACT STEPS**
+
+1. Open the events page of the university, student union or city culture
+   department you want. Look for **"subscribe to this calendar"**, an
+   **iCal/ICS** link, or a **Google Calendar** "public address in iCal format".
+   Nearly all of them have one; it is how they expect to be read.
+2. Copy the `.ics` URL. Check it in a browser — it should start
+   `BEGIN:VCALENDAR`.
+3. Add it to `STUDENTOS_EVENT_FEEDS` in Vercel, as
+   `slug=citySlug=url`, comma separated. A campus can be named:
+   `ucm-events=madrid@ucm=https://…`.
+4. Trigger `/api/cron/event-sync` once (it needs `CRON_SECRET`) and read the
+   response. It reports `imported`, `updated`, `expired`, and two honesty
+   figures: `unpriced` (every calendar entry, because iCalendar has no price
+   field) and `flattened` (entries with an RRULE, of which only the next
+   occurrence was taken).
+5. Check `/admin` → Data providers. A failing calendar shows the real error.
+
+**WHAT IT WILL NOT DO** Expand recurrence, geocode a venue, or invent a price.
+Each is documented in `PRODUCTION_DATA.md` → Events with the reason.
 
 **REQUIRED FOR LAUNCH?** **No** — but do not mark a city Live on the strength of
 its events until one exists. "Open" is the honest default and the interface

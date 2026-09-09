@@ -237,7 +237,7 @@ export function DiscoverMap({
                 ) : null}
               </div>
               <Link
-                href={`/discover/${encodeURIComponent(selected.id)}`}
+                href={`/discover/${selected.id}`}
                 className="inline-flex shrink-0 items-center gap-1 rounded-full bg-ink-950 px-3 py-1.5 text-[0.8125rem] font-medium text-paper"
               >
                 Open

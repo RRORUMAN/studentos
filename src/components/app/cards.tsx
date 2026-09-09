@@ -187,7 +187,7 @@ export function PlaceCard({
       </div>
 
       <h3 className="mt-2.5 text-[1.0625rem] leading-snug font-semibold text-ink-950">
-        <Link href={`/discover/${encodeURIComponent(place.id)}`} className="after:absolute after:inset-0">
+        <Link href={`/discover/${place.id}`} className="after:absolute after:inset-0">
           {place.name}
         </Link>
       </h3>

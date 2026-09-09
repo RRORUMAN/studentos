@@ -307,7 +307,7 @@ export async function resolveAttachment(
             id,
             title: place.name,
             meta: `${place.category} · ${describeProximity(place.proximity)}`,
-            href: `/discover/${encodeURIComponent(id)}`,
+            href: `/discover/${id}`,
           }
         : null;
     }
@@ -429,7 +429,7 @@ export async function loadAttachables(citySlug: string, where: Where): Promise<A
       id: place.id,
       title: place.name,
       meta: `${place.category} · ${describeProximity(place.proximity)}`,
-      href: `/discover/${encodeURIComponent(place.id)}`,
+      href: `/discover/${place.id}`,
     })),
     ...deals.slice(0, 16).map<AttachmentCard>((deal) => ({
       kind: "deal",

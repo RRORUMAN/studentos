@@ -5,6 +5,7 @@ import { institutions } from "@/data/institutions";
 import { findMany } from "@/server/db";
 import { placeProviders } from "@/server/places";
 import { routeProviders } from "@/server/places/route";
+import { eventProviders } from "@/server/events/providers";
 import { providers as jobProviders } from "@/server/work/providers";
 
 /**
@@ -76,7 +77,7 @@ export type CityHealth = {
 };
 
 export type ProviderHealthRow = {
-  kind: "places" | "routing" | "jobs";
+  kind: "places" | "routing" | "events" | "jobs";
   label: string;
   configured: boolean;
   /** The detail when configured, or the exact variable that would configure it. */
@@ -233,6 +234,15 @@ export async function loadDataHealth(now: Date): Promise<DataHealthReport> {
         const status = provider.status();
         return {
           kind: "routing",
+          label: provider.label,
+          configured: status.configured,
+          detail: status.configured ? status.detail : status.missing,
+        };
+      }),
+      ...eventProviders().map((provider): ProviderHealthRow => {
+        const status = provider.status();
+        return {
+          kind: "events",
           label: provider.label,
           configured: status.configured,
           detail: status.configured ? status.detail : status.missing,

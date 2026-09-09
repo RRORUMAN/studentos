@@ -100,7 +100,7 @@ export function SmartPlaceCard({
 
       <h3 className="mt-1.5 text-[1.0625rem] leading-snug font-semibold text-ink-950">
         <Link
-          href={`/discover/${encodeURIComponent(place.id)}`}
+          href={`/discover/${place.id}`}
           className="after:absolute after:inset-0 after:rounded-2xl"
         >
           {place.name}

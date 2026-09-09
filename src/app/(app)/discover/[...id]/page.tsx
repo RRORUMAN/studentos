@@ -42,9 +42,19 @@ export const metadata: Metadata = {
  * student who disagrees can see which signal was wrong.
  * ============================================================================
  */
-export default async function PlacePage(props: PageProps<"/discover/[id]">) {
+/**
+ * A CATCH-ALL segment, because a place id contains a slash.
+ *
+ * The id is `osm:node/26472667` — the provider, then that provider's own
+ * identity for the object, which for OpenStreetMap is a path. Percent-encoding
+ * the slash into a single dynamic segment does not survive routing: the page
+ * 404ed on every real place, which looked like the provider having lost them.
+ * The segments are rejoined here and the URL stays readable.
+ */
+export default async function PlacePage(props: PageProps<"/discover/[...id]">) {
   const viewer = await requireViewer();
-  const { id } = await props.params;
+  const { id: segments } = await props.params;
+  const id = (Array.isArray(segments) ? segments : [segments]).join("/");
 
   /* One lookup against the provider, by the id in the URL. A place that no
      longer exists is a 404 rather than a page rendered from a cached name. */

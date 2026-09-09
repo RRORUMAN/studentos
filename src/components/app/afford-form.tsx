@@ -287,7 +287,7 @@ export function AffordForm({
 
       {result && result.verdict !== "no-budget" && better ? (
         <Link
-          href={`/discover/${encodeURIComponent(better.place.id)}`}
+          href={`/discover/${better.place.id}`}
           className="flex items-center gap-4 rounded-2xl bg-white p-5 shadow-[var(--shadow-flat)] ring-1 ring-ink-950/6 transition-shadow hover:shadow-[var(--shadow-raise)]"
         >
           <span className="min-w-0 flex-1">

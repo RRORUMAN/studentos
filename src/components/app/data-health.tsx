@@ -30,6 +30,7 @@ export function DataHealth({ report }: { report: DataHealthReport }) {
   const byKind = {
     places: report.providers.filter((row) => row.kind === "places"),
     routing: report.providers.filter((row) => row.kind === "routing"),
+    events: report.providers.filter((row) => row.kind === "events"),
     jobs: report.providers.filter((row) => row.kind === "jobs"),
   };
 
@@ -46,11 +47,12 @@ export function DataHealth({ report }: { report: DataHealthReport }) {
           something to worry about rather than something to do.
         </p>
 
-        <dl className="grid gap-3 sm:grid-cols-3">
+        <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {(
             [
               ["places", "Places", byKind.places],
               ["routing", "Routing", byKind.routing],
+              ["events", "Events", byKind.events],
               ["jobs", "Work", byKind.jobs],
             ] as const
           ).map(([key, label, rows]) => (

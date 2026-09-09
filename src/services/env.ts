@@ -53,6 +53,40 @@ function parseFeeds(raw: string | null): readonly { slug: string; url: string }[
 }
 
 /**
+ * `slug=citySlug=https://…/events.ics` into typed entries.
+ *
+ * A calendar has to say which city it is for, because an ICS feed carries no
+ * location a machine can trust — LOCATION is free text like "Aula Magna" — and
+ * events pinned to the wrong city are worse than no events. `slug=citySlug@
+ * campusSlug=url` narrows it to one campus.
+ *
+ * Like the job feeds, a malformed entry is dropped rather than thrown: a typo
+ * in one calendar must not take the application down at import time, and the
+ * admin screen shows which feeds actually registered.
+ */
+type EventFeed = { slug: string; citySlug: string; campusSlug: string | null; url: string };
+
+function parseEventFeeds(raw: string | null): readonly EventFeed[] {
+  if (!raw) return [];
+  return raw
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .map((entry): EventFeed | null => {
+      const parts = entry.split("=");
+      if (parts.length < 3) return null;
+      const slug = parts[0]?.trim() ?? "";
+      const place = parts[1]?.trim() ?? "";
+      const url = parts.slice(2).join("=").trim();
+      if (!slug || !place || !/^https:\/\//.test(url)) return null;
+      const [citySlug, campusSlug] = place.split("@");
+      if (!citySlug) return null;
+      return { slug, citySlug, campusSlug: campusSlug ?? null, url };
+    })
+    .filter((entry): entry is EventFeed => entry !== null);
+}
+
+/**
  * Which AI provider this deployment talks to, and with which key.
  *
  * Resolved together, once, because the two answers have to agree: an OpenAI
@@ -368,6 +402,19 @@ export const env = {
    * not agreed to be republished, and its terms are not ours to reinterpret.
    */
   workFeeds: parseFeeds(optional(process.env.STUDENTOS_WORK_FEEDS)),
+
+  /**
+   * University, student union and municipal calendars, as iCalendar URLs.
+   *
+   * env: optional — `slug=citySlug=https://…/events.ics`, comma separated.
+   * A campus can be named: `ucm-events=madrid@ucm=https://…`.
+   *
+   * The same rule as the job feeds and for the same reason: this is the only
+   * way an external event can enter the product. There is no scraper. A
+   * calendar is a URL its publisher created so that other software would read
+   * it, which is an act of permission; a website is not.
+   */
+  eventFeeds: parseEventFeeds(optional(process.env.STUDENTOS_EVENT_FEEDS)),
 
   adminEmails: (optional(process.env.ADMIN_EMAILS) ?? "")
     .split(",")

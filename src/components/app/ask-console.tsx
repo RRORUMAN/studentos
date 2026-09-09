@@ -303,7 +303,7 @@ function StudentOSSays({
       {answer.lines.length > 0 ? (
         <ul className="divide-y divide-ink-100 border-t border-ink-100">
           {answer.lines.map((line, index) => {
-            const href = line.refKind === "place" ? `/discover/${encodeURIComponent(line.refId ?? "")}` : line.refKind === "event" ? `/events/${line.refId}` : null;
+            const href = line.refKind === "place" ? `/discover/${line.refId ?? ""}` : line.refKind === "event" ? `/events/${line.refId}` : null;
             const body = (
               <>
                 <span className="tnum w-6 shrink-0 pt-0.5 font-mono text-[0.75rem] text-ink-400">{index + 1}</span>

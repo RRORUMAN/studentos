@@ -102,7 +102,7 @@ export function buildForYouFeed(input: FeedInput): FeedItem[] {
     items.push({
       kind: "place",
       id: place.id,
-      href: `/discover/${encodeURIComponent(place.id)}`,
+      href: `/discover/${place.id}`,
       title: place.name,
       meta: `${place.category} · ${describeProximity(place.proximity)}`,
       /* A place has no amount, only a band, and the band belongs in the

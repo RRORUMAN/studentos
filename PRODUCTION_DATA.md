@@ -193,7 +193,9 @@ development only.
 | **Source** | Student-created rows, plus seeded official recurring facts |
 | **Seeded rows** | 32, each with a real venue, real coordinates and a real `sourceUrl` |
 | **Social counts** | **Zero on every seeded row.** |
-| **External feeds** | **Not connected.** No adapter is configured. |
+| **External feeds** | iCalendar. **Adapter exists; no calendar configured.** |
+| **Configuration** | `STUDENTOS_EVENT_FEEDS=slug=citySlug=https://…/events.ics` |
+| **Sync** | `/api/cron/event-sync`, twice daily |
 
 The seeded events are real things that really recur — the Prado's free evening
 window, with a link to the museum's own page saying so. What was **not** real
@@ -203,10 +205,30 @@ behind them. Worse, the interface **adds** real responses to the seeded figure,
 so three students going rendered as ninety-seven and the three real ones were
 the part nobody could see. Every one is now zero.
 
-**An event provider adapter does not exist yet.** This is the largest remaining
-gap. The shape to copy is `src/server/work/providers.ts`: a typed adapter that
-reads a declared feed, normalises without inventing a field, and records a
-`ProviderRun` carrying the real error text on failure.
+**The adapter exists and no calendar is configured.** `src/server/events/
+providers.ts` reads iCalendar feeds — the format nearly every student union,
+faculty and municipal culture department already publishes for anybody to
+subscribe to. That is the same act of permission a JSON feed is, and it is the
+only kind the product accepts: there is no scraper, for the same reason there
+is none for jobs.
+
+Three things it deliberately does not do, each visible rather than hidden:
+
+- **It never says an event is free.** iCalendar has no price field, so every
+  ingested row arrives unpriced. `CityEvent.priceCents` cannot be null, so it
+  is stored as zero — and the sync run reports `unpriced`, which is the record
+  that zero was a storage constraint rather than a claim.
+- **It does not expand recurrence.** `parseIcs` reads RRULE and does not
+  implement it, so a weekly society meeting is ingested as its next occurrence
+  and the run reports `flattened`. A half-implemented recurrence rule puts a
+  lecture on the wrong Tuesday for a term.
+- **It does not geocode.** An ICS LOCATION is free text ("Aula Magna, Facultad
+  de Filosofía"), so the pin sits on the city centre and the venue name is kept
+  exactly as published. Geocoding would mean sending a publisher's venue
+  strings to a third party and trusting what came back.
+
+Social counts on an ingested event start at zero and a sync never touches them
+again: confirmations and interest belong to the students who supplied them.
 
 ---
 

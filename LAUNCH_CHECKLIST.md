@@ -112,9 +112,12 @@ it says. What remains here is everything a provider cannot supply.
       is the only review step between Wikidata and the map.
 - [ ] Institution submissions queue in `/admin` has somebody who reads it
 - [ ] Official facts re-checked against their sources, and `checked_at` updated
-- [ ] Events: understood that there is **no event provider adapter**, so beyond
-      the 32 seeded recurring facts and whatever students post, a city's events
-      are empty. Do not market Event Radar in a city on the strength of it.
+- [ ] At least one `STUDENTOS_EVENT_FEEDS` calendar per launch city, and
+      `/api/cron/event-sync` triggered once with its response read. Without a
+      calendar, a city's events are the 32 seeded recurring facts and whatever
+      students post — do not market Event Radar there on the strength of that.
+      Student unions and municipal culture departments almost always publish an
+      `.ics`; this is the highest-value hour on this page.
 - [ ] `STUDENTOS_CONTENT_MODE` left at `sample` until the seeded events and
       deals have actually been replaced. While it is `sample` the app carries a
       standing "sample city data" notice, which is correct and must not be
@@ -147,8 +150,9 @@ it says. What remains here is everything a provider cannot supply.
 - [ ] `NEXT_PUBLIC_SENTRY_DSN` and `SENTRY_ENVIRONMENT` set
 - [ ] PostHog set, or a deliberate decision not to
 - [ ] Uptime check on `/` and on `/api/stripe/webhook`
-- [ ] Both cron jobs confirmed running in Vercel: `/api/cron/work-sync` (04:17)
-      and `/api/cron/data-upkeep` (04:42). `CRON_SECRET` must be set or both
+- [ ] All three cron jobs confirmed running in Vercel: `/api/cron/work-sync`
+      (04:17), `/api/cron/event-sync` (05:31) and `/api/cron/data-upkeep`
+      (04:42). `CRON_SECRET` must be set or both
       refuse every request — which is the correct closed default, and also means
       an unset secret looks exactly like a working schedule that does nothing.
 - [ ] A deploy rollback tested once

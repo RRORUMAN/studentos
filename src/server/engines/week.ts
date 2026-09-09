@@ -147,7 +147,7 @@ export function planWeek(input: {
       detail: scored.item.value.reasons.join(" · ") || scored.item.category,
       reasons: scored.reasons,
       refId: scored.item.id,
-      href: `/discover/${encodeURIComponent(scored.item.id)}`,
+      href: `/discover/${scored.item.id}`,
       tags: scored.item.layers,
     });
   }

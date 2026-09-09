@@ -285,7 +285,7 @@ export async function runTool<K extends ToolName>(name: K, rawArgs: unknown, ctx
           /* No place provider publishes an amount, so a place card never
              carries one. The band is in `reasons` where it belongs. */
           priceCents: null,
-          href: `/discover/${encodeURIComponent(scored.item.id)}`,
+          href: `/discover/${scored.item.id}`,
           reasons: scored.reasons,
           /* Where the row came from, which for a place is always a provider.
              "students" would claim a student wrote it. */
@@ -596,7 +596,7 @@ export async function runTool<K extends ToolName>(name: K, rawArgs: unknown, ctx
               title: place.name,
               detail: `${place.category} · ${describeProximity(place.proximity)}`,
               priceCents: null,
-              href: `/discover/${encodeURIComponent(place.id)}`,
+              href: `/discover/${place.id}`,
               reasons: ["You saved this"],
               source: "official",
               social: null,

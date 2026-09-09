@@ -21,7 +21,18 @@ import { signUpAndOnboard } from "./helpers";
  */
 
 /** Any of the fixture's Madrid rows. Which one ranks first is not the point. */
-const MADRID_PLACE = /Mercadona|Dia|Farmacia la Latina|El Brillante|Casa Toni/;
+const MADRID_PLACE = /Mercadona|Farmacia la Latina|El Brillante|Casa Toni|Biblioteca/;
+
+/**
+ * The card's title link, rather than any text.
+ *
+ * A place name also appears on a map pin, whose label is `hidden sm:inline` —
+ * present in the DOM and invisible on a phone. Matching text found the pin
+ * first and reported it hidden, which is a true statement about the wrong
+ * element. The card title is a link, so this is unambiguous.
+ */
+const placeLink = (page: import("@playwright/test").Page) =>
+  page.getByRole("main").getByRole("link", { name: MADRID_PLACE }).first();
 
 test.describe("real places", () => {
   test("Explore shows named places carrying their licence", async ({ page }) => {
@@ -30,9 +41,7 @@ test.describe("real places", () => {
 
     /* A real Madrid shop, by name. The old product showed "Ramen counter,
        Malasaña" here — a place with no name, which was always the tell. */
-    await expect(page.getByRole("main").getByText(MADRID_PLACE).first()).toBeVisible({
-      timeout: 25_000,
-    });
+    await expect(placeLink(page)).toBeVisible({ timeout: 25_000 });
 
     /* Attribution is a licence obligation, rendered from a field on the row
        rather than by whichever component remembered to. */
@@ -42,9 +51,7 @@ test.describe("real places", () => {
   test("a distance stays a distance until something routes it", async ({ page }) => {
     await signUpAndOnboard(page);
     await page.goto("/discover");
-    await expect(page.getByRole("main").getByText(MADRID_PLACE).first()).toBeVisible({
-      timeout: 25_000,
-    });
+    await expect(placeLink(page)).toBeVisible({ timeout: 25_000 });
 
     /* No routing provider is configured here, so nothing on this screen may
        claim a walking time. This assertion would have failed on every build of

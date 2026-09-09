@@ -83,7 +83,14 @@ export function CityCollection({
         <div className="page">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <Eyebrow index="01">Places</Eyebrow>
-            <SampleTag />
+            {/* No sample tag here any more, and its absence is the claim: these
+                rows came from a place provider at request time, each with a
+                link back to the object it came from. The tag stays on the
+                sections below, which are still seeded. Leaving it on real data
+                would be as misleading as leaving it off invented data. */}
+            {attribution ? (
+              <SampleTag label={`Live · ${attribution}`} />
+            ) : null}
           </div>
           <PlaceList
             className="mt-6"

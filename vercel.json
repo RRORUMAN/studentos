@@ -7,6 +7,10 @@
       "schedule": "17 4 * * *"
     },
     {
+      "path": "/api/cron/event-sync",
+      "schedule": "31 5 * * *"
+    },
+    {
       "path": "/api/cron/data-upkeep",
       "schedule": "42 4 * * *"
     }

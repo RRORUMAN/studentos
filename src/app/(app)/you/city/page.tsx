@@ -102,12 +102,12 @@ export default async function MyCityPage() {
       <div className="mt-6 grid gap-4 sm:grid-cols-2">
         <Block title="My cheap places" icon={<Utensils className="size-4" />} href="/discover?tab=food" empty="Save a lunch spot or a supermarket and it lands here.">
           {cheap.slice(0, 4).map((place) => (
-            <Row key={place.id} href={`/discover/${encodeURIComponent(place.id)}`} title={place.name} meta={`${priceLevelLabel(place.priceLevel)} · ${describeProximity(place.proximity)}`} />
+            <Row key={place.id} href={`/discover/${place.id}`} title={place.name} meta={`${priceLevelLabel(place.priceLevel)} · ${describeProximity(place.proximity)}`} />
           ))}
         </Block>
         <Block title="My study spots" icon={<GraduationCap className="size-4" />} href="/discover?tab=study" empty="Nowhere saved to work yet.">
           {study.slice(0, 4).map((place) => (
-            <Row key={place.id} href={`/discover/${encodeURIComponent(place.id)}`} title={place.name} meta={describeProximity(place.proximity)} />
+            <Row key={place.id} href={`/discover/${place.id}`} title={place.name} meta={describeProximity(place.proximity)} />
           ))}
         </Block>
         <Block title="My events" icon={<CalendarDays className="size-4" />} href="/events" empty="Nothing you are going to yet.">
