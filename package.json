@@ -13,6 +13,7 @@
     "lint:fix": "eslint --fix",
     "typecheck": "next typegen && tsc --noEmit",
     "check": "pnpm typecheck && pnpm lint && pnpm test && pnpm build",
+    "db:connect": "node scripts/db-connect.mjs",
     "db:sql": "node scripts/db-sql.mjs",
     "db:verify": "node scripts/db-verify.mjs",
     "ai:verify": "node --experimental-strip-types --import ./scripts/test-register.mjs scripts/ai-verify.mjs",

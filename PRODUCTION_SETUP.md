@@ -40,6 +40,22 @@ SUPABASE_SERVICE_ROLE_KEY
 STUDENTOS_STORE=supabase
 ```
 
+**THE SHORT WAY.** Create the project in the dashboard, then let the connector
+do the rest — schema, keys, `.env.local`, Vercel, and the verification:
+
+```bash
+supabase login                                    # once, in a browser
+pnpm db:connect                                   # lists your projects
+pnpm db:connect --project <ref> --vercel          # does everything else
+vercel --prod                                     # deploy onto it
+```
+
+It applies **only** `0005` and `0006`, never the four that must not be applied,
+and it never prints a key. Re-running it is safe. If it fails at any step it
+says which, and the manual route below still works.
+
+The long way, step by step:
+
 **DASHBOARD SETUP**
 1. supabase.com → New project. Pick the region closest to your students —
    `eu-central-1` (Frankfurt) matches the current Vercel region `fra1`.
