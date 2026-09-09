@@ -14,16 +14,16 @@ The Supabase store now exists (`src/server/db/supabase-store.ts`), so this
 section is configuration rather than engineering. `docs/data-layer.md` explains
 the shape and where it stops.
 
-- [ ] **BLOCKER** Supabase production project created, separate from any
+- [x] **BLOCKER** Supabase production project created, separate from any
       staging project
-- [ ] **BLOCKER** `supabase/migrations/0005_row_store.sql` applied
-- [ ] **BLOCKER** `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` and
+- [x] **BLOCKER** `supabase/migrations/0005_row_store.sql` applied
+- [x] **BLOCKER** `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` and
       `STUDENTOS_STORE=supabase` set in the Vercel **production** environment.
       Without the service role key the app silently runs on the JSON file — the
       anon key alone is not enough and is not meant to be.
-- [ ] **BLOCKER** `pnpm db:verify` exits 0 against production. It writes a probe
+- [x] **BLOCKER** `pnpm db:verify` exits 0 against production. It writes a probe
       row, reads it back, confirms a stale write is rejected and cleans up.
-- [ ] **BLOCKER** The real test: deploy, sign up, redeploy, confirm the account
+- [x] **BLOCKER** The real test: deploy, sign up, redeploy, confirm the account
       is still there. Nothing else on this page proves storage works.
 - [ ] Preview deployments pointed at a **second** Supabase project. A preview
       wired to production is a preview that can delete real accounts.
@@ -181,7 +181,7 @@ it says. What remains here is everything a provider cannot supply.
       thing that reaches students is whatever happened to be in one working
       directory. Connecting it needs dashboard access and cannot be done from a
       shell.
-- [ ] Confirm what production is actually serving, rather than assuming the last
+- [x] Confirm what production is actually serving, rather than assuming the last
       push arrived: `curl -s https://studentos-sooty.vercel.app/api/health`
       returns the commit, the environment and which store is live. `"store":
       "file"` means Supabase is not configured and every account is on an

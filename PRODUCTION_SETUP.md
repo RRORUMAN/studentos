@@ -4,9 +4,8 @@ Every external service StudentOS talks to, what it is for, and exactly what you
 have to do. `docs/configuration.md` has longer prose on several of these;
 this file is the checklist you work down on the day.
 
-**Status is as of 2026-09-07 and describes the code, not your account.** Nothing
-here has been configured on your behalf — no credentials were invented and none
-were available to this session. `/admin` → **Services** reports the live state
+**Status is as of 2026-09-09.** Supabase is configured and verified (§1); every
+other service below is still unconfigured. `/admin` → **Services** reports the live state
 from the running process, and `pnpm db:verify` proves the database specifically.
 
 Order matters. Storage first: until it is real, nothing else is worth
@@ -17,14 +16,24 @@ the next deploy.
 
 ## 1. Supabase
 
-**STATUS:** Missing — code complete, **never executed against a real Postgres**
+**STATUS:** **Configured and running.** Project `fbyzfhstdraucxmjktzg`
+(StudentOS, eu-west-1, Postgres 17.6).
 
-The store and its tests are done and green, but no Supabase credentials existed
-in the session that wrote them, so `0005_row_store.sql` has been read and
-structurally checked and never actually run. Treat step 3 below as the first
-real test of it, and `pnpm db:verify` as the thing that tells you whether it
-worked. If the SQL editor reports an error, that is the expected kind of problem
-at this point and not a sign anything deeper is wrong.
+`0005_row_store.sql` and `0006_scheduled_cleanup.sql` have now been applied to a
+real Postgres — the first time either had been — and both worked. `pnpm
+db:verify` passes every check, including the stale-write rejection that makes
+concurrent instances safe. `studentos-prune` is scheduled and active at 03:11.
+
+The test that actually proves it, from the launch checklist: production was
+deployed, the store seeded 318 rows, production was redeployed, and both
+`seeded_at` and the row count were unchanged afterwards. The new deployment
+found the existing store rather than re-seeding it. **Data survives a
+redeploy.** The "preview server, nothing is kept" banner disappeared on its own,
+because `isEphemeralStore` is now false.
+
+Applied with `supabase db query --linked --project-ref <ref> -f <file>`, one
+migration file at a time, which is the CLI equivalent of pasting into the SQL
+editor and — unlike `supabase db push` — applies only the files named.
 
 **PURPOSE**
 The database. Without it the product runs on a JSON file; on Vercel that file
