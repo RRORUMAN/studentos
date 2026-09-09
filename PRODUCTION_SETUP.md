@@ -40,13 +40,15 @@ SUPABASE_SERVICE_ROLE_KEY
 STUDENTOS_STORE=supabase
 ```
 
-**THE SHORT WAY.** Create the project in the dashboard, then let the connector
-do the rest — schema, keys, `.env.local`, Vercel, and the verification:
+**THE SHORT WAY.** Sign in once; the connector does the rest — creates the
+project, applies the schema, reads the keys, writes `.env.local`, configures
+Vercel, and proves a write survives a round trip:
 
 ```bash
 supabase login                                    # once, in a browser
-pnpm db:connect                                   # lists your projects
-pnpm db:connect --project <ref> --vercel          # does everything else
+pnpm db:connect --create "studentos" --vercel     # creates it and does the rest
+# or, for a project you already made:
+pnpm db:connect --project <ref> --vercel
 vercel --prod                                     # deploy onto it
 ```
 

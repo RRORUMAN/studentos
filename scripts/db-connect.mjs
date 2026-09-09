@@ -6,13 +6,22 @@
  * Takes a project from "exists and is empty" to "the product is running on it",
  * in one command.
  *
- *   supabase login            # once, in a browser. Yours to do.
- *   pnpm db:connect           # lists your projects and stops
- *   pnpm db:connect --project <ref>
- *   pnpm db:connect --project <ref> --vercel   # also configure production
+ *   supabase login                                  # once. Yours to do.
+ *   pnpm db:connect                                 # lists your projects
+ *   pnpm db:connect --create "studentos" --vercel   # from nothing to serving
+ *   pnpm db:connect --project <ref> --vercel        # an existing project
+ *
+ * THE ONE STEP THAT IS NOT AUTOMATED is authorising it, and that is deliberate.
+ * `supabase login` signs in as the account owner in a browser; a personal
+ * access token from the dashboard, placed in `.env.local`, does the same job
+ * without one. Everything after that point is this script's job.
  *
  * WHAT IT DOES, in order, and it is safe to re-run at any point:
  *
+ *   0. With `--create`, provisions the project: picks your organisation (or
+ *      takes `--org`), generates a database password and records it in
+ *      `.env.local`, creates the project in `--region` (default eu-central-1,
+ *      which matches Vercel's fra1), and waits for it to go healthy.
  *   1. Applies migrations 0005 and 0006 through the Management API, which is
  *      the same path the dashboard SQL editor uses. It does NOT run
  *      `supabase db push`, which would apply all six migrations including the
@@ -45,6 +54,7 @@
 
 import { readFile, writeFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -74,13 +84,30 @@ const redact = (value) => (value ? `[${value.length} chars]` : "[missing]");
 /* -------------------------------------------------------------------------- */
 
 /**
- * The access token, from the environment or from the CLI's own session file.
+ * The access token, from the environment, `.env.local`, or the CLI's session.
  *
- * Reading the CLI's session rather than asking for a token keeps this command
- * to one prerequisite -- `supabase login` -- instead of two.
+ * THREE PLACES, because there are two reasonable ways to authorise this and
+ * they end up in different files. `supabase login` writes a session under the
+ * home directory and involves no copying. A personal access token from the
+ * dashboard is the alternative when a browser flow is inconvenient, and the
+ * right home for it is `.env.local` -- which is gitignored, is where every
+ * other secret in this project lives, and is already what `db-verify` reads.
+ *
+ * A token is never printed, and it never needs to be pasted anywhere but into
+ * that file.
  */
 async function accessToken() {
   if (process.env.SUPABASE_ACCESS_TOKEN) return process.env.SUPABASE_ACCESS_TOKEN.trim();
+
+  /* `.env.local`, read the way `next dev` and `db-verify` read it. */
+  try {
+    const raw = await readFile(join(ROOT, ".env.local"), "utf8");
+    const match = /^\s*SUPABASE_ACCESS_TOKEN\s*=\s*(.+)$/m.exec(raw);
+    const value = match?.[1]?.trim().replace(/^["']|["']$/g, "");
+    if (value) return value;
+  } catch {
+    /* no .env.local; try the CLI session */
+  }
 
   const candidates = [
     join(homedir(), ".supabase", "access-token"),
@@ -98,10 +125,14 @@ async function accessToken() {
 
   die(
     "not signed in to Supabase",
-    "Run this once, in a browser:\n\n" +
-      "  supabase login\n\n" +
-      "or set SUPABASE_ACCESS_TOKEN from a personal access token at\n" +
-      "https://supabase.com/dashboard/account/tokens",
+    "Either of these works. Neither needs the token pasted anywhere but your\n" +
+      "own machine:\n\n" +
+      "  1.  supabase login\n" +
+      "      Opens a browser, signs in as you, writes a session. Nothing to copy.\n\n" +
+      "  2.  Create a token at https://supabase.com/dashboard/account/tokens\n" +
+      "      and add one line to .env.local (which is gitignored):\n\n" +
+      "        SUPABASE_ACCESS_TOKEN=sbp_...\n\n" +
+      "Then re-run this command.",
   );
 }
 
@@ -187,8 +218,15 @@ function run(command, args, { stdin } = {}) {
 /* -------------------------------------------------------------------------- */
 
 const args = process.argv.slice(2);
-const projectIndex = args.indexOf("--project");
-const projectRef = projectIndex >= 0 ? args[projectIndex + 1] : null;
+const flag = (name) => {
+  const index = args.indexOf(name);
+  return index >= 0 ? args[index + 1] : null;
+};
+
+let projectRef = flag("--project");
+const createName = flag("--create");
+const region = flag("--region") ?? "eu-central-1";
+const orgFlag = flag("--org");
 const toVercel = args.includes("--vercel");
 
 console.log("");
@@ -207,11 +245,100 @@ try {
   die("could not list your projects", error.message);
 }
 
+/* ---- create one, if asked ------------------------------------------------ */
+
+if (createName && !projectRef) {
+  step(`Creating project "${createName}" in ${region}`);
+
+  let organisations;
+  try {
+    organisations = await api(token, "/v1/organizations");
+  } catch (error) {
+    die("could not list your organisations", error.message);
+  }
+
+  const organisation = orgFlag
+    ? organisations.find((row) => row.id === orgFlag)
+    : organisations.length === 1
+      ? organisations[0]
+      : null;
+
+  if (!organisation) {
+    die(
+      orgFlag ? `no organisation ${orgFlag}` : "several organisations; say which",
+      `${organisations.map((row) => `  ${row.id}  ${row.name}`).join("\n")}\n\n` +
+        "Re-run with --org <id>",
+    );
+  }
+  ok(`organisation ${organisation.name}`);
+
+  /**
+   * The database password.
+   *
+   * Generated here rather than asked for, and written to `.env.local` with the
+   * rest. It is not used to sign in to anything -- the application reaches the
+   * store with the service-role key -- but Supabase requires one at creation
+   * and you need it later for direct psql access, and a password nobody
+   * recorded is the kind of thing that turns a routine afternoon into a project
+   * restore.
+   */
+  const dbPass = randomBytes(24).toString("base64url");
+
+  let created;
+  try {
+    created = await api(token, "/v1/projects", {
+      method: "POST",
+      body: JSON.stringify({
+        name: createName,
+        organization_id: organisation.id,
+        region,
+        db_pass: dbPass,
+      }),
+    });
+  } catch (error) {
+    die("could not create the project", error.message);
+  }
+
+  projectRef = created.id;
+  ok(`created ${projectRef}`);
+
+  await writeEnvLocal({ SUPABASE_DB_PASSWORD: dbPass, SUPABASE_PROJECT_REF: projectRef });
+  ok(`database password saved to .env.local ${redact(dbPass)}`);
+
+  /* Provisioning takes a couple of minutes and everything below needs a live
+     database, so wait rather than failing on a project that is nearly there. */
+  step("Waiting for it to finish provisioning");
+  const deadline = Date.now() + 8 * 60_000;
+  for (;;) {
+    const rows = await api(token, "/v1/projects");
+    const status = rows.find((row) => row.id === projectRef)?.status;
+    if (status === "ACTIVE_HEALTHY") {
+      ok("healthy");
+      break;
+    }
+    if (Date.now() > deadline) {
+      die(
+        `still ${status} after eight minutes`,
+        `The project exists (${projectRef}). Re-run:\n\n` +
+          `  pnpm db:connect --project ${projectRef} --vercel`,
+      );
+    }
+    info(`${status ?? "unknown"}…`);
+    await new Promise((resolve) => setTimeout(resolve, 10_000));
+  }
+
+  projects = await api(token, "/v1/projects");
+}
+
 if (!projectRef) {
   step("Your projects:");
   if (projects.length === 0) {
-    info("none yet — create one at https://supabase.com/dashboard/projects");
-    info("Pick the region nearest your students; eu-central-1 matches Vercel's fra1.");
+    info("none yet.");
+    console.log("");
+    info("Create and connect one in a single command:");
+    info('  pnpm db:connect --create "studentos" --vercel');
+    console.log("");
+    info("eu-central-1 is the default region and matches Vercel's fra1.");
   }
   for (const project of projects) {
     info(`${project.id}   ${project.name}  (${project.region}, ${project.status})`);
