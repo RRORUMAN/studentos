@@ -15,8 +15,7 @@ import { brand } from "@/brand/brand.config";
 import { plans as pricingPlans, type PlanKey } from "@/config/pricing";
 import { arrivalTasksFor } from "@/data/arrival";
 import { campusesForCity, cities, cityStatusLabel, getCity } from "@/data/cities";
-import type { Campus } from "@/data/types";
-import { UniversityPicker } from "@/components/onboarding/university-picker";
+import { UniversityPicker, type UniversityChoice } from "@/components/onboarding/university-picker";
 import { heroPlans, planTotal } from "@/data/plans";
 import { placesForCity } from "@/data/places";
 import { loopSummaries } from "@/data/loop";
@@ -67,15 +66,16 @@ export function OnboardingFlow({
 
   const [step, setStep] = useState(0);
   const [citySlug, setCitySlug] = useState<string | null>(null);
-  const [campusSlug, setCampusSlug] = useState<string | null>(null);
-  /* A student whose university is not in the list still has one. */
-  const [universityName, setUniversityName] = useState("");
+  /* A student whose university is not in the register still has one, so this
+     holds the whole choice rather than a slug: see `UniversityChoice`. */
+  const [university, setUniversity] = useState<UniversityChoice | null>(null);
+  const campusSlug = university?.campusSlug ?? null;
+  const universityName = university?.name ?? "";
   const [budget, setBudget] = useState(BUDGET_DEFAULT);
   const [interests, setInterests] = useState<string[]>(["cheap-eats", "free-culture"]);
   const [done, setDone] = useState(false);
 
   const city = citySlug ? getCity(citySlug) : undefined;
-  const campuses = citySlug ? campusesForCity(citySlug) : [];
 
   const canAdvance =
     (step === 0 && Boolean(citySlug)) ||
@@ -158,14 +158,11 @@ export function OnboardingFlow({
             {step === 1 ? (
               <StepCampus
                 cityName={city?.name ?? ""}
-                campuses={campuses}
-                value={campusSlug}
-                universityName={universityName}
-                onTyped={(name) => {
-                  setUniversityName(name);
-                  setCampusSlug(null);
-                }}
-                onChange={setCampusSlug}
+                citySlug={citySlug}
+                countryCode={city?.countryCode ?? null}
+                choice={university}
+                onPick={setUniversity}
+                onClear={() => setUniversity(null)}
               />
             ) : null}
 
@@ -199,7 +196,7 @@ export function OnboardingFlow({
         </Button>
 
         <div className="flex items-center gap-3">
-          {step === 1 && !campusSlug ? (
+          {step === 1 && !university ? (
             <span className="text-[0.8125rem] text-ink-400">You can skip this</span>
           ) : null}
           <Button variant="signal" size="md" onClick={next} disabled={!canAdvance} className="group">
@@ -294,18 +291,18 @@ function StepCity({
 
 function StepCampus({
   cityName,
-  campuses,
-  value,
-  universityName,
-  onChange,
-  onTyped,
+  citySlug,
+  countryCode,
+  choice,
+  onPick,
+  onClear,
 }: {
   cityName: string;
-  campuses: readonly Campus[];
-  value: string | null;
-  universityName: string;
-  onChange: (slug: string | null) => void;
-  onTyped: (name: string) => void;
+  citySlug: string | null;
+  countryCode: string | null;
+  choice: UniversityChoice | null;
+  onPick: (choice: UniversityChoice) => void;
+  onClear: () => void;
 }) {
   return (
     <div>
@@ -315,15 +312,11 @@ function StepCampus({
       />
       <UniversityPicker
         cityName={cityName}
-        campuses={campuses}
-        campusSlug={value}
-        universityName={universityName}
-        onPickCampus={(slug) => onChange(slug)}
-        onPickTyped={onTyped}
-        onClear={() => {
-          onChange(null);
-          onTyped("");
-        }}
+        citySlug={citySlug}
+        countryCode={countryCode}
+        choice={choice}
+        onPick={onPick}
+        onClear={onClear}
       />
     </div>
   );

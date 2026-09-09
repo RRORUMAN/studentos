@@ -4,6 +4,8 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 
 import { defaultCityContext, getCampus, resolveCity } from "@/data/cities";
+import { institutionById } from "@/data/institutions";
+import { submitInstitution } from "@/server/actions/institutions";
 import { emptyMemory } from "@/domain/social";
 import {
   defaultPrivacy,
@@ -56,6 +58,7 @@ const schema = z.object({
     .default("unknown"),
   stayMonths: z.number().int().min(1).max(72).nullable().optional(),
 
+  institutionId: z.string().max(80).nullable().optional(),
   campusSlug: z.string().nullable().optional(),
   universityName: z.string().max(120).nullable().optional(),
 
@@ -120,6 +123,7 @@ export async function completeOnboarding(input: OnboardingInput): Promise<Onboar
 
   const city = resolveCity(answers.citySlug) ?? defaultCityContext;
   const campus = answers.campusSlug ? getCampus(answers.campusSlug) : undefined;
+  const institution = answers.institutionId ? institutionById(answers.institutionId) : undefined;
   const now = nowIso();
 
   /* ---- budget -----------------------------------------------------------
@@ -166,6 +170,7 @@ export async function completeOnboarding(input: OnboardingInput): Promise<Onboar
       leavingOn: answers.leavingOn ?? null,
 
       campusSlug: campus?.slug ?? null,
+      institutionId: institution?.id ?? null,
       universityName: answers.universityName ?? campus?.name ?? null,
 
       homeArea: answers.homeArea ?? null,
@@ -304,6 +309,19 @@ export async function completeOnboarding(input: OnboardingInput): Promise<Onboar
       community.memberCount += 1;
     }
   });
+
+  /* A university nobody could find is a gap in the register, and the student
+     who found it is the only person who will ever report it. Queued after the
+     account is written, never before: this must not be able to fail onboarding.
+     `submitInstitution` drops repeats, so twenty students at the same missing
+     university produce one decision to make. */
+  if (answers.universityName && !institution && !campus) {
+    await submitInstitution({
+      name: answers.universityName,
+      citySlug: city.slug,
+      countryCode: city.countryCode,
+    });
+  }
 
   return { ok: true };
 }

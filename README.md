@@ -286,8 +286,8 @@ version:
    grants an entitlement. `stripe listen --forward-to
    localhost:3000/api/stripe/webhook` is a local development convenience and is
    never part of how production works.
-4. **Everything else** is optional and degrades honestly: `ANTHROPIC_API_KEY`,
-   Google sign-in, Maps, Sentry, PostHog. `/admin` → Services lists what is
+4. **Everything else** is optional and degrades honestly: `OPENAI_API_KEY` or
+   `ANTHROPIC_API_KEY`, Google sign-in, Maps, Sentry, PostHog. `/admin` → Services lists what is
    configured and what each absence costs.
 
 `.env.example` is the complete list, and every entry says which environments

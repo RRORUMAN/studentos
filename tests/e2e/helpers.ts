@@ -51,8 +51,15 @@ export async function completeOnboarding(
   await page.getByRole("button", { name: /^Madrid/ }).click();
   await page.getByRole("button", { name: "Continue" }).click();
 
-  // 3. University — skippable, but campus drives a lot, so pick one.
-  await page.getByRole("button", { name: /Complutense/ }).click();
+  /* 3. University — skippable, but the campus drives a lot, so pick one.
+        It has to be SEARCHED for rather than clicked out of the opening list:
+        the picker now covers every institution in the country and opens with
+        the eight nearest the student, which is not the same eight it used to
+        show. Typing is also what a real student does. */
+  await page
+    .getByRole("searchbox", { name: /Search universities/ })
+    .fill("complutense");
+  await page.getByRole("option", { name: /Universidad Complutense de Madrid/ }).click();
   await page.getByRole("button", { name: "Continue" }).click();
 
   // 4. Home area

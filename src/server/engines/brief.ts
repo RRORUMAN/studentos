@@ -19,7 +19,7 @@ import type { Cents, CityEvent } from "@/domain/types";
  */
 
 export type BriefLine = {
-  kind: "tonight" | "free" | "friends" | "deal" | "money" | "task" | "people" | "pulse" | "payment" | "mission" | "exchange";
+  kind: "tonight" | "free" | "friends" | "deal" | "money" | "task" | "people" | "pulse" | "payment" | "mission" | "exchange" | "language";
   text: string;
   href: string;
   /** Secondary detail shown smaller, when there is one. */
@@ -52,6 +52,11 @@ export type BriefInput = {
   mission?: { title: string; step: string; href: string } | null;
   /** Exchange requests in the city that match something the student listed, or new departing stock for arrivals. */
   exchange?: { count: number; label: string; href: string } | null;
+  /**
+   * Today's phrase. Null when there is no pack, the student turned it off, or
+   * they have finished the pack -- the brief then simply has one fewer line.
+   */
+  language?: { packName: string; text: string } | null;
 };
 
 export function buildDailyBrief(input: BriefInput): BriefLine[] {
@@ -162,6 +167,19 @@ export function buildDailyBrief(input: BriefInput): BriefLine[] {
       kind: "exchange",
       text: input.exchange.label,
       href: input.exchange.href,
+    });
+  }
+
+  /* ---- language ----------------------------------------------------------
+     Last, and only when there is room. It is the one line here with no
+     deadline attached, so it yields to every line that has one -- but on a
+     quiet day it is the most useful thirty seconds on the screen. */
+  if (input.language && lines.length < 6) {
+    lines.push({
+      kind: "language",
+      text: `Today's ${input.language.packName} takes 30 seconds`,
+      detail: input.language.text,
+      href: "/speak",
     });
   }
 

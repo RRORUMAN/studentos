@@ -217,6 +217,7 @@ export async function seedDemoAccount(db: Database): Promise<number> {
       pulse: false,
       arrival: true,
       "weekend-ideas": true,
+      language: false,
     },
     quietFrom: 23,
     quietTo: 8,

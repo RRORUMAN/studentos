@@ -66,8 +66,17 @@ export type Profile = {
   arrivingOn: Iso | null;
   leavingOn: Iso | null;
 
-  /* --- step 3: university ----------------------------------------------- */
+  /* --- step 3: university -----------------------------------------------
+     Three fields for three different amounts of knowledge, and they are not
+     interchangeable. `campusSlug` means StudentOS knows where the buildings
+     are and may talk about commutes. `institutionId` means it knows the place
+     exists, in the register, under a stable id -- enough to group students and
+     to look the institution up later, and not enough to guess a neighbourhood.
+     `universityName` is always set once the student has answered, including
+     when they typed something nobody has heard of. */
   campusSlug: string | null;
+  /** Registry id. Optional for rows written before the register existed. */
+  institutionId?: string | null;
   universityName: string | null;
 
   /* --- step 4: home ------------------------------------------------------
@@ -612,7 +621,18 @@ export type NotificationTopic =
    * `deliveryFor` defaults it on for prefs rows written before it existed —
    * silence after you asked a question reads as a broken product.
    */
-  | "answers";
+  | "answers"
+  /**
+   * Today's phrase is waiting.
+   *
+   * OFF BY DEFAULT, and it is the only topic here that is off for a reason
+   * other than volume. A daily reminder to learn a word is the exact
+   * engagement bait this product avoids everywhere else, and a student who
+   * wants it can say so in one tap. Its producer also refuses to fire until
+   * the student has used Speak Local at least once, so nobody is nagged about
+   * a feature they never opened.
+   */
+  | "language";
 
 export const notificationTopics: readonly NotificationTopic[] = [
   "budget-warnings",
@@ -625,6 +645,7 @@ export const notificationTopics: readonly NotificationTopic[] = [
   "arrival",
   "weekend-ideas",
   "answers",
+  "language",
 ];
 
 /** How a topic reaches the student. "digest" batches into one daily note. */

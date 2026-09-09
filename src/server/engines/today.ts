@@ -21,7 +21,7 @@ import type { RightNowItem } from "@/server/engines/right-now";
  * ============================================================================
  */
 
-export type TodayPickKind = "task" | "event" | "social" | "deal" | "place" | "mission";
+export type TodayPickKind = "task" | "event" | "social" | "deal" | "place" | "mission" | "language";
 
 export type TodayPick = {
   kind: TodayPickKind;
@@ -44,6 +44,13 @@ export type TodayInput = {
   feed: readonly FeedItem[];
   rightNow: readonly RightNowItem[];
   mission: { id: string; title: string; emoji: string; nextStep: MissionStep | null; done: number; total: number } | null;
+  /**
+   * Today's phrase, already chosen by `dailyPhrase`. Null when the student has
+   * turned the daily phrase off, when their country has no pack, or when they
+   * have marked every phrase known -- three different reasons that all mean
+   * the same thing here: do not put language on Home today.
+   */
+  language: { phraseId: string; text: string; meaning: string; packName: string } | null;
   formatMoney: (cents: Cents) => string;
   limit?: number;
 };
@@ -194,8 +201,38 @@ function missionPick(input: TodayInput): TodayPick | null {
   };
 }
 
+/**
+ * Today's phrase, as a pick.
+ *
+ * Scored below anything with a deadline and above anything merely nice, which
+ * is the correct place for a thirty-second habit: it should be the fourth
+ * thing a student sees on a normal day and the thing that drops off entirely
+ * on a day when the visa office wants them.
+ */
+function languagePick(input: TodayInput): TodayPick | null {
+  if (!input.language) return null;
+  return {
+    kind: "language",
+    id: input.language.phraseId,
+    title: input.language.text,
+    meta: input.language.meaning,
+    href: "/speak",
+    reason: `Today's ${input.language.packName} · 30 sec`,
+    priceCents: null,
+    score: 52,
+    tag: null,
+  };
+}
+
 export function todayForYou(input: TodayInput): TodayPick[] {
-  const picks = [taskPick(input), eventPick(input), socialPick(input), dealPick(input), missionPick(input)].filter(
+  const picks = [
+    taskPick(input),
+    eventPick(input),
+    socialPick(input),
+    dealPick(input),
+    missionPick(input),
+    languagePick(input),
+  ].filter(
     (pick): pick is TodayPick => pick !== null,
   );
   return picks.sort((a, b) => b.score - a.score).slice(0, input.limit ?? 5);

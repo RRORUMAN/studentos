@@ -1,6 +1,8 @@
 import "server-only";
 
 import type { PlanKey } from "@/config/pricing";
+import { institutionById, institutions } from "@/data/institutions";
+import { searchInstitutions } from "@/domain/institutions";
 import { intentLabel, needGapMeta } from "@/domain/insight";
 import { effectivePlan } from "@/domain/types";
 import { all, findMany } from "@/server/db";
@@ -431,4 +433,116 @@ export async function loadUpgradeTriggerStats(): Promise<TriggerRow[]> {
   return [...byTrigger.values()]
     .map((entry) => ({ ...entry, rate: entry.shown === 0 ? 0 : Math.round((entry.converted / entry.shown) * 100) }))
     .sort((a, b) => b.shown - a.shown);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Institutions                                                                */
+/* -------------------------------------------------------------------------- */
+
+export type InstitutionAdminView = {
+  /** Size of the register, by where each row came from. */
+  registry: { total: number; curated: number; imported: number; withCampus: number };
+  /** Countries the import has been run for, with a count each. */
+  byCountry: { countryCode: string; count: number }[];
+  /** How students are distributed across institutions. */
+  distribution: { institutionId: string; name: string; city: string; students: number }[];
+  /** Students whose university is not in the register at all. */
+  unmatched: number;
+  /** The review queue, newest first. */
+  submissions: {
+    id: string;
+    name: string;
+    citySlug: string;
+    countryCode: string;
+    status: "pending" | "verified" | "merged" | "rejected";
+    mergedIntoName: string | null;
+    createdAt: string;
+    /** What the search WOULD return for this name now. Often the answer. */
+    suggestions: { id: string; name: string; city: string }[];
+  }[];
+  pending: number;
+};
+
+/**
+ * The institution register, and the queue of names students typed that it did
+ * not have.
+ *
+ * The interesting column is `suggestions`. Most submissions are not missing
+ * institutions at all -- they are institutions that ARE in the register under
+ * a name the search did not match, and the fix is an alias rather than a new
+ * row. Running the search against each submitted name and showing the top
+ * three answers turns a review from "look this up" into "is it one of these",
+ * which is the difference between a queue that gets worked and one that does
+ * not.
+ */
+export async function loadInstitutionAdmin(): Promise<InstitutionAdminView> {
+  const [submissions, profiles] = await Promise.all([
+    all("institutionSubmissions"),
+    all("profiles"),
+  ]);
+
+  const byCountry = new Map<string, number>();
+  for (const row of institutions) {
+    byCountry.set(row.countryCode, (byCountry.get(row.countryCode) ?? 0) + 1);
+  }
+
+  const students = new Map<string, number>();
+  let unmatched = 0;
+  for (const profile of profiles) {
+    const id = profile.institutionId ?? null;
+    if (id) students.set(id, (students.get(id) ?? 0) + 1);
+    else if (profile.universityName) unmatched += 1;
+  }
+
+  const distribution = [...students.entries()]
+    .map(([institutionId, count]) => {
+      const row = institutionById(institutionId);
+      return {
+        institutionId,
+        name: row?.officialName ?? institutionId,
+        city: row?.city ?? "—",
+        students: count,
+      };
+    })
+    .sort((a, b) => b.students - a.students)
+    .slice(0, 12);
+
+  return {
+    registry: {
+      total: institutions.length,
+      curated: institutions.filter((row) => row.source === "curated").length,
+      imported: institutions.filter((row) => row.source === "wikidata").length,
+      withCampus: institutions.filter((row) => row.campusSlug !== null).length,
+    },
+    byCountry: [...byCountry.entries()]
+      .map(([countryCode, count]) => ({ countryCode, count }))
+      .sort((a, b) => b.count - a.count),
+    distribution,
+    unmatched,
+    submissions: submissions
+      .slice()
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, 30)
+      .map((row) => ({
+        id: row.id,
+        name: row.name,
+        citySlug: row.citySlug,
+        countryCode: row.countryCode,
+        status: row.status,
+        mergedIntoName: row.mergedIntoId
+          ? (institutionById(row.mergedIntoId)?.officialName ?? row.mergedIntoId)
+          : null,
+        createdAt: row.createdAt,
+        suggestions: searchInstitutions(institutions, row.name, {
+          countryCode: row.countryCode,
+          citySlug: row.citySlug,
+          limit: 3,
+        }).map((hit) => ({
+          id: hit.institution.id,
+          name: hit.institution.officialName,
+          city: hit.institution.city,
+        })),
+      })),
+    pending: submissions.filter((row) => row.status === "pending").length,
+  };
 }

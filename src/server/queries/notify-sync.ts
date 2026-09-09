@@ -4,6 +4,7 @@ import { dayKey } from "@/lib/dates";
 import { findMany } from "@/server/db";
 import { notify } from "@/server/notify";
 import { loadDeals } from "@/server/queries/discovery";
+import { loadLanguage } from "@/server/queries/language";
 import { loadLifeOps } from "@/server/queries/lifeops";
 import { loadMoney } from "@/server/queries/money";
 import type { Viewer } from "@/server/viewer";
@@ -40,7 +41,34 @@ export async function syncNotifications(viewer: Viewer, now: Date): Promise<numb
   const options = { timeZone: tz, now };
   let written = 0;
 
-  const [money$, timeline] = await Promise.all([loadMoney(userId, now), loadLifeOps(viewer, now)]);
+  const [money$, timeline, language] = await Promise.all([
+    loadMoney(userId, now),
+    loadLifeOps(viewer, now),
+    loadLanguage({ userId, countryCode: viewer.city.countryCode, timezone: tz, now }),
+  ]);
+
+  /* ---- language ----------------------------------------------------------
+     Off by default, and gated twice more on top of that: there must be a
+     phrase to show, the student must not have turned the daily phrase off,
+     and they must have used Speak Local at least once. A student who has
+     never opened it is not reminded about it -- a reminder to use a feature
+     you have ignored is an advert, and this product does not send those. */
+  if (language.pack && language.today && language.profile.dailyBite && language.progress && language.progress.seen > 0) {
+    written += Number(
+      await notify(
+        {
+          userId,
+          topic: "language",
+          title: `Today's ${language.pack.name} takes 30 seconds`,
+          body: `${language.today.phrase.text} - ${language.today.phrase.meaning}`,
+          href: "/speak",
+          key: `phrase:${today}`,
+          withinHours: 20,
+        },
+        options,
+      ),
+    );
+  }
 
   /* ---- budget-warnings --------------------------------------------------
      The one topic that is on by default and had no producer. Two conditions,

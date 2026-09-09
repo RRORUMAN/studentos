@@ -143,6 +143,10 @@ function toolPlanFor(parsed: ParsedAsk, safeTodayCents: number | null): { name: 
       ];
     case "find-deals":
       return [{ name: "search_deals", args: { limit: 6 } }];
+    case "language-question":
+      return [
+        { name: "get_useful_phrases", args: { situation: parsed.situation ?? "first-words", limit: 6 } },
+      ];
     case "find-exchange":
       return [{ name: "search_exchange", args: { keywords: parsed.keywords, limit: 6 } }];
     case "budget-question":

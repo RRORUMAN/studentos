@@ -167,12 +167,22 @@ export async function loadInfrastructure(): Promise<InfrastructureReport> {
 
   /* ---- ai --------------------------------------------------------------- */
 
+  /**
+   * Named after the provider actually resolved, not after whichever vendor was
+   * wired first: a panel that says "Anthropic" while the requests go to OpenAI
+   * is the same class of untruth as an integration that pretends to work.
+   * `keySource` is the variable name, so a key set under the wrong name is
+   * visible here rather than at the first 401.
+   */
+  const aiProvider = env.ai.provider ?? (isAiConfigured ? "anthropic" : "none");
+  const aiLabel = aiProvider === "openai" ? "AI (OpenAI)" : aiProvider === "anthropic" ? "AI (Anthropic)" : "AI";
+
   services.push({
     key: "ai",
-    label: "AI (Anthropic)",
+    label: aiLabel,
     level: isAiConfigured ? "ready" : "degraded",
     state: isAiConfigured
-      ? `Key present, provider ${env.ai.provider ?? "anthropic"}.`
+      ? `Key present from ${env.ai.keySource}, provider ${aiProvider}.`
       : "No key. Every surface answers deterministically.",
     consequence: isAiConfigured
       ? null

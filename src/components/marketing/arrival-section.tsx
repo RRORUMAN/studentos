@@ -41,7 +41,7 @@ export function ArrivalSection() {
           <div>
             <SectionHeader
               eyebrow={brand.surfaces.arrival}
-              eyebrowIndex="11"
+              eyebrowIndex="12"
               title="Just landed? Start here."
               lead="A personal relocation assistant for the two weeks nobody prepares you for — sequenced so the thing that takes three weeks to book is the thing you do first."
             />

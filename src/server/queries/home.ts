@@ -18,6 +18,7 @@ import {
   loadScoredEvents,
 } from "@/server/queries/discovery";
 import { loadFriendEventIds } from "@/server/queries/events";
+import { loadLanguage } from "@/server/queries/language";
 import { loadLifeOps } from "@/server/queries/lifeops";
 import { loadTrending } from "@/server/queries/loop";
 import { loadMissions, type MissionView } from "@/server/queries/missions";
@@ -75,6 +76,13 @@ export async function loadHome(viewer: Viewer, now: Date): Promise<HomeData> {
   const stage = viewer.stage.stage;
   const hour = hourIn(now, tz);
   const day = weekdayIn(now, tz);
+
+  const language = await loadLanguage({
+    userId,
+    countryCode: viewer.city.countryCode,
+    timezone: tz,
+    now,
+  });
 
   const money$ = await loadMoney(userId, now);
   const budgetCents = money$.unset ? null : money$.reading.safeTodayCents;
@@ -171,6 +179,10 @@ export async function loadHome(viewer: Viewer, now: Date): Promise<HomeData> {
     },
     mission: mission && nextStep ? { title: mission.mission.title, step: nextStep.label, href: nextStep.href ?? `/missions/${mission.mission.id}` } : null,
     exchange: exchangeLine,
+    language:
+      language.pack && language.today && language.profile.dailyBite
+        ? { packName: language.pack.name, text: language.today.phrase.text }
+        : null,
   });
 
   const sentence = daySentence({
@@ -222,6 +234,18 @@ export async function loadHome(viewer: Viewer, now: Date): Promise<HomeData> {
     feed,
     rightNow: live,
     mission: mission ? { id: mission.mission.id, title: mission.mission.title, emoji: mission.mission.emoji, nextStep, done: mission.progress.done, total: mission.progress.total } : null,
+    /* Off when the student turned it off, when the country has no pack, and
+       when they have marked the whole pack known. All three arrive here as
+       null and Home simply has one fewer thing on it. */
+    language:
+      language.pack && language.today && language.profile.dailyBite
+        ? {
+            phraseId: language.today.phrase.id,
+            text: language.today.phrase.text,
+            meaning: language.today.phrase.meaning,
+            packName: language.pack.name,
+          }
+        : null,
     formatMoney: fmt,
     limit: 5,
   });

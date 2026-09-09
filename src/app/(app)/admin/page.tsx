@@ -8,11 +8,12 @@ import { upgradeTriggerMeta, type UpgradeTrigger } from "@/config/entitlements";
 import { cityDirectory } from "@/data/cities";
 import type { CityStatus } from "@/data/types";
 import { providerHealth } from "@/server/work/providers";
-import { loadAdminMetrics, loadUnmetNeeds, loadUpgradeTriggerStats } from "@/server/queries/admin";
+import { loadAdminMetrics, loadInstitutionAdmin, loadUnmetNeeds, loadUpgradeTriggerStats } from "@/server/queries/admin";
 import { loadInfrastructure } from "@/server/queries/infrastructure";
 import { aiConfig, degradedCopy, spendSince } from "@/server/ai/config";
 import { toolMeta, type ToolName, toolSchemas } from "@/server/ai/tools";
 import { type FlagName, flagMeta, loadSettings } from "@/server/queries/settings";
+import { reviewInstitution } from "@/server/actions/admin";
 import { requireAdmin } from "@/server/viewer";
 import { cn, money } from "@/lib/utils";
 
@@ -36,7 +37,7 @@ export const metadata: Metadata = {
 export default async function AdminPage() {
   await requireAdmin();
 
-  const [metrics, needs, triggers, settings, ai, health, infrastructure] = await Promise.all([
+  const [metrics, needs, triggers, settings, ai, health, infrastructure, register] = await Promise.all([
     loadAdminMetrics(),
     loadUnmetNeeds(),
     loadUpgradeTriggerStats(),
@@ -44,6 +45,7 @@ export default async function AdminPage() {
     aiConfig(),
     providerHealth(),
     loadInfrastructure(),
+    loadInstitutionAdmin(),
   ]);
 
   const dayStart = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate())).toISOString();
@@ -322,7 +324,9 @@ export default async function AdminPage() {
               <p className="font-mono text-micro uppercase tracking-[0.1em] text-ink-400">Tier 0 share</p>
               <p className="mt-2 text-[1.0625rem] font-semibold text-ink-700">No model calls logged</p>
               <p className="mt-2 text-[0.875rem] leading-relaxed text-ink-500">
-                Nothing has called a model yet, so there is no share to report. This fills in once
+                Nothing has called a model yet, so there is no share to report. This fills in once an
+                <code className="mx-1 rounded bg-ink-100 px-1 py-0.5 font-mono text-[0.8125rem]">OPENAI_API_KEY</code>
+                or
                 <code className="mx-1 rounded bg-ink-100 px-1 py-0.5 font-mono text-[0.8125rem]">ANTHROPIC_API_KEY</code>
                 is set and a student asks something the parser cannot place.
               </p>
@@ -497,6 +501,108 @@ export default async function AdminPage() {
           </ul>
         )}
       </section>
+
+      {/* ---- institutions ---------------------------------------------------- */}
+      <SectionHead
+        title="Institutions"
+        detail={`${register.registry.total} in the register: ${register.registry.curated} curated with a campus location, ${register.registry.imported} imported from Wikidata. A submission is a name a student typed that search could not find — usually an institution that is already here under a name nobody matched, which is why the suggestions sit next to it.`}
+      />
+
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <Stat label="In the register" value={String(register.registry.total)} hint={`${register.byCountry.length} ${register.byCountry.length === 1 ? "country" : "countries"} imported`} />
+        <Stat label="With a campus" value={String(register.registry.withCampus)} hint="Commute figures available" />
+        <Stat
+          label="Awaiting review"
+          value={String(register.pending)}
+          tone={register.pending > 0 ? "warn" : undefined}
+          hint={register.pending > 0 ? "Each one is a student who was not found" : "Nothing queued"}
+        />
+        <Stat label="Unmatched students" value={String(register.unmatched)} hint="Typed a name, no register row" />
+      </div>
+
+      {register.submissions.length > 0 ? (
+        <ul className="mt-4 space-y-2">
+          {register.submissions.map((row) => (
+            <li key={row.id} className="rounded-xl bg-white p-4 ring-1 ring-ink-950/6">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <p className="text-[0.9375rem] font-semibold text-ink-950">{row.name}</p>
+                <p className="font-mono text-[0.6875rem] uppercase tracking-[0.1em] text-ink-400">
+                  {row.citySlug} · {row.countryCode} · {row.status}
+                  {row.mergedIntoName ? ` → ${row.mergedIntoName}` : ""}
+                </p>
+              </div>
+
+              {row.suggestions.length > 0 ? (
+                <p className="mt-1.5 text-[0.8125rem] leading-relaxed text-ink-500">
+                  Search now returns: {row.suggestions.map((hit) => hit.name).join(", ")}
+                </p>
+              ) : (
+                <p className="mt-1.5 text-[0.8125rem] text-ink-500">Search returns nothing for this name.</p>
+              )}
+
+              {row.status === "pending" ? (
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  {row.suggestions.map((hit) => (
+                    <form key={hit.id} action={reviewInstitution}>
+                      <input type="hidden" name="id" value={row.id} />
+                      <input type="hidden" name="status" value="merged" />
+                      <input type="hidden" name="mergedIntoId" value={hit.id} />
+                      <button
+                        type="submit"
+                        className="rounded-full bg-ink-100 px-3 py-1.5 text-[0.8125rem] font-medium text-ink-700 transition-colors hover:bg-ink-200"
+                      >
+                        Same as {hit.name}
+                      </button>
+                    </form>
+                  ))}
+                  <form action={reviewInstitution}>
+                    <input type="hidden" name="id" value={row.id} />
+                    <input type="hidden" name="status" value="verified" />
+                    <button
+                      type="submit"
+                      className="rounded-full bg-mint-soft px-3 py-1.5 text-[0.8125rem] font-medium text-mint-deep transition-opacity hover:opacity-80"
+                    >
+                      Real, and missing
+                    </button>
+                  </form>
+                  <form action={reviewInstitution}>
+                    <input type="hidden" name="id" value={row.id} />
+                    <input type="hidden" name="status" value="rejected" />
+                    <button
+                      type="submit"
+                      className="rounded-full px-3 py-1.5 text-[0.8125rem] font-medium text-ink-500 transition-colors hover:bg-ink-100"
+                    >
+                      Not an institution
+                    </button>
+                  </form>
+                </div>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-4 rounded-xl bg-paper p-4 text-[0.875rem] text-ink-500 ring-1 ring-ink-950/6">
+          No student has typed a university the register could not find. That is the number to watch:
+          it going up means the import is behind.
+        </p>
+      )}
+
+      {register.distribution.length > 0 ? (
+        <div className="mt-4">
+          <p className="mb-2 font-mono text-micro uppercase tracking-[0.12em] text-ink-400">
+            Where students are
+          </p>
+          <ul className="space-y-1">
+            {register.distribution.map((row) => (
+              <li key={row.institutionId} className="flex items-baseline justify-between gap-3 text-[0.875rem]">
+                <span className="min-w-0 truncate text-ink-800">{row.name}</span>
+                <span className="shrink-0 text-ink-400">{row.city}</span>
+                <span className="tnum shrink-0 font-medium text-ink-950">{row.students}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       {/* ---- infrastructure -------------------------------------------------- */}
       <section className="mt-9 border-t border-ink-200 pt-5">

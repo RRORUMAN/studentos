@@ -35,7 +35,7 @@ export function ExchangeSection() {
       <div className="page">
         <SectionHeader
           eyebrow="Student Exchange"
-          eyebrowIndex="12"
+          eyebrowIndex="13"
           title="Students leaving have what new students need."
           lead="Buy and sell, borrow, ask for help, split a ride, give things away. Between verified students at universities in your city — not with the whole internet."
         />

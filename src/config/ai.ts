@@ -35,8 +35,8 @@ export const providerMeta: Record<AiProviderId, { label: string; detail: string;
     endpoint: "https://api.anthropic.com/v1/messages",
   },
   openai: {
-    label: "OpenAI-compatible",
-    detail: "Any endpoint speaking the Chat Completions shape, including self-hosted gateways.",
+    label: "OpenAI",
+    detail: "Chat Completions. Defaults are gpt-5.4-mini for tier 1, gpt-5.4 for tier 2, gpt-5.5 for tier 3. Any endpoint speaking the same shape works via AI_BASE_URL.",
     endpoint: "https://api.openai.com/v1/chat/completions",
   },
   none: {
@@ -96,23 +96,33 @@ export const defaultModels: Record<Exclude<AiProviderId, "none">, Record<1 | 2 |
     3: "claude-opus-5",
   },
   openai: {
-    1: "gpt-4.1-mini",
-    2: "gpt-4.1",
-    3: "gpt-4.1",
+    1: "gpt-5.4-mini",
+    2: "gpt-5.4",
+    3: "gpt-5.5",
   },
 };
 
 /**
- * Rough per-million-token euro cost, for the admin cost view. Unknown models
- * fall back to the tier-2 rate rather than to zero: a cost view that
- * under-reports is worse than one that is approximate.
+ * Rough per-million-token euro cost, for the admin cost view and for the spend
+ * caps that view enforces. Unknown models fall back to the tier-2 rate rather
+ * than to zero: a cost view that under-reports is worse than one that is
+ * approximate.
+ *
+ * Every row is the vendor's published list price converted at 0.9 EUR/USD.
+ * The rate is stated here rather than applied per row so that refreshing these
+ * numbers is a mechanical job, and so nobody has to guess whether a given row
+ * is dollars or euros. Checked against both vendors' pricing pages 2026-09-08.
  */
 export const costPerMillionTokens: Record<string, { input: number; output: number }> = {
   "claude-haiku-4-5-20251001": { input: 0.9, output: 4.5 },
   "claude-sonnet-5": { input: 2.7, output: 13.5 },
   "claude-opus-5": { input: 13.5, output: 67.5 },
-  "gpt-4.1-mini": { input: 0.4, output: 1.6 },
-  "gpt-4.1": { input: 2.0, output: 8.0 },
+  "gpt-5.4-nano": { input: 0.18, output: 1.125 },
+  "gpt-5.4-mini": { input: 0.675, output: 4.05 },
+  "gpt-5.4": { input: 2.25, output: 13.5 },
+  "gpt-5.5": { input: 4.5, output: 27.0 },
+  "gpt-4.1-mini": { input: 0.36, output: 1.44 },
+  "gpt-4.1": { input: 1.8, output: 7.2 },
   none: { input: 0, output: 0 },
 };
 

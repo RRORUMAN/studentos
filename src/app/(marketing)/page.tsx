@@ -8,6 +8,7 @@ import { FaqSection } from "@/components/marketing/faq-section";
 import { FinalCta } from "@/components/marketing/final-cta";
 import { GlobalCities } from "@/components/marketing/global-cities";
 import { Hero } from "@/components/marketing/hero";
+import { LanguageSection } from "@/components/marketing/language-section";
 import { LifeOpsSection } from "@/components/marketing/lifeops-section";
 import { MissionsSection } from "@/components/marketing/missions-section";
 import { OneApp } from "@/components/marketing/one-app";
@@ -70,6 +71,7 @@ export default function HomePage() {
       <BudgetSection />
       <SurvivalMode />
       <WorkSection />
+      <LanguageSection />
       <LifeOpsSection />
       <MissionsSection />
       <ArrivalSection />

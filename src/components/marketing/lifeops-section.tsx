@@ -57,7 +57,7 @@ export function LifeOpsSection() {
           <div>
             <SectionHeader
               eyebrow="LifeOps"
-              eyebrowIndex="09"
+              eyebrowIndex="10"
               title="One place for everything you need to remember."
               lead="Arrival tasks, deadlines, classes, the events you are going to, your plans, recurring payments and travel. Complete, snooze, reschedule or add to your calendar."
             />

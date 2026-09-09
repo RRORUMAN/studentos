@@ -2,6 +2,7 @@ import "server-only";
 
 import { z } from "zod";
 
+import { phrasesFor } from "@/domain/language";
 import { listingKind, listingMode } from "@/domain/social";
 import type { Cents } from "@/domain/types";
 import { findMany } from "@/server/db";
@@ -16,6 +17,7 @@ import {
   loadRecommendContext,
   loadScoredEvents,
 } from "@/server/queries/discovery";
+import { loadLanguage } from "@/server/queries/language";
 import { loadMoney } from "@/server/queries/money";
 import { loadOpenInvites } from "@/server/queries/plans";
 import { suggestedPeople } from "@/server/queries/social";
@@ -54,7 +56,7 @@ import { money } from "@/lib/utils";
 /* Result shapes                                                               */
 /* -------------------------------------------------------------------------- */
 
-export type ToolCardKind = "place" | "event" | "deal" | "invite" | "post" | "listing" | "task" | "mission" | "person" | "figure";
+export type ToolCardKind = "place" | "event" | "deal" | "invite" | "post" | "listing" | "task" | "mission" | "person" | "figure" | "phrase";
 
 /**
  * One thing the answer can show. Deliberately flat and uniform: the console
@@ -102,7 +104,8 @@ export type ToolName =
   | "read_preferences"
   | "read_saved"
   | "calculate_budget"
-  | "suggest_missions";
+  | "suggest_missions"
+  | "get_useful_phrases";
 
 /* -------------------------------------------------------------------------- */
 /* Argument schemas                                                            */
@@ -159,6 +162,31 @@ export const toolSchemas = {
   suggest_missions: z.object({
     limit: z.number().int().min(1).max(4).default(3),
   }),
+  /**
+   * Phrases for a situation, from the student's pack.
+   *
+   * There is deliberately NO free-text argument here. A model cannot ask this
+   * tool to translate an arbitrary sentence, because the answer would be the
+   * model's own invention presented with the same authority as the curated
+   * pack -- and a student repeating a hallucinated sentence at a pharmacy
+   * counter is exactly the failure this codebase refuses everywhere else.
+   * The situation is an enum; anything outside it returns nothing.
+   */
+  get_useful_phrases: z.object({
+    situation: z.enum([
+      "first-words",
+      "getting-around",
+      "groceries",
+      "eating-out",
+      "money",
+      "housing",
+      "university",
+      "meeting-people",
+      "work",
+      "emergency",
+    ]),
+    limit: z.number().int().min(1).max(8).default(5),
+  }),
 } as const;
 
 export type ToolArgs = { [K in ToolName]: z.infer<(typeof toolSchemas)[K]> };
@@ -180,6 +208,7 @@ export const toolMeta: Record<ToolName, { label: string; detail: string }> = {
   read_saved: { label: "read_saved", detail: "Places, events, deals and listings this student saved." },
   calculate_budget: { label: "calculate_budget", detail: "Whether a specific amount is affordable, and what it leaves." },
   suggest_missions: { label: "suggest_missions", detail: "Mission templates that fit this student's stage right now." },
+  get_useful_phrases: { label: "get_useful_phrases", detail: "Curated phrases in the local language for one situation. Never translates free text: the pack is the only source." },
 };
 
 /* -------------------------------------------------------------------------- */
@@ -584,6 +613,46 @@ export async function runTool<K extends ToolName>(name: K, rawArgs: unknown, ctx
           walkMinutes: null,
         })),
         emptyReason: templates.length === 0 ? "You are already running every mission that fits right now." : undefined,
+      };
+    }
+
+    case "get_useful_phrases": {
+      const a = args as ToolArgs["get_useful_phrases"];
+      const view = await loadLanguage({
+        userId: ctx.viewer.user.id,
+        countryCode: ctx.viewer.city.countryCode,
+        timezone: ctx.viewer.city.timezone,
+        now: ctx.now,
+      });
+      if (!view.pack) {
+        return {
+          tool: name,
+          args: a,
+          cards: [],
+          emptyReason: `There is no phrase pack for ${ctx.viewer.city.country} yet.`,
+        };
+      }
+      const rows = phrasesFor(view.pack, a.situation).slice(0, a.limit);
+      return {
+        tool: name,
+        args: a,
+        cards: rows.map((phrase) => ({
+          kind: "phrase" as const,
+          id: phrase.id,
+          title: phrase.text,
+          detail: phrase.meaning,
+          priceCents: null,
+          href: `/speak/${phrase.situation}`,
+          /* The respelling and the note are facts from the pack, so they may
+             be shown. Nothing here is generated. */
+          reasons: [phrase.say, phrase.note].filter((value): value is string => Boolean(value)),
+          source: "official" as const,
+          social: null,
+          at: null,
+          walkMinutes: null,
+        })),
+        emptyReason:
+          rows.length === 0 ? `The ${view.pack.name} pack has nothing for that situation yet.` : undefined,
       };
     }
 

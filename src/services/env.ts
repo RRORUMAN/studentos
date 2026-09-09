@@ -53,6 +53,53 @@ function parseFeeds(raw: string | null): readonly { slug: string; url: string }[
 }
 
 /**
+ * Which AI provider this deployment talks to, and with which key.
+ *
+ * Resolved together, once, because the two answers have to agree: an OpenAI
+ * key posted to `api.anthropic.com` is a 401 that reads like an outage. The
+ * key is never chosen from a different vendor than the resolved provider — a
+ * deployment with a mismatch degrades honestly instead.
+ */
+function resolveAi(): {
+  provider: string | null;
+  apiKey: string | null;
+  /** Which variable the key came from. The name, never the value. */
+  keySource: "AI_API_KEY" | "ANTHROPIC_API_KEY" | "OPENAI_API_KEY" | null;
+} {
+  const generic = optional(process.env.AI_API_KEY);
+  const anthropic = optional(process.env.ANTHROPIC_API_KEY);
+  const openai = optional(process.env.OPENAI_API_KEY);
+
+  /**
+   * `AI_PROVIDER` is the explicit statement and wins. Otherwise a vendor key
+   * implies its own vendor: somebody who has put an `ANTHROPIC_API_KEY` or an
+   * `OPENAI_API_KEY` in the environment has already said which provider they
+   * want, and making them say it twice only creates a way to get it wrong.
+   * With both vendor keys present and no `AI_PROVIDER`, Anthropic wins and
+   * /admin names the key actually in use.
+   */
+  const provider =
+    optional(process.env.AI_PROVIDER) ?? (anthropic ? "anthropic" : openai ? "openai" : null);
+
+  /**
+   * `AI_API_KEY` stays first: it is the generic OpenAI-compatible name, used
+   * with `AI_BASE_URL` for self-hosted gateways, and it was already documented
+   * as winning over a vendor name.
+   */
+  const candidates: readonly (readonly ["AI_API_KEY" | "ANTHROPIC_API_KEY" | "OPENAI_API_KEY", string | null])[] =
+    provider === "openai"
+      ? ([["AI_API_KEY", generic], ["OPENAI_API_KEY", openai]] as const)
+      : provider === "anthropic"
+        ? ([["AI_API_KEY", generic], ["ANTHROPIC_API_KEY", anthropic]] as const)
+        : ([["AI_API_KEY", generic]] as const);
+
+  const hit = candidates.find(([, value]) => value !== null);
+  return { provider, apiKey: hit?.[1] ?? null, keySource: hit?.[0] ?? null };
+}
+
+const ai = resolveAi();
+
+/**
  * The origin Vercel gave this particular deployment, as an https origin.
  *
  * `VERCEL_URL` is a bare host with no scheme (`studentos-abc123.vercel.app`),
@@ -149,24 +196,19 @@ export const env = {
   },
 
   ai: {
-    /**
-     * Which provider adapter to construct: "anthropic", "openai" or "none".
-     *
-     * Unset with an `ANTHROPIC_API_KEY` present means Anthropic. Somebody who
-     * has put an Anthropic key in the environment has said which provider they
-     * want, and making them say it twice only creates a way to get it wrong.
-     */
-    provider:
-      optional(process.env.AI_PROVIDER) ??
-      (optional(process.env.ANTHROPIC_API_KEY) ? "anthropic" : null),
+    /** "anthropic", "openai" or "none". Resolved by `resolveAi` above. */
+    provider: ai.provider,
 
     /**
-     * `ANTHROPIC_API_KEY` is the name Anthropic's own tooling uses, so it is
-     * the one most likely to already be in a shell or a Vercel project.
-     * `AI_API_KEY` stays for the OpenAI-compatible path and wins if both are
-     * set, because it is the more specific statement.
+     * The vendor variable names are the ones each vendor's own tooling uses,
+     * so they are the ones most likely to already be in a shell or a Vercel
+     * project. `AI_API_KEY` stays for any other OpenAI-compatible endpoint and
+     * wins over both, because it is the more specific statement.
      */
-    apiKey: optional(process.env.AI_API_KEY) ?? optional(process.env.ANTHROPIC_API_KEY),
+    apiKey: ai.apiKey,
+
+    /** Which variable the key was read from, for /admin. Never the value. */
+    keySource: ai.keySource,
 
     /** Pins one model across every tier. Leave unset to use the per-tier defaults. */
     model: optional(process.env.AI_MODEL),

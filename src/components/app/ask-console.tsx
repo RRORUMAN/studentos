@@ -9,6 +9,7 @@ import {
   ExternalLink,
   History,
   Loader2,
+  Languages,
   MapPin,
   MessageSquare,
   Sparkles,
@@ -490,6 +491,7 @@ const CARD_ICON: Record<ToolCard["kind"], typeof MapPin> = {
   mission: Sparkles,
   person: UsersRound,
   figure: Sparkles,
+  phrase: Languages,
 };
 
 const TOOL_HEADING: Record<string, string> = {
@@ -502,6 +504,7 @@ const TOOL_HEADING: Record<string, string> = {
   read_lifeops: "On your timeline",
   read_saved: "You saved these",
   suggest_missions: "Missions that fit",
+  get_useful_phrases: "What to say",
 };
 
 /**

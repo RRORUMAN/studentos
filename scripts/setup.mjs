@@ -132,15 +132,22 @@ console.log("─".repeat(64));
 const env = existsSync(envLocal) ? readFileSync(envLocal, "utf8") : "";
 const has = (key) => new RegExp(`^${key}=.+$`, "m").test(env);
 
+/* Each row lists every variable that would configure the service; one is
+   enough. AI has three names because either vendor key, or the generic
+   OpenAI-compatible one, switches it on. */
 const services = [
-  ["NEXT_PUBLIC_SUPABASE_URL", "Database", "Storage is a JSON file under .data/. Fine locally."],
-  ["RESEND_API_KEY", "Email", "Verification links print to the screen instead of sending."],
-  ["STRIPE_SECRET_KEY", "Payments", "Checkout is unavailable. Paid features stay locked."],
-  ["ANTHROPIC_API_KEY", "AI", "Every surface answers deterministically. Nothing is broken."],
+  [["NEXT_PUBLIC_SUPABASE_URL"], "Database", "Storage is a JSON file under .data/. Fine locally."],
+  [["RESEND_API_KEY"], "Email", "Verification links print to the screen instead of sending."],
+  [["STRIPE_SECRET_KEY"], "Payments", "Checkout is unavailable. Paid features stay locked."],
+  [
+    ["OPENAI_API_KEY", "ANTHROPIC_API_KEY", "AI_API_KEY"],
+    "AI",
+    "Every surface answers deterministically. Nothing is broken.",
+  ],
 ];
 
-for (const [key, label, consequence] of services) {
-  if (has(key)) ok(`${label} configured`);
+for (const [keys, label, consequence] of services) {
+  if (keys.some(has)) ok(`${label} configured`);
   else say("  -- ", `${label} not configured. ${consequence}`);
 }
 

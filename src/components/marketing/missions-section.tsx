@@ -45,7 +45,7 @@ export function MissionsSection() {
       <div className="page">
         <SectionHeader
           eyebrow="Smart Missions"
-          eyebrowIndex="10"
+          eyebrowIndex="11"
           title="Don't just get recommendations. Get a plan."
           lead="Ten missions that turn a vague week into an ordered, priced list of things to actually do — each step built from a real place, event or group in your city."
         />

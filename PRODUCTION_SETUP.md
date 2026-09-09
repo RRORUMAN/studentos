@@ -233,13 +233,17 @@ or a legal requirement whether or not a key is present.
 
 **REQUIRED ENV VARIABLES**
 ```
+OPENAI_API_KEY               implies AI_PROVIDER=openai
 ANTHROPIC_API_KEY            implies AI_PROVIDER=anthropic
 ```
-Optional overrides:
+One of the two. Set both only alongside `AI_PROVIDER`, which then decides.
+
+Optional overrides (OpenAI defaults shown; the Anthropic ladder is
+claude-haiku-4-5-20251001 / claude-sonnet-5 / claude-opus-5):
 ```
-AI_SMALL_MODEL=claude-haiku-4-5-20251001     tier 1: classify, tag, summarise
-AI_DEFAULT_MODEL=claude-sonnet-5             tier 2: plans, budget coaching
-AI_PLANNING_MODEL=claude-opus-5              tier 3: rare, Max only
+AI_SMALL_MODEL=gpt-5.4-mini                  tier 1: classify, tag, summarise
+AI_DEFAULT_MODEL=gpt-5.4                     tier 2: plans, budget coaching
+AI_PLANNING_MODEL=gpt-5.5                    tier 3: rare, Max only
 AI_MAX_TOKENS                                caps every tier
 AI_DAILY_LIMIT_FREE / _PLUS / _PRO / _MAX    per-student daily calls
 ```

@@ -181,8 +181,10 @@ export function AiControls({
       </ul>
 
       <p className="border-t border-ink-100 px-4 py-3 text-[0.75rem] leading-relaxed text-ink-500">
-        The API key is read from <span className="font-mono">AI_API_KEY</span> only. There is no field for it here on
-        purpose. Blank restores the code or environment default. Cost caps are micro-euros: 12000000 is €12.
+        The API key is read from the environment only — <span className="font-mono">OPENAI_API_KEY</span>,{" "}
+        <span className="font-mono">ANTHROPIC_API_KEY</span> or <span className="font-mono">AI_API_KEY</span>. There is
+        no field for it here on purpose. Blank restores the code or environment default. Cost caps are micro-euros:
+        12000000 is €12.
       </p>
     </div>
   );

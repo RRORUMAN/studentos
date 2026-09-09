@@ -5,6 +5,7 @@ import Link from "next/link";
 import { TaskList, type TaskView } from "@/components/app/task-list";
 import { Upsell } from "@/components/app/upsell";
 import { MascotArt } from "@/components/mascot/mascot-art";
+import { PhraseHint } from "@/components/app/phrase-hint";
 import { arrivalTasks, orderByBlocking, phaseMeta, phasesForStage, type ArrivalPhase } from "@/config/arrival-plan";
 import { factFreshness } from "@/domain/knowledge";
 import type { LifeStage } from "@/domain/lifecycle";
@@ -109,6 +110,9 @@ export default async function ArrivalPage() {
 
   const allTasks = TIMELINE.flatMap((entry) => (entry.phase ? buildPhase(entry.phase) : []));
   const completed = allTasks.filter((task) => task.done).length;
+  /* One phrase hint, for the next open task only. A hint under every row would
+     be a second feature competing with the checklist on its own screen. */
+  const nextOpen = allTasks.find((task) => !task.done) ?? null;
 
   return (
     <div className="page max-w-2xl py-6 sm:py-8">
@@ -157,6 +161,8 @@ export default async function ArrivalPage() {
       </p>
 
       {/* ---- phases: current open, others folded ---------------------------- */}
+      {nextOpen ? <PhraseHint viewer={viewer} context={{ kind: "arrival", taskKey: nextOpen.id }} /> : null}
+
       <div className="mt-6 space-y-4">
         {TIMELINE.filter((entry) => entry.phase).map((entry) => {
           const phase = entry.phase!;

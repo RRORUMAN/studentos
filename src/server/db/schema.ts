@@ -20,6 +20,8 @@ import type { LifeOpsTask } from "@/domain/lifeops";
 import type { Mission, MissionStep } from "@/domain/missions";
 import type { DealReport, Guide, OfficialFact, PriceObservation } from "@/domain/knowledge";
 import type { Claim, Verification } from "@/domain/truth";
+import type { InstitutionSubmission } from "@/domain/institutions";
+import type { LanguageProfile, PhraseProgress } from "@/domain/language";
 import type { Answer, Question } from "@/domain/questions";
 import type {
   Application,
@@ -194,6 +196,19 @@ export type Database = {
   chatPolls: ChatPoll[];
   chatPollVotes: ChatPollVote[];
 
+  /* --- speak local ---------------------------------------------------------
+     One profile per student saying which language they are learning, and one
+     row per phrase they have done something with. Nothing is written just for
+     having seen a phrase on Home -- see `src/server/actions/language.ts`. */
+  languageProfiles: LanguageProfile[];
+  phraseProgress: PhraseProgress[];
+
+  /* --- institutions -------------------------------------------------------
+     Only the SUBMISSIONS live in the store. The registry itself is a data file
+     built by `scripts/import-institutions.mjs`: a few hundred rows that change
+     when somebody re-runs an import, not when a student does something. */
+  institutionSubmissions: InstitutionSubmission[];
+
   /* --- waitlist ----------------------------------------------------------- */
   waitlist: WaitlistEntry[];
 };
@@ -275,6 +290,9 @@ export function emptyDatabase(): Database {
     pollVotes: [],
     chatPolls: [],
     chatPollVotes: [],
+    languageProfiles: [],
+    phraseProgress: [],
+    institutionSubmissions: [],
     waitlist: [],
   };
 }

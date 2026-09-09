@@ -10,6 +10,7 @@ import { valueWord } from "@/components/app/place-card";
 import { SaveButton } from "@/components/app/save-button";
 import { ShareButton } from "@/components/app/share-button";
 import { MascotArt } from "@/components/mascot/mascot-art";
+import { PhraseHint } from "@/components/app/phrase-hint";
 import { Badge } from "@/components/ui/primitives";
 import { placesForCity, sourceLabel } from "@/data/places";
 import { describe as describeRelation, relate } from "@/domain/graph";
@@ -176,6 +177,11 @@ export default async function PlacePage(props: PageProps<"/discover/[id]">) {
           </ul>
         </section>
       ) : null}
+
+      {/* ---- what to say there ---------------------------------------------
+           Rendered only when the category has an obvious sentence attached; a
+           gym gets nothing rather than something generic. */}
+      <PhraseHint viewer={viewer} context={{ kind: "place", category: place.category }} />
 
       {/* ---- better option -------------------------------------------------- */}
       {better ? (

@@ -1,3 +1,4 @@
+import type { SituationKey } from "@/domain/language";
 import type { Place } from "@/data/types";
 import type { Cents, CityEvent } from "@/domain/types";
 import type { Scored } from "@/server/engines/recommend";
@@ -53,7 +54,8 @@ export type AskIntent =
   | "lifeops-question"
   | "pulse-question"
   | "mission-question"
-  | "arrival-question";
+  | "arrival-question"
+  | "language-question";
 
 export const intentMeta: Record<AskIntent, { label: string; detail: string }> = {
   "plan-night": { label: "Plan tonight", detail: "An evening assembled inside your number." },
@@ -73,6 +75,7 @@ export const intentMeta: Record<AskIntent, { label: string; detail: string }> = 
   "pulse-question": { label: "What students say", detail: "Posts and the top answer on each." },
   "mission-question": { label: "Missions", detail: "A short plan with steps and a budget." },
   "arrival-question": { label: "Official information", detail: "From verified sources, never generated." },
+  "language-question": { label: "What to say", detail: "Phrases from the local pack. Never translated on the fly." },
 };
 
 export type ParsedAsk = {
@@ -90,7 +93,35 @@ export type ParsedAsk = {
   nearby: boolean;
   /** Words left after the structured bits. Used for ranking, never filtering. */
   keywords: string[];
+  /**
+   * Which phrase situation the question is about. Only set for
+   * `language-question`, and it falls back to the first words rather than to
+   * nothing: somebody who asks how to say something and gives no context is
+   * usually at the start.
+   */
+  situation: SituationKey | null;
 };
+
+/**
+ * The moment a "how do I say" question is about.
+ *
+ * Keyword matching, in the order that resolves the overlaps: "the bill" is
+ * eating out even though it is also money, and "chemist" is an emergency even
+ * though it is also a shop. Anything unmatched is `first-words`, which is the
+ * right answer for "teach me some Spanish".
+ */
+function situationFrom(text: string): SituationKey {
+  if (/\bpharmac|\bchemist\b|\bdoctor\b|\bhospital\b|\bill\b|\bsick\b|\bhurt|\bemergenc|\bpain\b/.test(text)) return "emergency";
+  if (/\border|\brestaurant\b|\bmenu\b|\bbill\b|\bwaiter\b|\btable\b|\bcafe\b|\bbar\b|\bcoffee\b|\bbeer\b|\ballerg/.test(text)) return "eating-out";
+  if (/\bsupermarket|\bgrocer|\bshop\b|\bshopping\b|\bmarket\b|\btill\b|\bcheckout\b/.test(text)) return "groceries";
+  if (/\brent\b|\blandlord\b|\bdeposit\b|\bflat\b|\bapartment\b|\bcontract\b|\bbills\b|\bboiler\b|\bheating\b/.test(text)) return "housing";
+  if (/\bjob\b|\bwork\b|\bhiring\b|\bshift\b|\bwage\b|\binterview\b|\bcv\b/.test(text)) return "work";
+  if (/\bticket\b|\btrain\b|\bbus\b|\bmetro\b|\bplatform\b|\bstation\b|\btram\b|\btravel card\b/.test(text)) return "getting-around";
+  if (/\buniversit|\bclass\b|\blecture\b|\bexam\b|\benrol|\blibrary\b|\bdeadline\b/.test(text)) return "university";
+  if (/\bmeet\b|\bintroduc|\bname\b|\bfriend|\bparty\b|\binvite\b/.test(text)) return "meeting-people";
+  if (/\bpay\b|\bcard\b|\bcash\b|\bdiscount\b|\bprice\b|\bcost\b|\bhow much\b|\breceipt\b/.test(text)) return "money";
+  return "first-words";
+}
 
 /**
  * Money out of a sentence.
@@ -171,6 +202,17 @@ export function parseAsk(query: string): ParsedAsk {
     ) {
       return "arrival-question";
     }
+    /* Language next, before food and money. "How do I say the bill please"
+       contains "bill" and would otherwise be read as a money question; "what
+       do I say when ordering" contains "ordering" and would be read as food.
+       The phrasing is distinctive enough to test for ahead of both. */
+    if (
+      /\bhow do (?:i|you) say\b|\bhow to say\b|\bwhat do i say\b|\bwhat should i say\b|\bword for\b|\bphrase|\bteach me\b|\bpronounc|\bin (?:spanish|french|german|italian|portuguese|dutch|polish|czech|hungarian|finnish|swedish|estonian)\b/.test(
+        text,
+      )
+    ) {
+      return "language-question";
+    }
     if (/\bafford\b|\bcan i spend\b|\bis it ok to spend\b/.test(text)) return "afford-question";
     if (/\bforget|\bforgot|\bdue\b|\bdeadline\b|\bmy week\b|\bmy day\b|\bwhat.s on my\b|\bschedule\b|\btimeline\b|\bremind/.test(text)) {
       return "lifeops-question";
@@ -210,7 +252,17 @@ export function parseAsk(query: string): ParsedAsk {
     .split(/\s+/)
     .filter((word) => word.length > 2 && !STOP_WORDS.has(word));
 
-  return { intent, budgetCents, when, freeOnly, cheaper, social, nearby, keywords };
+  return {
+    intent,
+    budgetCents,
+    when,
+    freeOnly,
+    cheaper,
+    social,
+    nearby,
+    keywords,
+    situation: intent === "language-question" ? situationFrom(text) : null,
+  };
 }
 
 /** A one-line, human restatement of what was understood, so it can be corrected. */

@@ -3,6 +3,7 @@
 import {
   Compass,
   House,
+  Languages,
   ListChecks,
   MessagesSquare,
   Sparkles,
@@ -58,6 +59,7 @@ const DESKTOP: readonly Item[] = [
   { href: "/discover", label: "Discover", icon: Compass },
   { href: "/pulse", label: "Pulse", icon: MessagesSquare },
   { href: "/budget", label: "Budget", icon: Wallet },
+  { href: "/speak", label: "Speak", icon: Languages },
   { href: "/missions", label: "Missions", icon: Target },
 ];
 

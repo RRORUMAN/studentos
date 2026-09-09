@@ -18,6 +18,7 @@ import { aiConfig, callsToday } from "@/server/ai/config";
 import { insert, newId, nowIso } from "@/server/db";
 import { assertQuota, planFor } from "@/server/entitlements";
 import { env } from "@/services/env";
+import { captureError } from "@/services/monitoring";
 
 /**
  * ============================================================================
@@ -193,6 +194,20 @@ class DeterministicProvider implements AiProvider {
  * nothing. It also keeps the abstraction honest about being swappable: a
  * second provider is thirty lines in this shape, not a second SDK.
  */
+/**
+ * A refused request, described well enough to fix.
+ *
+ * `provider-401` is indistinguishable from `provider-500` once it has been
+ * swallowed by the fallback, and the difference is the whole diagnosis: one is
+ * a key that is wrong or revoked, the other is somebody else's outage. Both
+ * vendors put a usable sentence in the body, so it is carried through — capped,
+ * because an error message is not a place to paste a page of HTML.
+ */
+async function describeFailure(response: Response): Promise<string> {
+  const detail = await response.text().catch(() => "");
+  return `provider-${response.status}${detail ? `: ${detail.slice(0, 300)}` : ""}`;
+}
+
 class AnthropicProvider implements AiProvider {
   readonly id = "anthropic" as const;
 
@@ -221,7 +236,7 @@ class AnthropicProvider implements AiProvider {
         }),
       });
 
-      if (!response.ok) throw new AiRefusedError(`provider-${response.status}`);
+      if (!response.ok) throw new AiRefusedError(await describeFailure(response));
 
       const body = (await response.json()) as {
         content: { type: string; text?: string }[];
@@ -266,7 +281,7 @@ class OpenAiProvider implements AiProvider {
         }),
       });
 
-      if (!response.ok) throw new AiRefusedError(`provider-${response.status}`);
+      if (!response.ok) throw new AiRefusedError(await describeFailure(response));
 
       const body = (await response.json()) as {
         choices: { message: { content: string | null } }[];
@@ -451,7 +466,12 @@ export async function runAi<T>(call: GatewayCall<T>): Promise<GatewayResult<T>> 
     inputTokens = response.inputTokens;
     outputTokens = response.outputTokens;
     value = call.parse(response.text);
-  } catch {
+  } catch (error) {
+    /* The student still gets the Tier 0 answer, which is correct — but a
+       provider that is failing every call must not be invisible. Without this,
+       a revoked key and a healthy deployment look identical from the outside:
+       every surface simply reads a little plainer, forever. */
+    captureError(error, { area: "ai", operation: call.operation, provider: provider.id, model });
     value = call.fallback();
     degraded = true;
   }

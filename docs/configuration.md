@@ -117,14 +117,22 @@ request is built.
 **Environment**
 
 ```
-AI_PROVIDER=anthropic          # or "openai" for any OpenAI-compatible endpoint
-AI_API_KEY=<key>
+OPENAI_API_KEY=<key>           # implies AI_PROVIDER=openai
+ANTHROPIC_API_KEY=<key>        # implies AI_PROVIDER=anthropic
+AI_PROVIDER=openai             # only needed when both keys are present
+AI_API_KEY=<key>               # any other OpenAI-compatible endpoint; wins over both
 AI_MODEL=                      # optional: pins one model across every tier
 AI_BASE_URL=                   # optional: self-hosted OpenAI-compatible gateway
 ```
 
-**Where to get it.** Anthropic: console.anthropic.com → API keys. OpenAI:
-platform.openai.com → API keys.
+A vendor key implies its own provider, and the key handed to the request is
+always the one belonging to the resolved provider — a mismatch degrades to
+deterministic answers rather than sending one vendor's key to the other's
+endpoint. `/admin` → Services names both the provider and the variable the key
+came from.
+
+**Where to get it.** OpenAI: platform.openai.com → API keys. Anthropic:
+console.anthropic.com → API keys.
 
 **Set from /admin, not the environment.** Provider, the model for each tier,
 temperature, per-tier output ceilings, a daily and monthly euro spend cap, and a

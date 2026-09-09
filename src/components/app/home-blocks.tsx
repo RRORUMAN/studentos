@@ -6,6 +6,7 @@ import {
   Compass,
   CreditCard,
   Gift,
+  Languages,
   LifeBuoy,
   ListChecks,
   MapPin,
@@ -115,6 +116,7 @@ const PICK_ICON: Record<TodayPick["kind"], typeof Moon> = {
   deal: Gift,
   place: MapPin,
   mission: Target,
+  language: Languages,
 };
 
 const PICK_TINT: Record<TodayPick["kind"], string> = {
@@ -124,6 +126,7 @@ const PICK_TINT: Record<TodayPick["kind"], string> = {
   deal: "bg-amber-soft text-amber-deep",
   place: "bg-mint-soft text-mint-deep",
   mission: "bg-mint-soft text-mint-deep",
+  language: "bg-flow-soft text-flow-deep",
 };
 
 export function TodayForYou({ picks, where }: { picks: readonly TodayPick[]; where: { currency: string; locale: string } }) {
@@ -233,6 +236,7 @@ const BRIEF_ICON: Record<BriefLine["kind"], typeof Moon> = {
   pulse: Sparkles,
   payment: CreditCard,
   mission: Target,
+  language: Languages,
   exchange: Package,
 };
 

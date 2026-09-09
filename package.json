@@ -14,6 +14,7 @@
     "typecheck": "next typegen && tsc --noEmit",
     "check": "pnpm typecheck && pnpm lint && pnpm test && pnpm build",
     "db:verify": "node scripts/db-verify.mjs",
+    "ai:verify": "node --experimental-strip-types --import ./scripts/test-register.mjs scripts/ai-verify.mjs",
     "test": "node --test --experimental-strip-types --import ./scripts/test-register.mjs \"tests/unit/*.test.ts\"",
     "test:e2e": "playwright test",
     "mascot:manifest": "node scripts/mascot-manifest.mjs"

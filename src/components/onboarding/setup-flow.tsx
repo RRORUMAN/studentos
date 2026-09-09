@@ -23,7 +23,7 @@ import {
   transportModes,
   travelLimits,
 } from "@/config/onboarding";
-import { campusesForCity, cityDirectory, cityStatusLabel, resolveCity } from "@/data/cities";
+import { cityDirectory, cityStatusLabel, resolveCity } from "@/data/cities";
 import { UniversityPicker } from "@/components/onboarding/university-picker";
 import { interfaceLanguages } from "@/config/regions";
 import { completeOnboarding, type OnboardingInput } from "@/server/actions/onboarding";
@@ -56,6 +56,7 @@ type Answers = {
   leavingOn: string;
   housing: OnboardingInput["housing"];
   stayMonths: string;
+  institutionId: string | null;
   campusSlug: string | null;
   universityName: string;
   homeArea: string;
@@ -82,6 +83,7 @@ const INITIAL: Answers = {
   leavingOn: "",
   housing: "unknown",
   stayMonths: "",
+  institutionId: null,
   campusSlug: null,
   universityName: "",
   homeArea: "",
@@ -175,6 +177,7 @@ export function SetupFlow() {
         leavingOn: answers.leavingOn ? new Date(answers.leavingOn).toISOString() : null,
         housing: answers.housing,
         stayMonths: answers.stayMonths ? Number(answers.stayMonths) : null,
+        institutionId: answers.institutionId,
         campusSlug: answers.campusSlug,
         universityName: answers.universityName || null,
         homeArea: answers.homeArea || null,
@@ -424,7 +427,7 @@ function CityStep({ answers, update }: StepProps) {
           label={city.name}
           detail={`${city.country} · ${cityStatusLabel[city.status]}`}
           selected={answers.citySlug === city.slug}
-          onSelect={() => update({ citySlug: city.slug, campusSlug: null })}
+          onSelect={() => update({ citySlug: city.slug, institutionId: null, campusSlug: null, universityName: "" })}
         />
       ))}
 
@@ -451,7 +454,7 @@ function CityStep({ answers, update }: StepProps) {
                 <button
                   type="button"
                   onClick={() => {
-                    update({ citySlug: city.slug, campusSlug: null });
+                    update({ citySlug: city.slug, institutionId: null, campusSlug: null, universityName: "" });
                     setQuery("");
                   }}
                   className={cn(
@@ -556,18 +559,30 @@ function CityStep({ answers, update }: StepProps) {
 }
 
 function UniversityStep({ answers, update }: StepProps) {
-  const options = answers.citySlug ? campusesForCity(answers.citySlug) : [];
-  const cityName = answers.citySlug ? (resolveCity(answers.citySlug)?.name ?? "your city") : "your city";
+  const city = answers.citySlug ? resolveCity(answers.citySlug) : null;
 
   return (
     <UniversityPicker
-      cityName={cityName}
-      campuses={options}
-      campusSlug={answers.campusSlug}
-      universityName={answers.universityName}
-      onPickCampus={(slug) => update({ campusSlug: slug, universityName: "" })}
-      onPickTyped={(name) => update({ universityName: name, campusSlug: null })}
-      onClear={() => update({ campusSlug: null, universityName: "" })}
+      cityName={city?.name ?? "your city"}
+      citySlug={answers.citySlug}
+      countryCode={city?.countryCode ?? null}
+      choice={
+        answers.universityName
+          ? {
+              institutionId: answers.institutionId,
+              campusSlug: answers.campusSlug,
+              name: answers.universityName,
+            }
+          : null
+      }
+      onPick={(choice) =>
+        update({
+          institutionId: choice.institutionId,
+          campusSlug: choice.campusSlug,
+          universityName: choice.name,
+        })
+      }
+      onClear={() => update({ institutionId: null, campusSlug: null, universityName: "" })}
     />
   );
 }

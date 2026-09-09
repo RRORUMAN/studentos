@@ -6,6 +6,7 @@ import { z } from "zod";
 import { type AiSettingKey, aiSettingMeta } from "@/config/ai";
 import { tierOrder } from "@/config/entitlements";
 import { cityDirectory } from "@/data/cities";
+import { institutionById } from "@/data/institutions";
 import { nowIso, remove, transaction } from "@/server/db";
 import { flagMeta } from "@/server/queries/settings";
 import { requireAdmin } from "@/server/viewer";
@@ -129,6 +130,73 @@ export async function setAiSetting(formData: FormData): Promise<void> {
   }
 
   await put(key, raw);
+  await note(null);
+  revalidatePath("/admin");
+}
+
+/* -------------------------------------------------------------------------- */
+/* Institutions                                                                */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Review a university a student typed because the register did not have it.
+ *
+ * Three outcomes, and the middle one is the one that actually improves the
+ * product. `merged` says the place was already in the register under a name the
+ * search did not know; recording which row it was is what turns one student's
+ * typing into an alias, so the next student who types it is found. `verified`
+ * says it is a real institution the register is missing, which is a prompt to
+ * add it to `src/data/institutions/curated.ts` or to re-run the import.
+ *
+ * Neither status edits the registry from here. The registry is a data file
+ * under version control, reviewed in a diff, and a production surface that
+ * could quietly rewrite it would be a way to put an unreviewed name in front
+ * of every student in a city.
+ */
+export async function reviewInstitution(formData: FormData): Promise<void> {
+  const admin = await requireAdmin();
+  const parsed = z
+    .object({
+      id: z.string().min(1),
+      status: z.enum(["verified", "merged", "rejected", "pending"]),
+      mergedIntoId: z.string().max(80).optional(),
+    })
+    .safeParse({
+      id: formData.get("id"),
+      status: formData.get("status"),
+      mergedIntoId: formData.get("mergedIntoId") || undefined,
+    });
+
+  if (!parsed.success) {
+    await note("That institution review did not validate.");
+    revalidatePath("/admin");
+    return;
+  }
+
+  const { id, status, mergedIntoId } = parsed.data;
+
+  /* A merge has to name what it merged into, or the record says a decision was
+     made and not which one. */
+  if (status === "merged" && !mergedIntoId) {
+    await note("A merge needs the institution it was merged into.");
+    revalidatePath("/admin");
+    return;
+  }
+  if (mergedIntoId && !institutionById(mergedIntoId)) {
+    await note(`No institution with id ${mergedIntoId}.`);
+    revalidatePath("/admin");
+    return;
+  }
+
+  await transaction((db) => {
+    const row = db.institutionSubmissions.find((entry) => entry.id === id);
+    if (!row) return;
+    row.status = status;
+    row.mergedIntoId = status === "merged" ? (mergedIntoId ?? null) : null;
+    row.reviewedBy = status === "pending" ? null : admin.user.id;
+    row.reviewedAt = status === "pending" ? null : nowIso();
+  });
+
   await note(null);
   revalidatePath("/admin");
 }

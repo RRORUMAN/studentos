@@ -77,10 +77,10 @@ the shape and where it stops.
 
 - [ ] Decide whether to launch with a model at all. The product is complete
       without one; a key only makes explanations more fluent.
-- [ ] If yes: `ANTHROPIC_API_KEY` set. That alone implies
-      `AI_PROVIDER=anthropic`; the per-tier model names in `.env.example` are
-      already the code defaults and only need setting to override them.
-- [ ] A spend limit set on the Anthropic side too, not only in `/admin`. One
+- [ ] If yes: `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` set. Either alone implies
+      its provider; the per-tier model names in `.env.example` are already the
+      code defaults and only need setting to override them.
+- [ ] A spend limit set on the vendor's side too, not only in `/admin`. One
       protects the product, the other protects the card.
 - [ ] Daily and monthly euro spend caps set in `/admin` (defaults: €12/day,
       €200/month across all users)
