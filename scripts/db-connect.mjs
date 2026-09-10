@@ -364,32 +364,48 @@ if (project.status !== "ACTIVE_HEALTHY") {
 
 /* ---- 1. schema ----------------------------------------------------------- */
 
-step("Applying the schema (0005, 0006 — not the four that must not be applied)");
+step("Applying the schema (0005, 0006, 0007 — not the four that must not be applied)");
 
-const sql = [
-  await readFile(join(ROOT, "supabase", "migrations", "0005_row_store.sql"), "utf8"),
-  await readFile(join(ROOT, "supabase", "migrations", "0006_scheduled_cleanup.sql"), "utf8"),
+/**
+ * `required` is what the product cannot run correctly without. The other two
+ * need `pg_cron`, which some plans do not offer, and each degrades to something
+ * the product survives — so they warn rather than stop, and say what the
+ * deployment is left doing instead.
+ */
+const files = [
+  {
+    name: "0005_row_store",
+    file: "0005_row_store.sql",
+    required: true,
+    without: null,
+  },
+  {
+    name: "0006_scheduled_cleanup",
+    file: "0006_scheduled_cleanup.sql",
+    required: false,
+    without: "Expired sessions and spent password tokens will accumulate until something prunes them.",
+  },
+  {
+    name: "0007_shared_rate_limit",
+    file: "0007_shared_rate_limit.sql",
+    required: false,
+    without:
+      "Rate limits stay per serverless isolate, so the sign-in and sign-up ceilings multiply by however many isolates are running. /admin says so.",
+  },
 ];
 
-const names = ["0005_row_store", "0006_scheduled_cleanup"];
-
-for (const [index, query] of sql.entries()) {
+for (const migration of files) {
+  const query = await readFile(join(ROOT, "supabase", "migrations", migration.file), "utf8");
   try {
     await api(token, `/v1/projects/${projectRef}/database/query`, {
       method: "POST",
       body: JSON.stringify({ query }),
     });
-    ok(`${names[index]} applied`);
+    ok(`${migration.name} applied`);
   } catch (error) {
-    /* 0006 needs pg_cron, which some plans do not offer. That is survivable:
-       the product runs correctly, those four kinds of row simply accumulate. */
-    if (index === 1) {
-      info(`${names[index]} did not apply — ${error.message.slice(0, 160)}`);
-      info("This is the pg_cron cleanup. The product runs without it; expired");
-      info("sessions and spent tokens will accumulate until something prunes them.");
-    } else {
-      die(`${names[index]} failed to apply`, error.message);
-    }
+    if (migration.required) die(`${migration.name} failed to apply`, error.message);
+    info(`${migration.name} did not apply — ${error.message.slice(0, 160)}`);
+    info(migration.without);
   }
 }
 

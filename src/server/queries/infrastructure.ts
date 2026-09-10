@@ -2,8 +2,9 @@ import "server-only";
 
 import { missingPriceIds } from "@/server/billing/stripe";
 import { activeStore, storePersistence } from "@/server/db";
+import { sharedLimiterState } from "@/server/rate-limit-shared";
 import { monitoringConfigured, monitoringMisconfigured } from "@/services/monitoring";
-import { env, isAiConfigured, isSampleContent } from "@/services/env";
+import { env, isAiConfigured, isHostedDeployment, isSampleContent } from "@/services/env";
 
 /**
  * ============================================================================
@@ -105,8 +106,38 @@ export async function loadInfrastructure(): Promise<InfrastructureReport> {
         : "No API key.",
     consequence: emailReady
       ? null
-      : "Verification links are printed on screen instead of emailed, so anyone can verify any address.",
+      : isHostedDeployment
+        ? "Nobody can reset a forgotten password and no address can be confirmed. Signing up and using the product still work."
+        : "Verification and reset links are handed back on screen instead of emailed. Correct here; refused on any deployment.",
     blocksLaunch: !emailReady,
+  });
+
+  /* ---- rate limiting ----------------------------------------------------- */
+
+  /**
+   * Reported from what the limiter has actually observed, not from whether
+   * Supabase is configured — the two came apart the moment migration 0007
+   * existed, because a configured database without that function is exactly the
+   * state where the app quietly falls back to counting per isolate.
+   */
+  const limiter = sharedLimiterState();
+  services.push({
+    key: "rate-limit",
+    label: "Rate limiting",
+    level: limiter === "ready" ? "ready" : limiter === "unavailable" ? "degraded" : isHostedDeployment ? "degraded" : "ready",
+    state:
+      limiter === "ready"
+        ? "Shared counter in Postgres. Every instance sees one window."
+        : limiter === "unavailable"
+          ? "studentos_rate_hit did not answer. In-process counter only."
+          : "In-process counter only. No shared store configured.",
+    consequence:
+      limiter === "ready"
+        ? null
+        : isHostedDeployment
+          ? "Each serverless isolate gets its own window, so the sign-in and sign-up ceilings multiply by however many isolates the traffic starts. Apply supabase/migrations/0007_shared_rate_limit.sql."
+          : "One process is the whole deployment here, so the in-process counter is the complete picture.",
+    blocksLaunch: false,
   });
 
   /* ---- billing ---------------------------------------------------------- */

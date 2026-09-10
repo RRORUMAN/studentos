@@ -243,6 +243,56 @@ async function main() {
     );
   }
 
+  /* ---- 6. is the shared rate limiter really counting? --------------------- */
+
+  /**
+   * The one check here that is about a defence rather than about data.
+   *
+   * The application falls back to the in-process limiter whenever
+   * `studentos_rate_hit` is absent or unreachable, which is the right thing to
+   * do at 3am and the wrong thing to discover on the day somebody starts
+   * guessing passwords. So this asks the database to prove it: three hits
+   * against a limit of two, and the third must come back refused. A limiter
+   * that answers `ok` three times is not counting, and the whole point of it is
+   * that nothing else in the product would notice.
+   *
+   * Not a failure when the function is absent — 0007 needs pg_cron and some
+   * plans do not have it — but it says plainly what the deployment is left
+   * doing, because "no shared limiter" and "a shared limiter that does not
+   * count" must never render as the same silence.
+   */
+  const rateKey = `__verify:${randomUUID()}`;
+  try {
+    const verdicts = [];
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      verdicts.push(await call("studentos_rate_hit", { p_key: rateKey, p_limit: 2, p_window_seconds: 60 }));
+    }
+
+    const allowed = verdicts.filter((verdict) => verdict?.ok).length;
+    if (allowed !== 2) {
+      fail(
+        "the shared rate limiter is not counting",
+        `Three hits against a limit of two allowed ${allowed} of them.\n` +
+          "Every instance shares this counter, so a limiter that does not count\n" +
+          "is a sign-in endpoint with no ceiling.",
+      );
+    } else if (typeof verdicts[2]?.retryAfterSeconds !== "number" || verdicts[2].retryAfterSeconds < 1) {
+      fail("the shared rate limiter refuses without saying when to come back", JSON.stringify(verdicts[2]));
+    } else {
+      pass("the shared rate limiter counts, and refuses the attempt past the limit");
+    }
+
+    await call("studentos_rate_reset", { p_key: rateKey });
+  } catch (error) {
+    if (/does not exist|schema cache|not find the function/i.test(error.message)) {
+      info("migration 0007 is not applied — rate limits are per serverless isolate");
+      info("Apply it with `pnpm db:sql`, or accept that the sign-in ceiling");
+      info("multiplies by however many isolates the traffic starts. /admin says which.");
+    } else {
+      fail("could not test the shared rate limiter", error.message);
+    }
+  }
+
   return finish();
 }
 

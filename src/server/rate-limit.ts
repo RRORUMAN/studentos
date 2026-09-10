@@ -1,20 +1,36 @@
 import "server-only";
 
+import { sharedRateLimit, sharedRateReset } from "@/server/rate-limit-shared";
+
 /**
  * ============================================================================
  * RATE LIMITING
  * ----------------------------------------------------------------------------
- * A fixed-window counter, in process memory.
+ * Two counters. `rateLimit` is a fixed window in process memory, synchronous
+ * and always present. `rateLimitShared` is the same window counted in Postgres,
+ * so every instance sees one number, and it is what the auth and spend paths
+ * use.
  *
- * Scope, stated honestly: this stops credential stuffing and accidental
- * hammering from one Node process. It is not a distributed limiter — behind
- * two instances a caller gets two windows. The production deployment puts a
- * Redis or edge limiter in front for that, and this stays as the last line
- * that is always present regardless of infrastructure.
+ * WHY BOTH. This module used to say: "behind two instances a caller gets two
+ * windows. The production deployment puts a Redis or edge limiter in front for
+ * that." No such front was ever put there, and the deployment is serverless, so
+ * there is no fixed number of instances to reason about — Vercel starts an
+ * isolate whenever it wants one, each beginning with an empty Map. `authAttempt:
+ * 8 per 15 minutes` was eight attempts per isolate, with the isolate count
+ * driven by the attacker's own traffic. In production that is not a limit.
  *
- * It is deliberately *not* backed by the JSON store: a limiter that writes to
- * disk on every attempt turns a login flood into an I/O flood, which is the
- * denial of service it was supposed to prevent.
+ * The old objection to a stored counter still stands where it was written: "a
+ * limiter that writes to disk on every attempt turns a login flood into an I/O
+ * flood." That is an argument about the JSON file store, and it is why the
+ * shared counter is skipped entirely when the file store is live — which is
+ * also the only case where one process really is the whole deployment, so the
+ * Map is already the complete truth.
+ *
+ * WHICH CALLS USE WHICH. Shared costs a round trip, so it is spent where an
+ * attacker or a bill is on the other side: sign-in, sign-up, password reset,
+ * verification resend, the AI ask, and the two unauthenticated institution
+ * endpoints. Everything else is keyed by a user id and already requires an
+ * account, and its ceiling is a courtesy rather than a defence.
  * ============================================================================
  */
 
@@ -70,9 +86,56 @@ export function rateLimit(key: string, limit: number, windowSeconds: number): Ra
   };
 }
 
+/**
+ * The same window, counted once for the whole deployment.
+ *
+ * The local check runs first and short-circuits: a caller already blocked on
+ * this instance is blocked, and asking Postgres to confirm it would spend a
+ * round trip per request during exactly the flood the limiter exists for.
+ *
+ * The two counters are independent, and that is correct rather than a
+ * double-charge. Each enforces the same ceiling over a different population —
+ * one isolate, and everyone — so a caller is allowed only while both agree.
+ * The strict one wins, which is the one that noticed.
+ *
+ * A null from the shared counter means it has no opinion: not configured, not
+ * migrated, or not answering. Then this is the in-process limiter and nothing
+ * has regressed — but `/admin` → Services says so rather than showing a
+ * protection that is not running.
+ */
+export async function rateLimitShared(
+  key: string,
+  limit: number,
+  windowSeconds: number,
+): Promise<RateLimitResult> {
+  const local = rateLimit(key, limit, windowSeconds);
+  if (!local.ok) return local;
+
+  const shared = await sharedRateLimit(key, limit, windowSeconds);
+  if (!shared) return local;
+
+  return {
+    ok: shared.ok,
+    remaining: Math.min(local.remaining, shared.remaining),
+    retryAfterSeconds: shared.retryAfterSeconds,
+  };
+}
+
 /** Clear a key early — called after a successful sign-in. */
 export function resetLimit(key: string): void {
   windows.delete(key);
+}
+
+/**
+ * Clear a key on every instance.
+ *
+ * The local half is synchronous and happens first, so the instance handling the
+ * request that just succeeded is correct immediately whatever the round trip
+ * does.
+ */
+export async function resetLimitShared(key: string): Promise<void> {
+  windows.delete(key);
+  await sharedRateReset(key);
 }
 
 /**

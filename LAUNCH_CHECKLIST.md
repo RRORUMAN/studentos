@@ -187,8 +187,18 @@ it says. What remains here is everything a provider cannot supply.
 - [ ] Cookie handling reviewed for the jurisdictions you launch in. The product
       sets exactly one cookie, `studentos_session`, which is strictly necessary,
       so a banner is likely not required — confirm rather than assume.
-- [ ] Rate limits reviewed in `src/server/rate-limit.ts`. They are per-process;
-      behind more than one instance, put a shared limiter in front.
+- [x] Rate limits reviewed in `src/server/rate-limit.ts`. **They are no longer
+      per-process for the calls that matter.** `supabase/migrations/0007_shared_
+      rate_limit.sql` is applied to production, and sign-in, sign-up, password
+      reset, verification resend, the AI ask and the two unauthenticated
+      institution endpoints count through one Postgres counter that every
+      instance shares. `pnpm db:verify` proves it counts rather than assuming
+      it, and `/admin` → Services says which limiter is live.
+
+      The rest still count per process, deliberately: they are keyed by a user
+      id, already need an account, and their ceiling is a courtesy rather than a
+      defence. If one of those ever guards spend or an anonymous endpoint, move
+      it to `rateLimitShared` at the same time.
 - [ ] Reports (`content_reports`) have somebody who reads them, and a documented
       response time
 - [ ] Exchange safety copy present on every listing (it is not dismissible)

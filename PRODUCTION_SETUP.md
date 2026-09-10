@@ -28,10 +28,13 @@ the next deploy.
 **STATUS:** **Configured and running.** Project `fbyzfhstdraucxmjktzg`
 (StudentOS, eu-west-1, Postgres 17.6).
 
-`0005_row_store.sql` and `0006_scheduled_cleanup.sql` have now been applied to a
-real Postgres — the first time either had been — and both worked. `pnpm
-db:verify` passes every check, including the stale-write rejection that makes
-concurrent instances safe. `studentos-prune` is scheduled and active at 03:11.
+`0005_row_store.sql`, `0006_scheduled_cleanup.sql` and (since 2026-09-10)
+`0007_shared_rate_limit.sql` have been applied to a real Postgres and all three
+worked. `pnpm db:verify` passes every check, including the stale-write rejection
+that makes concurrent instances safe and the three-hits-against-a-limit-of-two
+probe that proves the shared rate limiter is actually counting.
+`studentos-prune` is scheduled and active at 03:11, `studentos-rate-prune`
+hourly at :07.
 
 The test that actually proves it, from the launch checklist: production was
 deployed, the store seeded 318 rows, production was redeployed, and both
@@ -70,8 +73,8 @@ pnpm db:connect --project <ref> --vercel
 vercel --prod                                     # deploy onto it
 ```
 
-It applies **only** `0005` and `0006`, never the four that must not be applied,
-and it never prints a key. Re-running it is safe. If it fails at any step it
+It applies **only** `0005`, `0006` and `0007`, never the four that must not be
+applied, and it never prints a key. Re-running it is safe. If it fails at any step it
 says which, and the manual route below still works.
 
 The long way, step by step:

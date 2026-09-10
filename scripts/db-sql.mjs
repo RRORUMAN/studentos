@@ -10,7 +10,7 @@
  *   pnpm db:sql --core          # 0005 only, if pg_cron is unavailable
  *   pnpm db:sql --out setup.sql # write it to a file instead
  *
- * WHY THIS EXISTS, and it is not convenience. `supabase/migrations/` holds six
+ * WHY THIS EXISTS, and it is not convenience. `supabase/migrations/` holds seven
  * files and **four of them must never be applied**. 0001 to 0004 describe the
  * relational schema the product is heading towards -- a real table per concept,
  * with foreign keys and per-row policies -- and nothing in the application
@@ -37,6 +37,14 @@
  *         extension, which some plans do not offer -- hence `--core`, which
  *         omits it. The product runs correctly without it; those four kinds of
  *         row simply accumulate until something prunes them.
+ *
+ *   0007  The shared rate limit. One counter every instance can see, instead of
+ *         one per serverless isolate. Without it the sign-in and sign-up
+ *         ceilings are per isolate, and the isolate count is chosen by the
+ *         traffic an attacker is generating -- so the ceiling that guards
+ *         password guessing effectively is not one. Also needs `pg_cron`, for
+ *         an hourly prune, so it is outside `--core` for the same reason 0006
+ *         is; the table and both functions still work without the schedule.
  * ============================================================================
  */
 
@@ -50,6 +58,7 @@ const MIGRATIONS = join(ROOT, "supabase", "migrations");
 const FILES = [
   { name: "0005_row_store.sql", label: "the row store", core: true },
   { name: "0006_scheduled_cleanup.sql", label: "scheduled cleanup (needs pg_cron)", core: false },
+  { name: "0007_shared_rate_limit.sql", label: "shared rate limit (needs pg_cron)", core: false },
 ];
 
 /** Migrations that exist and must not be run. Named so the answer is on record. */

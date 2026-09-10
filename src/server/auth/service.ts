@@ -10,7 +10,7 @@ import {
 } from "@/server/auth/crypto";
 import { destroyAllSessions } from "@/server/auth/session";
 import { findOne, insert, newId, nowIso, remove, update } from "@/server/db";
-import { limits, rateLimit, resetLimit } from "@/server/rate-limit";
+import { limits, rateLimitShared, resetLimitShared } from "@/server/rate-limit";
 import { absoluteUrl, sendTemplate } from "@/services/email";
 import { canSendEmail, isHostedDeployment } from "@/services/env";
 import type { AuthToken, User } from "@/domain/types";
@@ -179,7 +179,7 @@ export async function signUp(input: {
     return { ok: false, error: "invalid-email", message: "That email address does not look right." };
   }
 
-  const gate = rateLimit(`signup:${email}`, limits.authSignup.limit, limits.authSignup.windowSeconds);
+  const gate = await rateLimitShared(`signup:${email}`, limits.authSignup.limit, limits.authSignup.windowSeconds);
   if (!gate.ok) {
     return {
       ok: false,
@@ -255,7 +255,7 @@ export async function signUp(input: {
 export async function signIn(input: { email: string; password: string }): Promise<AuthResult> {
   const email = normaliseEmail(input.email);
 
-  const gate = rateLimit(`signin:${email}`, limits.authAttempt.limit, limits.authAttempt.windowSeconds);
+  const gate = await rateLimitShared(`signin:${email}`, limits.authAttempt.limit, limits.authAttempt.windowSeconds);
   if (!gate.ok) {
     return {
       ok: false,
@@ -279,7 +279,7 @@ export async function signIn(input: { email: string; password: string }): Promis
     };
   }
 
-  resetLimit(`signin:${email}`);
+  await resetLimitShared(`signin:${email}`);
   await update("users", (row) => row.id === user.id, { lastSeenAt: nowIso() });
 
   return { ok: true, userId: user.id, needsVerification: !user.emailVerifiedAt };
@@ -327,7 +327,7 @@ export async function resendVerification(
   const user = await findOne("users", (row) => row.id === userId);
   if (!user || user.emailVerifiedAt) return null;
 
-  const gate = rateLimit(`verify:${userId}`, limits.passwordReset.limit, limits.passwordReset.windowSeconds);
+  const gate = await rateLimitShared(`verify:${userId}`, limits.passwordReset.limit, limits.passwordReset.windowSeconds);
   if (!gate.ok) return null;
 
   const token = await issueToken(userId, "verify-email");
@@ -365,7 +365,7 @@ export async function requestPasswordReset(
      the addresses that do not, so the two are the same answer. */
   const wouldBe: LinkDelivery = canSendEmail ? "sent" : isHostedDeployment ? "unavailable" : "shown";
 
-  const gate = rateLimit(`reset:${email}`, limits.passwordReset.limit, limits.passwordReset.windowSeconds);
+  const gate = await rateLimitShared(`reset:${email}`, limits.passwordReset.limit, limits.passwordReset.windowSeconds);
   if (!gate.ok) return { ok: true, token: null, delivery: wouldBe };
 
   const user = await findOne("users", (row) => row.email === email);

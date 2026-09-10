@@ -31,7 +31,7 @@ import { loadMoney } from "@/server/queries/money";
 import { isFlagOn } from "@/server/queries/settings";
 import { requestDate } from "@/server/now";
 import { getViewer } from "@/server/viewer";
-import { limits, rateLimit } from "@/server/rate-limit";
+import { limits, rateLimitShared } from "@/server/rate-limit";
 import { currencySymbol } from "@/lib/utils";
 
 /**
@@ -200,7 +200,9 @@ export async function askStudentOS(query: string): Promise<AskResult> {
   const viewer = await getViewer();
   if (!viewer) return { ok: false, reason: "signed-out", message: "Sign in to ask." };
 
-  const gate = rateLimit(`ask:${viewer.user.id}`, limits.aiAsk.limit, limits.aiAsk.windowSeconds);
+  /* Shared, because this one has a bill on the other side of it. A per-isolate
+     ceiling on model calls is a per-isolate ceiling on spend. */
+  const gate = await rateLimitShared(`ask:${viewer.user.id}`, limits.aiAsk.limit, limits.aiAsk.windowSeconds);
   if (!gate.ok) {
     return {
       ok: false,

@@ -10,7 +10,7 @@ import {
   type InstitutionSubmission,
 } from "@/domain/institutions";
 import { findMany, insert, newId, nowIso } from "@/server/db";
-import { limits, rateLimit } from "@/server/rate-limit";
+import { limits, rateLimitShared } from "@/server/rate-limit";
 import { currentUserId } from "@/server/viewer";
 
 /**
@@ -76,7 +76,11 @@ export async function findInstitutions(input: {
      forwarded address where there is one and by a shared bucket where there is
      not -- which is the honest behaviour rather than an unlimited endpoint
      dressed up as a limited one. */
-  const gate = rateLimit(`institutions:${await callerKey()}`, limits.chat.limit, limits.chat.windowSeconds);
+  const gate = await rateLimitShared(
+    `institutions:${await callerKey()}`,
+    limits.chat.limit,
+    limits.chat.windowSeconds,
+  );
   if (!gate.ok) return [];
 
   const { query, citySlug, countryCode } = parsed.data;
@@ -127,7 +131,11 @@ export async function submitInstitution(input: {
   const parsed = submitSchema.safeParse(input);
   if (!parsed.success) return { ok: false };
 
-  const gate = rateLimit(`institution-submit:${await callerKey()}`, limits.report.limit, limits.report.windowSeconds);
+  const gate = await rateLimitShared(
+    `institution-submit:${await callerKey()}`,
+    limits.report.limit,
+    limits.report.windowSeconds,
+  );
   if (!gate.ok) return { ok: false };
 
   const { name, citySlug, countryCode } = parsed.data;
