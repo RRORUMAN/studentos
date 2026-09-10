@@ -163,7 +163,12 @@ export default async function HomePage() {
     "for-you": (
       <section aria-labelledby="for-you-heading">
         <SectionHead title="For you" hint="Events, places, deals and people — each with the reason it is here." href="/discover" hrefLabel="Discover" />
-        {data.feed.length === 0 ? (
+        {data.feed.length === 0 && data.placesUnavailable ? (
+          /* An outage is not an absence, and it is certainly not the student's
+             fault. "Add a few interests" is advice that cannot help when the
+             reason the feed is empty is that we could not reach a provider. */
+          <Empty line={data.placesUnavailable.message} />
+        ) : data.feed.length === 0 ? (
           <Empty line="Nothing matches you closely enough yet. Add a few interests and it fills in." action="Edit interests" href="/you/profile" />
         ) : (
           <ul className="space-y-3">

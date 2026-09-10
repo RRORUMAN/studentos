@@ -175,10 +175,23 @@ export type PlaceFilter = {
  * The result of a place search: rows, or the reason there are none.
  *
  * `unavailable` exists so that no caller can render "nothing nearby" over a
- * provider outage. Every surface that shows places destructures this and
- * handles both, and there is deliberately no helper that flattens it to an
+ * provider outage, and there is deliberately no helper that flattens it to an
  * array — one would be used, and the distinction would be lost on the first
  * screen somebody was in a hurry on.
+ *
+ * THIS PARAGRAPH USED TO END "every surface that shows places destructures
+ * this and handles both", and that was true of the marketing pages and false
+ * of the product. Discover, Home, Arrival, plans and the starter pack all read
+ * `.places` and dropped the rest, so an outage rendered as "Nothing in this
+ * category yet" — the product telling a student their city is empty when the
+ * truth is that we could not ask. Discover handles it now. The remaining
+ * surfaces are listed here rather than in a comment claiming they are done:
+ * Discover and Home handle it; Arrival, plans and the starter pack still read
+ * only `.places`.
+ *
+ * `stale` was rendered nowhere at all, so rows from an expired cache looked
+ * identical to rows fetched a second ago. Per-row freshness answers a
+ * different question — how old a row is, not whether we could check today.
  */
 export type PlaceResults = {
   places: Scored<Place>[];

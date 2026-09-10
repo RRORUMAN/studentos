@@ -399,9 +399,43 @@ export default async function DiscoverPage(props: PageProps<"/discover">) {
 
   const results = (
     <div>
-      <p className="mb-3 font-mono text-micro uppercase tracking-[0.1em] text-ink-400">{countLabel}</p>
+      <p className="mb-3 font-mono text-micro uppercase tracking-[0.1em] text-ink-400">
+        {countLabel}
+        {/* `stale` means these rows came from a cache entry past its lifetime
+            — the provider could not be reached to refresh them. It was on the
+            result object and rendered nowhere, so expired rows looked exactly
+            like current ones. Per-row freshness ("Checked this week") answers
+            a different question: how old the row is, not whether we could
+            check today. */}
+        {placeResults.stale ? (
+          <span className="ml-2 normal-case tracking-normal text-amber-deep">
+            · last known, not refreshed just now
+          </span>
+        ) : null}
+      </p>
 
-      {total === 0 ? (
+      {/* ---- an outage is not an absence ---------------------------------
+          `PlaceResults` carries `unavailable` for exactly this, and its own
+          comment claims "every surface that shows places destructures this
+          and handles both". The marketing pages do. The authenticated product
+          — this screen, Home, Arrival, plans, the starter pack — read only
+          `.places`, so a provider that was down rendered as "Nothing in this
+          category yet": the product telling a student their city is empty
+          when the truth is that we could not ask.
+
+          It is not the empty state with different words. The empty state
+          offers "Show everything nearby" and "Clear the filters", and both
+          are useless advice when nothing can be fetched at all. */}
+      {placeResults.unavailable && total === 0 ? (
+        <div className="flex flex-col items-center rounded-2xl bg-white px-5 py-10 text-center ring-1 ring-ink-950/6">
+          <MascotArt state="empty" className="size-16" />
+          <p className="mt-4 text-[0.9375rem] text-ink-700">{placeResults.unavailable.message}</p>
+          <p className="mt-2 text-[0.8125rem] text-ink-500">
+            This is on us, not on {cityName}. Events, deals and everything else on this screen are
+            unaffected.
+          </p>
+        </div>
+      ) : total === 0 ? (
         <div className="flex flex-col items-center rounded-2xl bg-white px-5 py-10 text-center ring-1 ring-ink-950/6">
           <MascotArt state="empty" className="size-16" />
           <p className="mt-4 text-[0.9375rem] text-ink-700">

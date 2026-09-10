@@ -56,6 +56,13 @@ export type HomeData = {
   brief: BriefLine[];
   actions: QuickAction[];
   feed: FeedItem[];
+  /**
+   * Set when no place provider answered. The For You feed mixes places with
+   * events, deals, invites and posts, so an outage rarely empties it — but
+   * when it does, "nothing matches you closely enough yet" is the product
+   * blaming the student for our own failed request.
+   */
+  placesUnavailable: { message: string } | null;
   rightNow: RightNowItem[];
   people: Awaited<ReturnType<typeof suggestedPeople>>;
   openInvites: Awaited<ReturnType<typeof loadOpenInvites>>;
@@ -261,6 +268,7 @@ export async function loadHome(viewer: Viewer, now: Date): Promise<HomeData> {
     brief,
     actions,
     feed: feed.filter((item) => !shown.has(item.id)),
+    placesUnavailable: places.unavailable,
     rightNow: live,
     people,
     openInvites: invites,
