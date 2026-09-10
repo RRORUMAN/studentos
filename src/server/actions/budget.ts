@@ -16,6 +16,7 @@ import {
 import type { SurvivalPreview } from "@/server/engines/survival";
 import { previewSurvivalPlan } from "@/server/engines/survival";
 import { rateLimit } from "@/server/rate-limit";
+import { loadFriendIds } from "@/server/queries/social";
 import { requireUserId, requireViewer } from "@/server/viewer";
 
 /**
@@ -638,6 +639,122 @@ export async function adoptDetectedSubscription(formData: FormData): Promise<Act
 /* -------------------------------------------------------------------------- */
 /* Shared buckets (Pro)                                                        */
 /* -------------------------------------------------------------------------- */
+
+/**
+ * ============================================================================
+ * GROUPS — the write side, which did not exist
+ * ----------------------------------------------------------------------------
+ * `groupMembers` was read in six places and written in none. No
+ * `insert("groups")` and no `insert("groupMembers")` anywhere in the codebase.
+ *
+ * The consequence runs all the way to the price list. `createBucket` refuses a
+ * `groupId` the student is not a member of, and nobody could be a member of
+ * anything, so every bucket ever created was `groupId: null` — a personal
+ * envelope. "Shared budgets" is sold on the Pro tier at €9.99 a month with the
+ * promise "Split a flat, a trip or a night out and keep it settled", and it
+ * was unreachable.
+ *
+ * Everything else for it was built: the `Group` and `GroupMember` types, the
+ * schema tables, `loadBuckets` and `loadBucketGroups`, the contribution rows,
+ * and `settleUpTransfers` in the budget engine, which works out who owes whom
+ * to the cent. Only the two writes were missing.
+ * ============================================================================
+ */
+
+/**
+ * Start a group, with the student in it.
+ *
+ * The owner is inserted as a member in the same transaction rather than being
+ * implied by `ownerId`. Six read paths ask `groupMembers` who is in a group,
+ * and an owner who is not a row in that table is a group its creator cannot
+ * see — the kind of split truth that is fixed twice and comes back.
+ */
+export async function createGroup(formData: FormData): Promise<ActionResult> {
+  const viewer = await requireViewer();
+  const userId = viewer.user.id;
+  const blocked = limited(userId, "bucket");
+  if (blocked) return blocked;
+
+  const parsed = z
+    .object({
+      name: z.string().trim().min(1, "Give the group a name.").max(60),
+      emoji: z.string().trim().max(8).optional(),
+    })
+    .safeParse({ name: formData.get("name"), emoji: formData.get("emoji") || undefined });
+
+  if (!parsed.success) {
+    return { ok: false, message: parsed.error.issues[0]?.message ?? "Give the group a name." };
+  }
+
+  const id = newId();
+  const now = nowIso();
+
+  await transaction((db) => {
+    db.groups.push({
+      id,
+      citySlug: viewer.profile.citySlug,
+      name: parsed.data.name,
+      emoji: parsed.data.emoji || "👥",
+      ownerId: userId,
+      createdAt: now,
+    });
+    db.groupMembers.push({ groupId: id, userId, joinedAt: now });
+  });
+
+  revalidatePath("/budget/shared");
+  return { ok: true };
+}
+
+/**
+ * Add somebody to a group.
+ *
+ * FRIENDS ONLY, and that is the whole authorisation. A group carries a shared
+ * bucket, and a shared bucket shows every member what everybody else paid —
+ * so being added to one is not a neutral act, and it must not be possible to
+ * do it to a stranger by knowing their id. A student who does not want to be
+ * in a group with somebody does not accept the friendship.
+ *
+ * Only a member may add, which keeps the group closed to anyone outside it,
+ * and adding twice is a no-op rather than an error: two rows for one person
+ * would double them in every settle-up.
+ */
+export async function addGroupMember(formData: FormData): Promise<ActionResult> {
+  const userId = await requireUserId();
+  const blocked = limited(userId, "bucket");
+  if (blocked) return blocked;
+
+  const parsed = z
+    .object({ groupId: z.string().min(1).max(64), memberId: z.string().min(1).max(64) })
+    .safeParse({ groupId: formData.get("groupId"), memberId: formData.get("memberId") });
+
+  if (!parsed.success) return { ok: false, message: "Pick somebody to add." };
+
+  const mine = await findOne(
+    "groupMembers",
+    (row) => row.groupId === parsed.data.groupId && row.userId === userId,
+  );
+  if (!mine) return { ok: false, message: "You are not in that group." };
+
+  const friends = await loadFriendIds(userId);
+  if (!friends.has(parsed.data.memberId)) {
+    return { ok: false, message: "You can only add people you are friends with." };
+  }
+
+  const already = await findOne(
+    "groupMembers",
+    (row) => row.groupId === parsed.data.groupId && row.userId === parsed.data.memberId,
+  );
+  if (already) return { ok: true };
+
+  await insert("groupMembers", {
+    groupId: parsed.data.groupId,
+    userId: parsed.data.memberId,
+    joinedAt: nowIso(),
+  });
+
+  revalidatePath("/budget/shared");
+  return { ok: true };
+}
 
 /**
  * A shared envelope. Explicitly not banking: no money moves, the product only

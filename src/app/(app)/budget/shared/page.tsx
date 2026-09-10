@@ -6,6 +6,8 @@ import { SharedBuckets, type BucketView } from "@/components/app/budget-shared";
 import { Upsell } from "@/components/app/upsell";
 import { MascotArt } from "@/components/mascot/mascot-art";
 import { loadBucketGroups, loadBuckets } from "@/server/queries/money";
+import { loadFriendIds } from "@/server/queries/social";
+import { findMany } from "@/server/db";
 import { requireViewer } from "@/server/viewer";
 import { currencySymbol, money } from "@/lib/utils";
 
@@ -36,10 +38,17 @@ export default async function SharedBudgetPage() {
   const symbol = currencySymbol(where.currency, where.locale);
   const unlocked = viewer.entitlements.can.sharedBudgets;
 
-  const [readings, groups] = await Promise.all([
+  const [readings, groups, friendIds] = await Promise.all([
     unlocked ? loadBuckets(viewer.user.id) : Promise.resolve([]),
     loadBucketGroups(viewer.user.id),
+    loadFriendIds(viewer.user.id),
   ]);
+
+  /* Only friends can be added to a group — a shared bucket shows every member
+     what everybody else paid, so being put in one is not a neutral act. The
+     server enforces it; this is the list the picker offers. */
+  const friendProfiles = await findMany("profiles", (row) => friendIds.has(row.userId));
+  const friends = friendProfiles.map((row) => ({ id: row.userId, name: row.displayName }));
 
   const buckets: BucketView[] = readings.map((reading) => {
     const nameFor = new Map(reading.members.map((member) => [member.userId, member]));
@@ -93,7 +102,7 @@ export default async function SharedBudgetPage() {
 
       <div className="mt-6">
         {unlocked ? (
-          <SharedBuckets buckets={buckets} groups={groups} symbol={symbol} where={where} />
+          <SharedBuckets buckets={buckets} groups={groups} friends={friends} symbol={symbol} where={where} />
         ) : (
           <div className="space-y-4">
             {/* An example, labelled as one. Inventing a bucket that looked like
