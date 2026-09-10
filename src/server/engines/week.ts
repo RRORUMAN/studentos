@@ -111,16 +111,22 @@ export function planWeek(input: {
   for (const scored of input.events) {
     const at = Date.parse(scored.item.startsAt);
     if (at < now.getTime() - 3_600_000 || at > weekEnd) continue;
+    /* The week plan prices every day and totals the week, so an event whose
+       source published no price cannot be in it — counting it as zero would
+       understate the week and guessing would invent the figure. It is still
+       reachable everywhere events are listed rather than added up. */
+    const priceCents = scored.item.priceCents;
+    if (priceCents === null) continue;
     const date = new Date(at);
     candidates.push({
       kind: "event",
       score: adjust(scored.match, {
-        priceCents: scored.item.priceCents,
+        priceCents,
         tags: [scored.item.kind, ...scored.item.tags],
         walk: null,
         dialSet,
       }),
-      priceCents: scored.item.priceCents,
+      priceCents,
       walk: null,
       day: weekdayIn(date, timeZone),
       dateIso: date.toISOString(),

@@ -2,7 +2,7 @@ import "server-only";
 
 import { cache } from "react";
 
-import type { Invite, PlanMember, PlanVote, SavedPlan } from "@/domain/types";
+import { type Invite, type PlanMember, type PlanVote, planTotal, type SavedPlan } from "@/domain/types";
 import { findMany } from "@/server/db";
 import { canSeeInvite } from "@/server/queries/social";
 
@@ -148,7 +148,7 @@ function planCard(
     title: plan.title,
     when: plan.forDate,
     people,
-    totalCents: plan.items.reduce((sum, item) => sum + item.priceCents, 0),
+    totalCents: planTotal(plan.items).cents,
     perPersonCents: null,
     stops: plan.items.length,
     status: past ? "past" : member?.status === "invited" ? "invited" : "upcoming",

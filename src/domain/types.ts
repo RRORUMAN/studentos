@@ -304,8 +304,27 @@ export type CityEvent = {
   title: string;
   blurb: string;
   kind: EventKind;
-  /** Zero is a real, common and important answer. Never null for "free". */
-  priceCents: Cents;
+  /**
+   * What it costs, or null when the source did not say.
+   *
+   * THREE STATES, AND THE MIDDLE ONE IS THE POINT. Zero is a real, common and
+   * important answer and still means free. A number means that number. Null
+   * means nobody has told us, which is not the same claim as either.
+   *
+   * This was `Cents`, and the ingest in `src/server/events/providers.ts` was
+   * therefore forced to write `priceCents ?? 0` for every calendar entry — an
+   * ICS feed has no price field, so that was ALL of them. The header of that
+   * file states the rule it could not keep: "PRICE IS NULLABLE, AND NULL IS
+   * NOT ZERO... 'Free' is a claim and a calendar entry does not make one." The
+   * only mark of the difference was a counter on the import run, so the row
+   * itself was indistinguishable from a genuinely free event, and
+   * `event-card.tsx` printed a solid mint "Free" badge over it.
+   *
+   * A student turning up to something they were told was free and being asked
+   * for twelve euro is the product inventing a fact about money, which is the
+   * one thing it is built not to do.
+   */
+  priceCents: Cents | null;
   startsAt: Iso;
   endsAt: Iso | null;
   venue: string;
@@ -549,7 +568,15 @@ export type SavedPlanItem = {
   time: string;
   title: string;
   detail: string | null;
-  priceCents: Cents;
+  /**
+   * What this stop costs, or null when the source never published one.
+   *
+   * Nullable for the same reason `CityEvent.priceCents` is: a student can add
+   * an imported event to a plan, and flattening its unknown price to zero here
+   * would put a "Free" line in their itinerary and understate the plan total —
+   * the same false claim, one layer further from where it started.
+   */
+  priceCents: Cents | null;
   walkMinutes: number | null;
   kind: "food" | "event" | "drink" | "transport" | "culture" | "activity";
   source: "students" | "official" | "venue";
@@ -557,6 +584,32 @@ export type SavedPlanItem = {
   refKind: "place" | "event" | null;
   refId: Id | null;
 };
+
+/**
+ * What a plan costs, and how much of it nobody could price.
+ *
+ * It returns two numbers rather than one because a plan holding a stop whose
+ * source never published a price does not HAVE a single honest total. The
+ * three call sites that used to do `reduce((sum, item) => sum + item.priceCents)`
+ * would now each need `?? 0`, and every one of those would quietly tell a
+ * student their evening costs €24 when one stop on it might cost twelve more.
+ *
+ * `unpriced` is the count of stops left out. A caller that shows the total to
+ * a student is expected to show that too; a compact summary row may use just
+ * `cents`, because the plan it links to discloses the rest.
+ */
+export function planTotal(items: readonly { priceCents: Cents | null }[]): {
+  cents: Cents;
+  unpriced: number;
+} {
+  let cents = 0;
+  let unpriced = 0;
+  for (const item of items) {
+    if (item.priceCents === null) unpriced += 1;
+    else cents += item.priceCents;
+  }
+  return { cents, unpriced };
+}
 
 export type SavedPlan = {
   id: Id;

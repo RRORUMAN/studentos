@@ -400,18 +400,29 @@ export function assemblePlan(input: {
   const mightFit = (estimate: [Cents, Cents] | null) =>
     estimate === null || total + estimate[0] <= budget;
 
-  /* 1. An event. Free ones first, then the cheapest that still fits. */
-  const events = [...input.events].sort(
-    (a, b) => a.item.priceCents - b.item.priceCents || b.match - a.match,
-  );
-  const event = events.find((entry) => fits(entry.item.priceCents));
+  /* 1. An event. Free ones first, then the cheapest that still fits.
 
-  if (event) {
+     An event whose source published no price is not a candidate at all. This
+     builds a plan with a TOTAL against a budget, and there is no honest way to
+     add a row of unknown cost to a sum: counting it as zero understates the
+     plan, and guessing a figure invents one. It stays out, and the student
+     still meets it everywhere events are merely listed rather than added up.
+
+     `?? Infinity` in the sort is the same statement — unknown is not cheap. */
+  const events = [...input.events].sort(
+    (a, b) =>
+      (a.item.priceCents ?? Number.POSITIVE_INFINITY) -
+        (b.item.priceCents ?? Number.POSITIVE_INFINITY) || b.match - a.match,
+  );
+  const event = events.find((entry) => entry.item.priceCents !== null && fits(entry.item.priceCents));
+  const eventPriceCents = event?.item.priceCents ?? null;
+
+  if (event && eventPriceCents !== null) {
     lines.push({
       kind: event.item.kind === "culture" ? "culture" : "event",
       title: event.item.title,
       detail: event.item.blurb,
-      priceCents: event.item.priceCents,
+      priceCents: eventPriceCents,
       estimateCents: null,
       estimateBasis: null,
       metres: null,
@@ -419,7 +430,7 @@ export function assemblePlan(input: {
       refId: event.item.id,
       source: event.item.source,
     });
-    total += event.item.priceCents;
+    total += eventPriceCents;
   }
 
   /* 2. Food, if the question implies it.

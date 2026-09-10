@@ -14,14 +14,15 @@ import {
   type LifeOpsTimeline,
 } from "@/domain/lifeops";
 import { missionProgress, type Mission, type MissionStep } from "@/domain/missions";
-import type {
-  Cents,
-  CityEvent,
-  Invite,
-  Iso,
-  RecurringExpense,
-  SavedPlan,
-  Transaction,
+import {
+  type Cents,
+  type CityEvent,
+  type Invite,
+  type Iso,
+  planTotal,
+  type RecurringExpense,
+  type SavedPlan,
+  type Transaction,
 } from "@/domain/types";
 
 /**
@@ -333,7 +334,9 @@ function planItems(input: LifeOpsInput): LifeOpsItem[] {
   return input.plans
     .filter((plan) => plan.forDate && Date.parse(plan.forDate) >= now.getTime() - DAY_MS)
     .map((plan) => {
-      const total = plan.items.reduce((sum, item) => sum + item.priceCents, 0);
+      /* A compact timeline row. The plan it links to discloses any stop the
+         source never priced; see `planTotal`. */
+      const total = planTotal(plan.items).cents;
       return {
         key: `plan:${plan.id}`,
         kind: "plan" as const,

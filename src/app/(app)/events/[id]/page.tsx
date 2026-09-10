@@ -19,7 +19,7 @@ import { findMany, findOne } from "@/server/db";
 import { requestDate } from "@/server/now";
 import { requireViewer } from "@/server/viewer";
 import { fmtLongDay, fmtTime } from "@/lib/dates";
-import { cn, money } from "@/lib/utils";
+import { cn, money, PRICE_NOT_LISTED } from "@/lib/utils";
 
 export const metadata: Metadata = {
   title: "Event",
@@ -92,6 +92,12 @@ export default async function EventPage(props: PageProps<"/events/[id]">) {
         <div className="flex flex-wrap items-center gap-2">
           {event.priceCents === 0 ? (
             <Badge accent="mint" tone="solid">Free</Badge>
+          ) : event.priceCents === null ? (
+            /* The source published no price. Saying so is the honest answer,
+               and this is the page a student reads before deciding to go. */
+            <span className="font-mono text-[0.9375rem] font-medium text-ink-500">
+              {PRICE_NOT_LISTED}
+            </span>
           ) : (
             <span className="tnum font-mono text-[1.125rem] font-semibold text-ink-900">
               {money(event.priceCents / 100, where)}

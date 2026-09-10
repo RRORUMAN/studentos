@@ -9,7 +9,7 @@ import type { CityEvent } from "@/domain/types";
 import type { EventEnergy } from "@/server/queries/events";
 import type { Scored } from "@/server/engines/recommend";
 import { fmtDay, fmtWhen } from "@/lib/dates";
-import { cn, money } from "@/lib/utils";
+import { cn, money, PRICE_NOT_LISTED } from "@/lib/utils";
 
 /**
  * ============================================================================
@@ -95,6 +95,13 @@ export function RadarCard({
           </span>
           {event.priceCents === 0 ? (
             <Badge accent="mint" tone="solid">Free</Badge>
+          ) : event.priceCents === null ? (
+            /* Not a badge and not mint. An unpriced row is the absence of a
+               claim, and it must not compete for the eye with the events that
+               really are free. */
+            <span className="rounded-full bg-paper/90 px-2.5 py-1 font-mono text-[0.75rem] font-medium text-ink-500">
+              {PRICE_NOT_LISTED}
+            </span>
           ) : (
             <span className="tnum rounded-full bg-paper px-2.5 py-1 font-mono text-[0.8125rem] font-semibold text-ink-950">
               {money(event.priceCents / 100, where)}

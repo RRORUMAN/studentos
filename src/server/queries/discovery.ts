@@ -340,7 +340,9 @@ export async function loadScoredEvents(
   events = filterEventsByWhen(events, filter.when, context.now);
   if (filter.freeOnly) events = events.filter((event) => event.priceCents === 0);
   if (filter.maxPriceCents != null) {
-    events = events.filter((event) => event.priceCents <= filter.maxPriceCents!);
+    events = events.filter(
+      (event) => event.priceCents !== null && event.priceCents <= filter.maxPriceCents!,
+    );
   }
   if (filter.kinds?.length) {
     events = events.filter(

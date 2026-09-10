@@ -712,13 +712,22 @@ export function arrangeEvents(
   const list = [...events];
 
   if (tab === "free") {
+    /* `=== 0`, not `<= 0` and not a nullish default. An event whose source
+       published no price is not free; it is unknown, and a "Free" tab that
+       includes it is the false claim in tab form. */
     return list.filter((entry) => entry.item.priceCents === 0);
   }
 
   if (tab === "under-10") {
+    /* Same argument: an unpriced event has not been shown to be under ten, so
+       it does not belong in a tab that says it is. Unknown sorts last. */
     return list
-      .filter((entry) => entry.item.priceCents <= UNDER_TEN_CENTS)
-      .sort((a, b) => a.item.priceCents - b.item.priceCents || b.match - a.match);
+      .filter((entry) => entry.item.priceCents !== null && entry.item.priceCents <= UNDER_TEN_CENTS)
+      .sort(
+        (a, b) =>
+          (a.item.priceCents ?? Number.POSITIVE_INFINITY) -
+            (b.item.priceCents ?? Number.POSITIVE_INFINITY) || b.match - a.match,
+      );
   }
 
   if (tab === "trending") {

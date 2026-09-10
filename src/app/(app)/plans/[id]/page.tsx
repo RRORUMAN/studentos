@@ -12,6 +12,7 @@ import { MascotArt } from "@/components/mascot/mascot-art";
 import { Badge } from "@/components/ui/primitives";
 import { recordUpgradeTrigger } from "@/server/actions/upgrade";
 import { findMany } from "@/server/db";
+import { planTotal } from "@/domain/types";
 import { loadPlan } from "@/server/queries/plans";
 import { loadFriendIds } from "@/server/queries/social";
 import { requireViewer } from "@/server/viewer";
@@ -60,7 +61,7 @@ export default async function PlanPage(props: PageProps<"/plans/[id]">) {
   const inMembers = members.filter((row) => row.status === "in");
   const invitedMembers = members.filter((row) => row.status === "invited");
   const canVote = mine || member?.status === "in";
-  const total = plan.items.reduce((sum, item) => sum + item.priceCents, 0);
+  const { cents: total, unpriced } = planTotal(plan.items);
 
   if (mine && members.length >= 1 && !viewer.entitlements.can.groupPlanner) {
     after(() => recordUpgradeTrigger("group-plan"));
@@ -92,15 +93,37 @@ export default async function PlanPage(props: PageProps<"/plans/[id]">) {
 
       {/* ---- numbers -------------------------------------------------------- */}
       <dl className="mt-5 grid grid-cols-3 gap-3">
-        <Figure label="Estimated total" value={total === 0 ? "Free" : money(total / 100, where)} />
-        <Figure label="Per person" value={total === 0 ? "Free" : money(Math.ceil(total / people) / 100, where)} />
+        {/* "from" whenever a stop has no published price: the figure is the
+            sum of what IS priced, and an evening that costs at least this much
+            is a different claim from one that costs this much. */}
+        <Figure
+          label="Estimated total"
+          value={`${unpriced > 0 ? "from " : ""}${total === 0 && unpriced === 0 ? "Free" : money(total / 100, where)}`}
+          hint={unpriced > 0 ? `${unpriced} not priced` : undefined}
+        />
+        <Figure
+          label="Per person"
+          value={`${unpriced > 0 ? "from " : ""}${total === 0 && unpriced === 0 ? "Free" : money(Math.ceil(total / people) / 100, where)}`}
+        />
         <Figure label="People" value={String(people)} hint={people === 1 ? "just you so far" : `${inMembers.length} joined`} />
       </dl>
       {plan.budgetCents !== null ? (
-        <p className={cn("mt-2 text-[0.8125rem]", total > plan.budgetCents ? "text-pulse-deep" : "text-mint-deep")}>
+        <p
+          className={cn(
+            "mt-2 text-[0.8125rem]",
+            total > plan.budgetCents ? "text-pulse-deep" : unpriced > 0 ? "text-ink-500" : "text-mint-deep",
+          )}
+        >
+          {/* THE VERDICT IS THE SENTENCE THAT COULD LIE. "Inside the budget
+              with €6 to spare" is a promise, and a plan holding a stop nobody
+              priced cannot make it — the missing figure could be twelve euro.
+              Over-budget is still safe to state either way: adding an unknown
+              cost cannot bring a plan back under. */}
           {total > plan.budgetCents
             ? `${money((total - plan.budgetCents) / 100, where)} over the ${money(plan.budgetCents / 100, where)} budget.`
-            : `Inside the ${money(plan.budgetCents / 100, where)} budget with ${money((plan.budgetCents - total) / 100, where)} to spare.`}
+            : unpriced > 0
+              ? `The priced stops come to ${money(total / 100, where)} of the ${money(plan.budgetCents / 100, where)} budget. ${unpriced === 1 ? "One stop has" : `${unpriced} stops have`} no published price, so this is not the final figure.`
+              : `Inside the ${money(plan.budgetCents / 100, where)} budget with ${money((plan.budgetCents - total) / 100, where)} to spare.`}
         </p>
       ) : null}
 

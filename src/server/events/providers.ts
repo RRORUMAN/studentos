@@ -354,8 +354,21 @@ export async function syncEventProvider(
         await update("events", (candidate) => candidate.id === held.id, {
           ...rest,
           /* A calendar cannot state a price, so an update never overwrites one
-             a student or an admin has since supplied. */
-          priceCents: priceCents ?? held.priceCents,
+             a student or an admin has since supplied.
+
+             The exception is a held ZERO on an imported row, which is cleared
+             back to null. Every calendar row written before `priceCents`
+             became nullable got a zero from the old `?? 0` — that is where
+             they came from, all of them — and leaving them would mean the fix
+             only ever helped events imported after today while every existing
+             one kept showing a "Free" badge nobody published.
+
+             It is not free of cost: an operator who deliberately set one of
+             these to zero, meaning "I checked, it is free", loses that and
+             gets "price not listed" until they set it again. That is the
+             direction to err. A wrong null makes no claim; a wrong zero tells
+             a student something is free and takes their afternoon. */
+          priceCents: priceCents ?? (held.priceCents === 0 ? null : held.priceCents),
           id: held.id,
           /* Social counts belong to the students who made them and are never
              touched by a sync. */
@@ -370,11 +383,11 @@ export async function syncEventProvider(
       await insert("events", {
         ...rest,
         id: newId(),
-        /* Unpriced becomes zero ONLY because `CityEvent.priceCents` cannot be
-           null, and the run reports how many rows this happened to so the
-           number is never silent. A calendar entry is not a claim that
-           something is free, and `unpriced` on the run is the record of that. */
-        priceCents: priceCents ?? 0,
+        /* Unpriced stays unpriced. `CityEvent.priceCents` is nullable now, so
+           the row itself carries the difference between "free" and "nobody
+           said" — it used to be flattened to zero here and the only record of
+           it was `unpriced` on the run, which no student ever sees. */
+        priceCents,
         confirmations: 0,
         interested: 0,
         observedAt: now.toISOString(),

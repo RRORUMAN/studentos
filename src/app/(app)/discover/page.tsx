@@ -114,7 +114,9 @@ const TABS: readonly Tab[] = [
        €30 dinner ends up filed under "Under 10". Cheap places have their own
        tab, which claims exactly what the provider said. */
     kind: "events",
-    event: (event) => event.priceCents <= UNDER_TEN_CENTS,
+    /* An unpriced event has not been shown to be under ten, so it is not in
+       a tab that says it is. Unknown is not cheap. */
+    event: (event) => event.priceCents !== null && event.priceCents <= UNDER_TEN_CENTS,
   },
   {
     value: "cheap",
@@ -278,7 +280,8 @@ export default async function DiscoverPage(props: PageProps<"/discover">) {
   const eventMatches = (scored: Scored<CityEvent>) => {
     const event = scored.item;
     if (!tab.event?.(event)) return false;
-    if (capCents !== null && event.priceCents > capCents) return false;
+    /* A price cap cannot be satisfied by a price nobody published. */
+    if (capCents !== null && (event.priceCents === null || event.priceCents > capCents)) return false;
     if (verified && event.confirmations < 10) return false;
     if (needle && !`${event.title} ${event.venue} ${event.blurb} ${event.kind} ${event.tags.join(" ")}`.toLowerCase().includes(needle)) {
       return false;

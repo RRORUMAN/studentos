@@ -23,7 +23,7 @@ import {
 } from "@/server/engines/catch-up";
 import { loadBlockedIds, loadFollowingIds, loadFriendIds } from "@/server/queries/social";
 import { fmtWhen } from "@/lib/dates";
-import { money } from "@/lib/utils";
+import { money , priceLabel } from "@/lib/utils";
 
 /**
  * ============================================================================
@@ -293,7 +293,7 @@ export async function resolveAttachment(
             kind: "event",
             id,
             title: event.title,
-            meta: `${eventWhen(event.startsAt)} · ${event.priceCents === 0 ? "Free" : money(event.priceCents / 100, where)} · ${event.venue}`,
+            meta: `${eventWhen(event.startsAt)} · ${priceLabel(event.priceCents, where)} · ${event.venue}`,
             href: `/events/${id}`,
           }
         : null;
@@ -421,7 +421,7 @@ export async function loadAttachables(citySlug: string, where: Where): Promise<A
         kind: "event",
         id: event.id,
         title: event.title,
-        meta: `${eventWhen(event.startsAt)} · ${event.priceCents === 0 ? "Free" : money(event.priceCents / 100, where)}`,
+        meta: `${eventWhen(event.startsAt)} · ${priceLabel(event.priceCents, where)}`,
         href: `/events/${event.id}`,
       })),
     ...places.map<AttachmentCard>((place) => ({

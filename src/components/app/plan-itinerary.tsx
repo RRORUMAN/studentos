@@ -1,8 +1,8 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
-import type { SavedPlanItem } from "@/domain/types";
-import { cn, money } from "@/lib/utils";
+import { planTotal, type SavedPlanItem } from "@/domain/types";
+import { cn, money, priceLabel } from "@/lib/utils";
 
 /**
  * ============================================================================
@@ -36,7 +36,7 @@ export function PlanItinerary({
   /** Print the total row at the bottom. */
   total?: boolean;
 }) {
-  const sum = items.reduce((acc, item) => acc + item.priceCents, 0);
+  const { cents: sum, unpriced } = planTotal(items);
 
   return (
     <section className="overflow-hidden rounded-2xl bg-white shadow-[var(--shadow-flat)] ring-1 ring-ink-950/6">
@@ -69,8 +69,13 @@ export function PlanItinerary({
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
                   {vote ? vote(index) : null}
-                  <span className={cn("tnum font-mono text-[0.9375rem] font-medium", item.priceCents === 0 ? "text-mint-deep" : "text-ink-900")}>
-                    {item.priceCents === 0 ? "Free" : money(item.priceCents / 100, where)}
+                  <span
+                    className={cn(
+                      "tnum font-mono text-[0.9375rem] font-medium",
+                      item.priceCents === 0 ? "text-mint-deep" : item.priceCents === null ? "text-ink-500" : "text-ink-900",
+                    )}
+                  >
+                    {priceLabel(item.priceCents, where)}
                   </span>
                   {remove ? remove(index) : null}
                 </div>
@@ -81,8 +86,21 @@ export function PlanItinerary({
       )}
       {total && items.length > 0 ? (
         <div className="flex items-baseline justify-between border-t border-ink-100 bg-paper-2/60 px-5 py-3.5">
-          <span className="font-mono text-micro uppercase tracking-[0.1em] text-ink-500">Total</span>
-          <span className="tnum font-mono text-[1.25rem] font-semibold text-ink-950">{sum === 0 ? "Free" : money(sum / 100, where)}</span>
+          <span className="font-mono text-micro uppercase tracking-[0.1em] text-ink-500">
+            Total
+            {/* The total is the sum of the stops that HAVE a price. Saying so
+                is the difference between an evening that costs this much and
+                an evening that costs at least this much. */}
+            {unpriced > 0 ? (
+              <span className="ml-2 normal-case tracking-normal text-ink-400">
+                {unpriced} {unpriced === 1 ? "stop" : "stops"} not priced
+              </span>
+            ) : null}
+          </span>
+          <span className="tnum font-mono text-[1.25rem] font-semibold text-ink-950">
+            {unpriced > 0 ? "from " : ""}
+            {sum === 0 && unpriced === 0 ? "Free" : money(sum / 100, where)}
+          </span>
         </div>
       ) : null}
     </section>

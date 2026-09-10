@@ -85,6 +85,28 @@ export function money(amount: number, where: MoneyLocale = {}): string {
   return formatter(currency, locale, hasCents ? 2 : 0).format(amount);
 }
 
+/** What we are allowed to say about a price. */
+export const PRICE_NOT_LISTED = "Price not listed";
+
+/**
+ * A price in cents, or the honest absence of one.
+ *
+ * Three states, and the middle one is the whole reason this exists: zero means
+ * free, a number means that number, and NULL MEANS NOBODY TOLD US. An ICS feed
+ * has no price field, so every imported calendar event is the third case, and
+ * for a long time all of them were written as zero and rendered as a solid
+ * "Free" badge — a claim the publisher never made, over an event that might
+ * cost twelve euro at the door.
+ *
+ * The label for the unknown case deliberately describes the DATA and not the
+ * event. "Price not listed" is a fact about what the source said. "Check the
+ * listing" would be advice, and "Free entry?" would be a guess.
+ */
+export function priceLabel(cents: number | null, where: MoneyLocale = {}): string {
+  if (cents === null) return PRICE_NOT_LISTED;
+  return cents === 0 ? "Free" : money(cents / 100, where);
+}
+
 /** The bare symbol for a currency, for axis labels and compact chips. */
 export function currencySymbol(currency: string, locale?: string): string {
   const parts = formatter(currency, locale ?? brand.currency.locale, 0).formatToParts(0);

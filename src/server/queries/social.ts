@@ -8,7 +8,7 @@ import { loadPlacesByIds } from "@/server/queries/places";
 import type { Invite, Profile } from "@/domain/types";
 import { findMany, findOne } from "@/server/db";
 import { fmtWhen } from "@/lib/dates";
-import { money } from "@/lib/utils";
+import { money , priceLabel } from "@/lib/utils";
 
 /**
  * ============================================================================
@@ -211,7 +211,7 @@ export async function resolveInviteAnchor(
         kind: "event",
         id,
         title: event.title,
-        meta: `${when} · ${event.priceCents === 0 ? "Free" : money(event.priceCents / 100, where)}`,
+        meta: `${when} · ${priceLabel(event.priceCents, where)}`,
         venue: event.venue,
         href: `/events/${id}`,
       };

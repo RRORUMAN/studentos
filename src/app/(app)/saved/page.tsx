@@ -16,7 +16,7 @@ import { findMany } from "@/server/db";
 import { requestDate } from "@/server/now";
 import { requireViewer } from "@/server/viewer";
 import { fmtWhen } from "@/lib/dates";
-import { cn, money } from "@/lib/utils";
+import { cn, money, priceLabel } from "@/lib/utils";
 
 export const metadata: Metadata = {
   title: "Saved",
@@ -239,7 +239,7 @@ export default async function SavedPage(props: PageProps<"/saved">) {
                   <p className="mt-0.5 text-[0.8125rem] text-ink-500">
                     {fmtWhen(entry.event.startsAt, timeZone, now)} · {entry.event.venue}
                   </p>
-                  <p className="mt-1.5 text-[0.875rem] font-medium text-ink-800">{entry.event.priceCents === 0 ? "Free" : money(entry.event.priceCents / 100, where)}</p>
+                  <p className="mt-1.5 text-[0.875rem] font-medium text-ink-800">{priceLabel(entry.event.priceCents, where)}</p>
                 </>
               ) : entry.kind === "deal" ? (
                 <>

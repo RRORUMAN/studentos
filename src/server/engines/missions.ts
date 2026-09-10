@@ -138,6 +138,12 @@ function pickEvent(
     if (Date.parse(event.startsAt) > horizon || Date.parse(event.startsAt) < now.getTime() - 3_600_000) return false;
     if (pick.eventTags && ![event.kind, ...event.tags].some((tag) => pick.eventTags?.includes(tag))) return false;
     if (pick.free && event.priceCents !== 0) return false;
+    /* A mission is a budget that adds up, and an event whose source published
+       no price cannot be added to one: counting it as zero understates the
+       mission and guessing a figure invents it. The template slot is dropped
+       instead, which is what this engine already does for a slot the city
+       cannot fill honestly. */
+    if (event.priceCents === null) return false;
     if (ceiling !== null && event.priceCents > ceiling) return false;
     return true;
   });
@@ -149,7 +155,11 @@ function pickEvent(
   if (variant.social || pick.social) {
     matches = [...matches].sort((a, b) => b.item.interested - a.item.interested || b.match - a.match);
   } else if (variant.cheaper) {
-    matches = [...matches].sort((a, b) => a.item.priceCents - b.item.priceCents || b.match - a.match);
+    matches = [...matches].sort(
+      (a, b) =>
+        (a.item.priceCents ?? Number.POSITIVE_INFINITY) -
+          (b.item.priceCents ?? Number.POSITIVE_INFINITY) || b.match - a.match,
+    );
   }
   return matches[0];
 }
@@ -236,7 +246,10 @@ export function buildMission(input: {
             detail: `${found.item.venue} · ${fmtShortDay(found.item.startsAt, timeZone)}${
               found.item.interested >= 5 ? ` · ${found.item.interested} interested` : ""
             }`,
-            priceCents: found.item.priceCents,
+            /* Guaranteed by the candidate filter, which drops unpriced events
+               because a mission has to add up. Restated here because the type
+               cannot carry a fact established in another function. */
+            priceCents: found.item.priceCents ?? 0,
             refKind: "event",
             refId: found.item.id,
             href: `/events/${found.item.id}`,
