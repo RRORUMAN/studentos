@@ -24,19 +24,15 @@ import type { FormState } from "@/server/actions/form-state";
  * and nothing else: validate the form, call the service, set or clear the
  * cookie.
  *
- * On the verification link: with no Resend key configured, `signUp` returns the
- * token and this layer redirects straight to it. That is a *development*
- * affordance. It is gated on BOTH the mailer being unconfigured AND this not
- * being a production deployment (`VERCEL_ENV === "production"`) — a missing
- * Resend key in production must dead-end with the generic message, never hand
- * the browser a live token in a URL. The env gate exists because a token in a
- * redirect is exactly the sort of thing that quietly survives to production.
+ * On the verification link: with nothing able to send email, `signUp` returns
+ * the token and this layer redirects straight to it, so the flow can be walked
+ * on a laptop with zero configuration. That gate lives in the service and is
+ * **not** "is there a Resend key" — this layer used to read `process.env`
+ * directly to decide, which put a live token in a URL on any deployment whose
+ * key was missing, expired or rejected. The service answers with a `delivery`
+ * instead, and a hosted deployment never gets a token to redirect through.
  * ============================================================================
  */
-
-/* Production must never surface auth tokens in a redirect, whatever the mailer
-   state. Vercel sets VERCEL_ENV to "production" only on production deploys. */
-const isLiveDeploy = process.env.VERCEL_ENV === "production";
 
 /* -------------------------------------------------------------------------- */
 /* Schemas                                                                     */
@@ -155,12 +151,24 @@ export async function requestResetAction(
   const email = String(formData.get("email") ?? "").trim();
   if (!email) return { ok: false, message: "Enter your email address.", field: "email" };
 
-  const { token } = await requestPasswordReset(email);
+  const { token, delivery } = await requestPasswordReset(email);
 
-  /* Development affordance, gated on the mailer being unconfigured — see the
-     module header. */
-  if (token && !process.env.RESEND_API_KEY && !isLiveDeploy) {
+  /* Zero-configuration affordance, decided by the service — see the module
+     header. A hosted deployment never reaches this with a token. */
+  if (token && delivery === "shown") {
     redirect(`/reset-password?token=${encodeURIComponent(token)}`);
+  }
+
+  /* No mail provider on a deployment means the link cannot be sent and must
+     not be shown, so there is nothing on its way and saying there is would be
+     the fake this codebase does not ship. This says nothing about whether the
+     address has an account: it is a fact about the deployment, true for every
+     address typed into this form. */
+  if (delivery === "unavailable") {
+    return {
+      ok: false,
+      message: "We cannot send email from this deployment yet, so a reset link cannot be sent. Ask us to set it up.",
+    };
   }
 
   /* Identical response whether or not the address exists. */
@@ -229,13 +237,20 @@ export async function resendVerificationAction(): Promise<FormState> {
   const session = await readSession();
   if (!session) return { ok: false, message: "Sign in first." };
 
-  const token = await resendVerification(session.user.id);
-  if (!token) {
+  const result = await resendVerification(session.user.id);
+  if (!result) {
     return { ok: true, done: true, message: "Already confirmed, or try again in a few minutes." };
   }
 
-  if (!process.env.RESEND_API_KEY && !isLiveDeploy) {
-    redirect(`/verify-email?token=${encodeURIComponent(token)}`);
+  if (result.token && result.delivery === "shown") {
+    redirect(`/verify-email?token=${encodeURIComponent(result.token)}`);
+  }
+
+  if (result.delivery === "unavailable") {
+    return {
+      ok: false,
+      message: "We cannot send email from this deployment yet. Your account works; the address stays unconfirmed until we can.",
+    };
   }
 
   return { ok: true, done: true, message: "New link sent." };

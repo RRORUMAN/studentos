@@ -61,13 +61,28 @@ the shape and where it stops.
 ## 2. Identity
 
 - [ ] **BLOCKER** `RESEND_API_KEY` and `RESEND_FROM` set, domain verified with
-      SPF, DKIM and DMARC. **When email cannot be sent, sign-up verifies its own
-      address and a password reset hands the link to whoever typed the address.**
-      Both fallbacks exist so the product works on a laptop; both are
-      account-takeover holes in public.
+      SPF, DKIM and DMARC.
+
+      **What this used to say, and what changed on 2026-09-10.** It said that
+      with no mail provider, sign-up verifies its own address and a password
+      reset hands the link to whoever typed the address — "account-takeover holes
+      in public". They were, and they were live. They are now impossible in
+      public: `isHostedDeployment` in `src/services/env.ts` is true on any Vercel
+      deployment, production or preview, and the two token fallbacks are refused
+      there. A laptop and the Playwright suite keep them, which is the only
+      reason they exist.
+
+      So this is no longer a security blocker. It is a functional one, and it is
+      still a blocker: **until Resend is configured, nobody can reset a
+      forgotten password and no address can be confirmed.** The forgot-password
+      screen says exactly that rather than claiming a link is on its way, and
+      `/you` says the address is unconfirmed. Signing up, signing in and using
+      the whole product still work.
 - [ ] **BLOCKER** Confirmed by hand: sign up with a real address on the deployed
       site, receive the email, and check you are *not* verified until you click
-      it. Being verified without touching your inbox means the fallback ran.
+      it. Being verified without touching your inbox means the fallback ran —
+      which should now be impossible on a deployment, so if it happens,
+      `isHostedDeployment` is returning false somewhere it should not.
 - [ ] Google OAuth client created, redirect URI
       `https://<domain>/api/auth/google/callback` registered
 - [ ] `NEXT_PUBLIC_SITE_URL` set to the real domain (share links, sitemap and
@@ -136,6 +151,14 @@ it says. What remains here is everything a provider cannot supply.
       real, in the right city, and about a kilometre from the truth. An area it
       cannot resolve keeps its row and simply never claims a place is in it, so
       an unresolved name is a coverage gap and not a failure.
+- [ ] `pnpm areas:discover` re-run if a **city** was added, and its output read.
+      This is the other half of the pair and they are easy to confuse:
+      `areas:import` puts a coordinate on a neighbourhood somebody wrote a row
+      for, in the five deep cities. `areas:discover` finds the districts of the
+      other seventy-five from Wikidata and writes them with `rent`, `character`
+      and `traits` **null** — a name and a point, nothing judged. Accept
+      `--city=vienna,krakow` to redo one. It prints every candidate it chose
+      between, and that print is the review step.
 - [ ] Institution submissions queue in `/admin` has somebody who reads it
 - [ ] Official facts re-checked against their sources, and `checked_at` updated
 - [ ] At least one `STUDENTOS_EVENT_FEEDS` calendar per launch city, and

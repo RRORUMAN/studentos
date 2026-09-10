@@ -384,11 +384,6 @@ export const env = {
   },
 
   /**
-   * Comma-separated addresses granted admin. Kept in the environment rather
-   * than as a database flag on purpose: promoting yourself to admin should
-   * require a deploy, not a row edit.
-   */
-  /**
    * Job feeds StudentOS is permitted to read, as a comma-separated list of
    * `slug=url` pairs.
    *
@@ -416,11 +411,46 @@ export const env = {
    */
   eventFeeds: parseEventFeeds(optional(process.env.STUDENTOS_EVENT_FEEDS)),
 
+  /**
+   * Comma-separated addresses granted admin. Kept in the environment rather
+   * than as a database flag on purpose: promoting yourself to admin should
+   * require a deploy, not a row edit.
+   */
   adminEmails: (optional(process.env.ADMIN_EMAILS) ?? "")
     .split(",")
     .map((entry) => entry.trim().toLowerCase())
     .filter(Boolean),
 } as const;
+
+/**
+ * True when this process is a deployment a stranger can reach, rather than
+ * somebody's laptop, a CI runner or a container on a private network.
+ *
+ * WHAT THIS DECIDES, and it is not cosmetic. Two auth flows hand a secret token
+ * to whoever is at the keyboard when email cannot be sent: sign-up redirects
+ * through its own verification link, and a password reset shows the reset link.
+ * Both exist so the product runs with zero configuration, which is a property
+ * worth keeping — and both are account takeover by knowing an email address the
+ * moment the URL is public. So the fallback is allowed here and refused there,
+ * and `src/server/auth/service.ts` is where that is read.
+ *
+ * A Vercel **preview** counts as hosted. A preview URL is guessable, indexed
+ * often enough, and shared in pull requests; "not production" is not the same
+ * claim as "not reachable".
+ *
+ * Deliberately not `NODE_ENV`. `pnpm build && pnpm start` sets it to production
+ * on a laptop and in the Playwright suite, neither of which is published, and a
+ * check that breaks the local flow is a check somebody will delete.
+ */
+export const isHostedDeployment = Boolean(env.hosting.environment) || env.hosting.ephemeralFilesystem;
+
+/**
+ * True when a transactional email can actually leave this deployment.
+ *
+ * Both halves are required: Resend rejects a send with no verified `from`
+ * address, so a key on its own produces a 4xx per sign-up rather than an email.
+ */
+export const canSendEmail = Boolean(env.resend.apiKey && env.resend.from);
 
 /**
  * True when reads and writes go to Postgres rather than a local file.

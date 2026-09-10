@@ -12,6 +12,7 @@ import { destroyAllSessions } from "@/server/auth/session";
 import { findOne, insert, newId, nowIso, remove, update } from "@/server/db";
 import { limits, rateLimit, resetLimit } from "@/server/rate-limit";
 import { absoluteUrl, sendTemplate } from "@/services/email";
+import { canSendEmail, isHostedDeployment } from "@/services/env";
 import type { AuthToken, User } from "@/domain/types";
 
 /**
@@ -41,6 +42,22 @@ import type { AuthToken, User } from "@/domain/types";
 export type AuthResult =
   | { ok: true; userId: string; needsVerification: boolean }
   | { ok: false; error: AuthError; message: string; retryAfterSeconds?: number };
+
+/**
+ * What happened to the one email a flow depends on.
+ *
+ * `shown` is the zero-configuration fallback: the link was handed back to the
+ * caller to put on screen, because nothing could send it and this process is
+ * not published. `unavailable` is the same inability on a deployment a stranger
+ * can reach, where handing the link over would be the account takeover the
+ * fallback is meant to avoid — so nothing is handed over and the interface says
+ * so rather than claiming an email is on its way.
+ *
+ * A single flag would have collapsed the last two into each other, and they are
+ * the two that must never be confused: one is a convenience, the other is a
+ * vulnerability. See `isHostedDeployment`.
+ */
+export type LinkDelivery = "sent" | "shown" | "unavailable";
 
 export type AuthError =
   | "invalid-email"
@@ -155,7 +172,7 @@ async function consumeToken(
 export async function signUp(input: {
   email: string;
   password: string;
-}): Promise<AuthResult & { verifyToken?: string }> {
+}): Promise<AuthResult & { verifyToken?: string; delivery?: LinkDelivery }> {
   const email = normaliseEmail(input.email);
 
   if (!isValidEmail(email)) {
@@ -204,26 +221,30 @@ export async function signUp(input: {
   await insert("users", user);
   const verifyToken = await issueToken(user.id, "verify-email");
 
-  /* Send the link, and only hand it back to the caller when sending failed.
+  /* Send the link. Hand it back only when sending failed AND this process is
+     not one a stranger can reach.
+
      `verifyToken` is what the sign-up action redirects through, so returning it
      unconditionally means every new account verifies itself the moment it is
-     created — which is the correct behaviour on a laptop with no email provider
-     and a hole in production, because it makes the address on the account
-     unproven while the product treats it as proven.
-
-     A deployment with a key and a verified domain therefore never takes that
-     path; one without a key keeps working exactly as it does today, and
-     `/admin` → Services says plainly which of the two it is. */
+     created — the address on the account is unproven while the product treats
+     it as proven. That is the right trade on a laptop with no email provider,
+     where the alternative is a sign-up flow that cannot be walked at all. It is
+     not a trade to make on a public URL, so on a hosted deployment the token
+     stays here: the account is created, signed in and usable, and simply stays
+     unverified until email is configured. `/you` says which it is. */
   const link = absoluteUrl(`/verify-email?token=${encodeURIComponent(verifyToken)}&next=/onboarding`);
   const sent = link
     ? await sendTemplate({ to: email, template: "verify-email", data: { url: link } })
     : ({ ok: false, reason: "no-site-url" } as const);
 
+  const delivery: LinkDelivery = sent.ok ? "sent" : isHostedDeployment ? "unavailable" : "shown";
+
   return {
     ok: true,
     userId: user.id,
     needsVerification: true,
-    verifyToken: sent.ok ? undefined : verifyToken,
+    verifyToken: delivery === "shown" ? verifyToken : undefined,
+    delivery,
   };
 }
 
@@ -286,15 +307,37 @@ export async function verifyEmail(token: string): Promise<AuthResult> {
   return { ok: true, userId: user.id, needsVerification: false };
 }
 
-/** Re-issue a verification link. */
-export async function resendVerification(userId: string): Promise<string | null> {
+/**
+ * Re-issue a verification link, and send it.
+ *
+ * THIS USED TO ONLY MINT A TOKEN. Nothing sent it. The action that calls this
+ * answered "New link sent." on any deployment with a Resend key, and no email
+ * had been composed, let alone posted — the one path that reported success
+ * while doing nothing, which is the exact shape this codebase has a rule
+ * against. The send now happens here, beside the other two, and the caller is
+ * told which of the three things actually happened.
+ *
+ * `null` means there was nothing to do: already verified, no such account, or
+ * asked again too soon. All three are indistinguishable to the caller on
+ * purpose.
+ */
+export async function resendVerification(
+  userId: string,
+): Promise<{ token: string | null; delivery: LinkDelivery } | null> {
   const user = await findOne("users", (row) => row.id === userId);
   if (!user || user.emailVerifiedAt) return null;
 
   const gate = rateLimit(`verify:${userId}`, limits.passwordReset.limit, limits.passwordReset.windowSeconds);
   if (!gate.ok) return null;
 
-  return issueToken(userId, "verify-email");
+  const token = await issueToken(userId, "verify-email");
+  const link = absoluteUrl(`/verify-email?token=${encodeURIComponent(token)}`);
+  const sent = link
+    ? await sendTemplate({ to: user.email, template: "verify-email", data: { url: link } })
+    : ({ ok: false, reason: "no-site-url" } as const);
+
+  const delivery: LinkDelivery = sent.ok ? "sent" : isHostedDeployment ? "unavailable" : "shown";
+  return { token: delivery === "shown" ? token : null, delivery };
 }
 
 /* -------------------------------------------------------------------------- */
@@ -306,29 +349,43 @@ export async function resendVerification(userId: string): Promise<string | null>
  *
  * Always reports success. The returned token is null for an unknown address,
  * and the caller renders the same screen either way.
+ *
+ * `delivery` IS DERIVED FROM THE DEPLOYMENT, NEVER FROM THE ACCOUNT, and that
+ * is the whole reason it is computed twice below rather than once at the end.
+ * If an unknown address answered "sent" while a real one answered
+ * "unavailable", the field this module exists to avoid creating — an
+ * account-existence oracle — would be right there in the response.
  */
 export async function requestPasswordReset(
   emailInput: string,
-): Promise<{ ok: true; token: string | null }> {
+): Promise<{ ok: true; token: string | null; delivery: LinkDelivery }> {
   const email = normaliseEmail(emailInput);
 
+  /* What would happen to a link for an address that does exist. Answered for
+     the addresses that do not, so the two are the same answer. */
+  const wouldBe: LinkDelivery = canSendEmail ? "sent" : isHostedDeployment ? "unavailable" : "shown";
+
   const gate = rateLimit(`reset:${email}`, limits.passwordReset.limit, limits.passwordReset.windowSeconds);
-  if (!gate.ok) return { ok: true, token: null };
+  if (!gate.ok) return { ok: true, token: null, delivery: wouldBe };
 
   const user = await findOne("users", (row) => row.email === email);
-  if (!user) return { ok: true, token: null };
+  if (!user) return { ok: true, token: null, delivery: wouldBe };
 
   const token = await issueToken(user.id, "reset-password");
 
   /* Same rule as verification, and it matters more here: a reset link shown on
      screen to whoever typed the address is a way to take over an account by
-     knowing an email address. Handed back only when it could not be sent. */
+     knowing that address. So it is handed back only when sending failed AND
+     nobody but the person running this process can reach it. On a deployment,
+     a reset with no mail provider is a reset that cannot happen, and the screen
+     says exactly that instead of "a link is on its way". */
   const link = absoluteUrl(`/reset-password?token=${encodeURIComponent(token)}`);
   const sent = link
     ? await sendTemplate({ to: email, template: "reset-password", data: { url: link } })
     : ({ ok: false, reason: "no-site-url" } as const);
 
-  return { ok: true, token: sent.ok ? null : token };
+  const delivery: LinkDelivery = sent.ok ? "sent" : isHostedDeployment ? "unavailable" : "shown";
+  return { ok: true, token: delivery === "shown" ? token : null, delivery };
 }
 
 /**
