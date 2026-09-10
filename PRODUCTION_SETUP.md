@@ -4,9 +4,18 @@ Every external service StudentOS talks to, what it is for, and exactly what you
 have to do. `docs/configuration.md` has longer prose on several of these;
 this file is the checklist you work down on the day.
 
-**Status is as of 2026-09-09.** Supabase is configured and verified (§1); every
-other service below is still unconfigured. `/admin` → **Services** reports the live state
-from the running process, and `pnpm db:verify` proves the database specifically.
+**Status is as of 2026-09-10**, read from `vercel env ls production` rather than
+from memory. Four things are configured: **Supabase** (§1), the **AI key** (§5),
+`NEXT_PUBLIC_SITE_URL` on the vercel.app host (§3) and `CRON_SECRET` (§7).
+Everything else below is unset in production.
+
+The two that block a launch are **Resend** (§2) and **Stripe** (§4), and one
+that takes a minute is **`ADMIN_EMAILS`** (§7) — without it `/admin` redirects
+for every account, including yours, so none of the operator screens this file
+tells you to check are reachable.
+
+`/admin` → **Services** reports the live state from the running process, and
+`pnpm db:verify` proves the database specifically.
 
 Order matters. Storage first: until it is real, nothing else is worth
 configuring, because every account you create while testing Stripe disappears on
@@ -144,13 +153,27 @@ itself.
 Verification and password-reset email. Sent over Resend's REST API — this was a
 stub returning `not-implemented` until 2026-09-07 and is now a real send.
 
-**Read this part.** When email cannot be sent, sign-up falls back to putting the
-verification token in the redirect, so a new account verifies its own address
-immediately. Password reset falls back the same way: the link is handed to
-whoever typed the address. Both are correct on a laptop with no provider and
-both are account-takeover holes in public. They are reachable whenever
-`RESEND_API_KEY` or `RESEND_FROM` is unset, or `NEXT_PUBLIC_SITE_URL` is
-missing so no absolute link can be built. `/admin` → Services says which.
+**Read this part — it changed on 2026-09-10.** When email cannot be sent,
+sign-up used to put the verification token in the redirect (so a new account
+verified its own address) and a password reset handed the link to whoever typed
+the address. Correct on a laptop with no provider; account takeover in public,
+and it was live on the deployment.
+
+Both fallbacks are now refused on any hosted deployment — production and
+preview alike — and kept on a laptop and in the e2e suite, which is the only
+place they were ever meant to run. So the consequence of leaving Resend unset
+is no longer a vulnerability. It is this, and it is still a launch blocker:
+
+- **Nobody can reset a forgotten password.** The screen says the deployment
+  cannot send email rather than "a link is on its way".
+- **No address can be confirmed.** Accounts work; `/you` says the address is
+  unconfirmed and `Confirm your email` reports the same thing.
+
+Everything else — signing up, signing in, the whole product — works without it.
+
+`/admin` → Services says which of the three inputs is missing: `RESEND_API_KEY`,
+`RESEND_FROM`, or `NEXT_PUBLIC_SITE_URL` (with no site URL there is no absolute
+link to put in a message, so nothing is sent even with a valid key).
 
 **REQUIRED ENV VARIABLES**
 ```
@@ -268,9 +291,19 @@ free and turn on billing later — the paywalls fail closed.
 
 ---
 
-## 5. Anthropic (Claude)
+## 5. The AI provider
 
-**STATUS:** Missing — code complete; the gateway calls the Messages API directly
+**STATUS:** **Configured.** `OPENAI_API_KEY` is set in the Vercel production
+environment, so `resolveAi()` reports provider `openai` and the tier ladder is
+gpt-5.4-mini / gpt-5.4 / gpt-5.5. `/admin` → Services names the provider it
+actually resolved, and `pnpm ai:verify` makes two real calls through `runAi`
+itself to prove the key works — worth running, because `runAi` catches every
+provider error and falls back to the Tier 0 answer, which is right for a student
+and invisible for a deploy.
+
+What is still worth doing: **set a spend limit on the vendor's side too.** The
+app's caps are in `/admin`; one protects the product, the other protects the
+card.
 
 **PURPOSE**
 Fluent explanations. **The product is complete without it.** Every surface has a
@@ -297,8 +330,8 @@ AI_DAILY_LIMIT_FREE / _PLUS / _PRO / _MAX    per-student daily calls
 The defaults above are already what the code uses; you only need the key.
 
 **DASHBOARD SETUP**
-1. console.anthropic.com → API Keys → Create.
-2. Billing → set a **monthly spend limit** on the Anthropic side as well. The
+1. platform.openai.com → API keys → Create (or console.anthropic.com → API Keys).
+2. Billing → set a **monthly spend limit** on the vendor's side as well. The
    app's own caps are in `/admin` (defaults €12/day, €200/month) and both should
    exist — one protects the product, the other protects the card.
 3. After a week live: `/admin` → AI cost → **Tier 0 share should be above 70%**.
@@ -306,9 +339,10 @@ The defaults above are already what the code uses; you only need the key.
 
 **REDIRECT/CALLBACK URLs** None.
 
-**WHERE TO GET THE CREDENTIAL** console.anthropic.com → Settings → API Keys.
+**WHERE TO GET THE CREDENTIAL** platform.openai.com → API keys, or
+console.anthropic.com → Settings → API Keys.
 
-**REQUIRED FOR MVP?** **No.**
+**REQUIRED FOR MVP?** **No** — and it is already done.
 
 ---
 
@@ -378,9 +412,19 @@ Hosting.
    Vercel sends it to the scheduled routes; without it they refuse everything.
 
 **SCHEDULED JOBS**
-`vercel.json` declares them and Vercel picks them up on deploy. Today there is
-one: `/api/cron/work-sync` at 04:17 UTC daily. Check it under Project → Cron
-Jobs after the first deploy.
+`vercel.json` declares them and Vercel picks them up on deploy. There are three,
+all daily and all UTC:
+
+| Path | Schedule | What it does |
+| --- | --- | --- |
+| `/api/cron/work-sync` | 04:17 | Pulls the declared job feeds, if any |
+| `/api/cron/data-upkeep` | 04:42 | Expiry, pruning, dedup |
+| `/api/cron/event-sync` | 05:31 | Pulls the declared event calendars, if any |
+
+Check them under Project → Cron Jobs after the first deploy. All three refuse
+every request with no `CRON_SECRET` set, which is the correct closed default and
+also means an unset secret looks exactly like a working schedule that does
+nothing.
 
 **COMMANDS YOU RUN**
 ```bash
