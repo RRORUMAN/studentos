@@ -98,6 +98,30 @@ export default defineConfig({
         STUDENTOS_DATA_DIR: ".data/e2e",
         NODE_ENV: "production",
         OVERPASS_URL: `http://127.0.0.1:${OVERPASS_PORT}/api/interpreter`,
+
+        /**
+         * FORCE THE FILE STORE. This is not belt-and-braces; without it the
+         * suite writes to whatever database `.env.local` points at.
+         *
+         * `STUDENTOS_DATA_DIR` only chooses WHERE the JSON file lives. It does
+         * not choose the file store — `chooseStore()` picks Supabase whenever
+         * it sees a URL and a service role key, and Next loads `.env.local` for
+         * a production build. So the day a developer connects a real database
+         * for the first time, the e2e suite silently stops using the throwaway
+         * directory and starts signing up a hundred test accounts against
+         * production. That is exactly what happened here: 110 accounts named
+         * `e2e-...@universidad.edu` landed in the live database, and the tests
+         * then failed because they were sharing state with it.
+         *
+         * `STUDENTOS_STORE=file` is the documented override in
+         * `src/server/db/access.ts` for precisely this — keeping a
+         * Supabase-configured developer on the local file. Blanking the two
+         * Supabase variables as well means the choice cannot be made even if
+         * the override is ever removed.
+         */
+        STUDENTOS_STORE: "file",
+        NEXT_PUBLIC_SUPABASE_URL: "",
+        SUPABASE_SERVICE_ROLE_KEY: "",
       },
     },
   ],
