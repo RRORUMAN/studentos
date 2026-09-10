@@ -88,6 +88,24 @@ export async function signUpAction(_prev: FormState, formData: FormData): Promis
     };
   }
 
+  /* The address already belongs to somebody. No session, because the password
+     typed here was never compared against theirs — `signUp` hashes it only so
+     the timing matches, and `signIn` is the only function that verifies one.
+     The real owner has been emailed; the visitor is sent to sign in.
+
+     This does tell the visitor that the address is taken, which the previous
+     silence was trying to avoid. That silence cost an account takeover, and
+     the difference was observable anyway: a genuinely new address lands on
+     /onboarding. Enumeration is a trade worth making deliberately; being
+     signed in as somebody else is not. */
+  if (!result.created) {
+    return {
+      ok: false,
+      field: "email",
+      message: "That address already has an account. Sign in instead.",
+    };
+  }
+
   /* A brand-new account is signed in immediately. Making a student verify
      their email *before* they can look around is the single biggest drop-off
      in a sign-up funnel, and the account can do nothing sensitive until

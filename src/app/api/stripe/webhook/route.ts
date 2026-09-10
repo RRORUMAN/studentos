@@ -65,10 +65,29 @@ export async function POST(request: Request): Promise<Response> {
         const userId = session.client_reference_id ?? session.metadata?.userId ?? null;
         if (!userId || !session.subscription) break;
 
-        const subscription = await fetchSubscription(
-          typeof session.subscription === "string" ? session.subscription : session.subscription.id,
-        );
-        if (subscription) await writeSubscription(userId, subscription);
+        const subscriptionId =
+          typeof session.subscription === "string" ? session.subscription : session.subscription.id;
+
+        const subscription = await fetchSubscription(subscriptionId);
+
+        /* THROW, do not shrug.
+           `fetchSubscription` returns null for every failure alike — a network
+           blip, a rate limit, a restricted key missing Subscriptions read. This
+           used to be `if (subscription) await write(...)`, which meant those all
+           fell through to a 200 while the event id stayed in the processed
+           table. Stripe treats 200 as delivered and never sends it again, so a
+           student who had just paid was never granted anything, and the replay
+           that would have fixed it was refused as a duplicate.
+
+           Throwing releases the idempotency claim and answers 500, which is the
+           whole reason that release path exists: Stripe then retries, and the
+           second delivery does the work. A payment taken and silently not
+           granted is the worst outcome this endpoint can produce. */
+        if (!subscription) {
+          throw new Error(`checkout.session.completed: could not retrieve subscription ${subscriptionId}`);
+        }
+
+        await writeSubscription(userId, subscription);
         break;
       }
 

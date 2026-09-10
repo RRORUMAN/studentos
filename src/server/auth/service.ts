@@ -44,6 +44,32 @@ export type AuthResult =
   | { ok: false; error: AuthError; message: string; retryAfterSeconds?: number };
 
 /**
+ * What sign-up produces, and why it is not `AuthResult`.
+ *
+ * `created` is the whole point. Sign-up used to answer a duplicate address with
+ * `{ok: true, userId: <the existing account's id>}` so the response would not
+ * reveal whether the address was taken — but the caller reads a userId as
+ * permission to open a session, so anyone who typed a known address was signed
+ * in as its owner without a password. Anti-enumeration was the intent; account
+ * takeover was the behaviour.
+ *
+ * A duplicate now carries NO user id at all, so there is nothing for a caller
+ * to open a session with even by mistake. The type enforces it: `userId` does
+ * not exist on the `created: false` branch.
+ */
+export type SignUpResult =
+  | {
+      ok: true;
+      created: true;
+      userId: string;
+      needsVerification: boolean;
+      verifyToken?: string;
+      delivery: LinkDelivery;
+    }
+  | { ok: true; created: false }
+  | { ok: false; error: AuthError; message: string; retryAfterSeconds?: number };
+
+/**
  * What happened to the one email a flow depends on.
  *
  * `shown` is the zero-configuration fallback: the link was handed back to the
@@ -172,7 +198,7 @@ async function consumeToken(
 export async function signUp(input: {
   email: string;
   password: string;
-}): Promise<AuthResult & { verifyToken?: string; delivery?: LinkDelivery }> {
+}): Promise<SignUpResult> {
   const email = normaliseEmail(input.email);
 
   if (!isValidEmail(email)) {
@@ -197,14 +223,25 @@ export async function signUp(input: {
   const existing = await findOne("users", (row) => row.email === email);
   if (existing) {
     /* Do the hash anyway so the timing matches the create path, then tell the
-       real owner rather than the person at the keyboard. */
+       real owner rather than the person at the keyboard.
+
+       THE ID STAYS HERE. This branch used to return the existing account's
+       userId with `ok: true`, and the sign-up action reads a userId as licence
+       to call createSession — so submitting a known address with any password
+       that passed the strength check signed the visitor in as that account. No
+       password was ever compared: `signIn` is the only function that does that,
+       and this path never reaches it. Rate limiting made it slower, not
+       impossible, and one attempt was always enough.
+
+       Returning `created: false` with no id makes the takeover unrepresentable
+       rather than merely unwritten. */
     await hashPassword(input.password);
     await sendTemplate({
       to: email,
       template: "duplicate-signup",
       data: { url: absoluteUrl("/signin") ?? "" },
     });
-    return { ok: true, userId: existing.id, needsVerification: !existing.emailVerifiedAt };
+    return { ok: true, created: false };
   }
 
   const user: User = {
@@ -241,6 +278,7 @@ export async function signUp(input: {
 
   return {
     ok: true,
+    created: true,
     userId: user.id,
     needsVerification: true,
     verifyToken: delivery === "shown" ? verifyToken : undefined,
