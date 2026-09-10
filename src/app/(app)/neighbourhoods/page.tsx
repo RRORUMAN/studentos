@@ -81,17 +81,25 @@ export default async function NeighbourhoodsPage() {
           <Matcher citySlug={citySlug} viewer={viewer} />
         ) : (
           <div className="rounded-2xl bg-white p-5 text-[0.9375rem] leading-relaxed text-ink-600 shadow-[var(--shadow-flat)] ring-1 ring-ink-950/6">
-            {/* This used to describe the five-city state — "this works in the
-                cities with full local data" — which was the honest answer when
-                the alternative was inventing seventy-five cities. It is now
-                the answer for a short list of cities whose districts Wikidata
-                genuinely does not record, so it says that instead of implying
-                a tier the student has not qualified for. */}
+            {/* IT SAYS WHAT IS TRUE, NOT WHY.
+                This said "we import every city's districts from Wikidata, and
+                for X it has none we could stand behind" — a specific claim
+                about a specific source, and wrong in two directions. It was
+                wrong for the 181 cities added with the European expansion,
+                where the import had simply never been run and Wikidata had
+                never been asked. It is still wrong for Paris, where the query
+                times out because the city has too many candidates within ten
+                kilometres: the districts exist and we could not fetch them.
+
+                Nine cities land here now, and the four that are not editorial
+                get here for three different reasons. A sentence naming one of
+                them would be false for the others, and the student cannot act
+                on any of it — so it states the fact, which is that there is
+                nothing here yet. */}
             <p>
-              We import every city&rsquo;s districts from Wikidata, and for{" "}
-              {city?.name ?? "your city"} it has none we could stand behind — so rather than
-              list something approximate, there is nothing here. Everything else in the product
-              works normally.
+              We do not have the districts of {city?.name ?? "your city"} yet. Rather than list
+              something approximate, there is nothing here. Everything else in the product works
+              normally.
             </p>
             <Link
               href="/ask/questions"

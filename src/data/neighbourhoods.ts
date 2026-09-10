@@ -415,6 +415,40 @@ export function getNeighbourhood(slug: string): Neighbourhood | undefined {
 }
 
 /**
+ * The coordinate of the area a student said they live in, or null.
+ *
+ * WHY THIS EXISTS. `Profile.homePoint` — the precise coordinate — is written by
+ * nothing. Onboarding sends `homePoint: null` on every path, no screen sets it
+ * afterwards, and relocating clears it, so the only row that has ever carried
+ * one is the seeded demo account. Every consumer was therefore dead for every
+ * real student: the map's home pin, the recommender's distance signal, and the
+ * whole routing chain.
+ *
+ * What the student DOES give us is the area, at onboarding, and areas carry a
+ * coordinate. Accurate to a neighbourhood rather than a doorway, which is
+ * exactly right for ranking one place above another, and is a claim that has
+ * to be labelled when a number is shown — see `readHomeOrigin`.
+ *
+ * MATCHED ON NAME OR SLUG because the two sides disagree by design: the
+ * onboarding chips are display names ("Malasaña") and the rows are keyed by
+ * slug ("malasana"). Matching on one alone would silently find nothing, which
+ * looks identical to a student who never answered.
+ */
+export function areaOrigin(
+  citySlug: string,
+  homeArea: string | null,
+): { lat: number; lng: number; name: string } | null {
+  if (!homeArea) return null;
+
+  const area = neighbourhoodsForCity(citySlug).find(
+    (row) => row.name === homeArea || row.slug === homeArea,
+  );
+  if (!area || area.lat === null || area.lng === null) return null;
+
+  return { lat: area.lat, lng: area.lng, name: area.name };
+}
+
+/**
  * The district names of a city, for anything that shows a list of names.
  *
  * Four screens needed this and four screens each read `City.neighbourhoods` —

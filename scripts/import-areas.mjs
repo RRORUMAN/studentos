@@ -111,6 +111,18 @@ const USER_AGENT = "StudentOS-area-import/1.0 (https://github.com/RRORUMAN/stude
 /** How far from the city's point an area may be and still be that city's. */
 const RADIUS_KM = 10;
 
+/** Great-circle kilometres. Used to re-check what the query already filtered. */
+function haversineKm(a, b) {
+  const R = 6371;
+  const toRad = (deg) => (deg * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.sin(dLng / 2) ** 2 * Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat));
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
 /** Areas kept per city, best first. */
 const PER_CITY = 12;
 
@@ -449,6 +461,32 @@ async function areasFor(city) {
       dropped.push(`${row.name} (${row.id}) has no coordinate on a second look`);
       continue;
     }
+    /**
+     * GATE 6: THE COORDINATE WE ARE ABOUT TO STORE IS INSIDE THE RADIUS.
+     *
+     * Gate 5 is enforced by `wikibase:around` on the query side, and that is
+     * not the same statement as "the point in the row is near the city".
+     * Bremen's "Häfen" (Q884559) has more than one P625 — the district is the
+     * port authority, whose holdings include the overseas terminal at
+     * Bremerhaven — so the geo index matched on one coordinate and the SELECT
+     * returned another, fifty kilometres north. It shipped as a Bremen
+     * neighbourhood, and the unit test that bounds every area to its own city
+     * is what caught it.
+     *
+     * An entity with two coordinates is not rare and the query cannot express
+     * "the one you matched on", so the value is re-checked here, against the
+     * value that will actually be written. A district we cannot place is
+     * dropped and named, not stored at an address in another city.
+     */
+    const km = haversineKm(city, point);
+    if (km > RADIUS_KM) {
+      dropped.push(
+        `${row.name} (${row.id}) stored coordinate is ${km.toFixed(1)} km out — ` +
+          `matched on a different P625 than it returned`,
+      );
+      continue;
+    }
+
     const slug = slugify(row.name, taken);
     if (!slug) {
       dropped.push(`${row.name} (${row.id}) does not reduce to a slug`);

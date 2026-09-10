@@ -5,6 +5,7 @@ import { cache } from "react";
 
 import type { CityContext } from "@/data/types";
 import { defaultCityContext, getCampus, resolveCity } from "@/data/cities";
+import { areaOrigin } from "@/data/neighbourhoods";
 import { type Move, resolveStage, type StageReading } from "@/domain/lifecycle";
 import type { Profile, User } from "@/domain/types";
 import { readSession } from "@/server/auth/session";
@@ -218,4 +219,45 @@ export async function readHomePoint(
 ): Promise<{ lat: number; lng: number } | null> {
   const profile = await findOne("profiles", (row) => row.userId === userId);
   return profile?.homePoint ?? null;
+}
+
+/**
+ * Where to measure a distance from, and how precisely we actually know it.
+ *
+ * NOTHING WRITES `homePoint`. Onboarding sends `homePoint: null` on every
+ * path, no screen sets it afterwards, and `relocate` clears it — the only row
+ * in the product that has ever had one is the seeded demo account. So every
+ * consumer of `readHomePoint` was dead for every real student: the map's home
+ * pin never drew, the recommender's distance signal never fired, and the whole
+ * routing chain had nothing to route from.
+ *
+ * The student does tell us something, though: at onboarding they pick their
+ * AREA, and areas carry a coordinate. That is a real origin, accurate to a
+ * neighbourhood rather than a doorway, and it is enough for the two things
+ * this is used for — ranking one place above another, and saying roughly how
+ * far something is.
+ *
+ * WHICH IS WHY `source` IS RETURNED AND NOT DISCARDED. A ranking may use an
+ * approximate origin silently; a number shown to a student may not. "14 min
+ * walk" from a neighbourhood centroid is not the same claim as from their
+ * front door, and the surface that prints it says which one it has.
+ *
+ * The privacy split survives this. An area centroid is the coarse value that
+ * was always safe to hold; the precise point stays behind `readHomePoint`,
+ * still greppable, still never sent to a client.
+ */
+export async function readHomeOrigin(
+  userId: string,
+): Promise<{ point: { lat: number; lng: number }; source: "home-point" | "area"; areaName: string | null } | null> {
+  const profile = await findOne("profiles", (row) => row.userId === userId);
+  if (!profile) return null;
+
+  if (profile.homePoint) {
+    return { point: profile.homePoint, source: "home-point", areaName: null };
+  }
+
+  const area = areaOrigin(profile.citySlug, profile.homeArea);
+  if (!area) return null;
+
+  return { point: { lat: area.lat, lng: area.lng }, source: "area", areaName: area.name };
 }

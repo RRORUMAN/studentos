@@ -15,7 +15,7 @@ import {
   type Scored,
 } from "@/server/engines/recommend";
 import { loadCityPlaces } from "@/server/queries/places";
-import { readHomePoint } from "@/server/viewer";
+import { readHomeOrigin } from "@/server/viewer";
 
 /**
  * ============================================================================
@@ -131,17 +131,17 @@ export const loadRecommendContext = cache(
     budgetCents: Cents | null;
     now?: Date;
   }): Promise<RecommendContext> => {
-    const [memory, signals, homePoint] = await Promise.all([
+    const [memory, signals, origin] = await Promise.all([
       findMany("memories", (row) => row.userId === input.userId).then((rows) => rows[0] ?? null),
       loadCommunitySignals(input.userId, input.profile.campusSlug),
-      readHomePoint(input.userId),
+      readHomeOrigin(input.userId),
     ]);
 
     return {
       profile: input.profile,
       memory,
       budgetCents: input.budgetCents,
-      homePoint,
+      homePoint: origin?.point ?? null,
       now: input.now ?? new Date(),
       communitySignals: {
         savedByCampus: signals.savedByCampus,
@@ -366,13 +366,15 @@ export async function loadScoredEvents(
   }
   if (filter.test) events = events.filter(filter.test);
 
-  /* The precise home point is read here and immediately reduced to a number of
-     minutes. It never leaves this function. */
-  const home = await readHomePoint(userId);
+  /* The origin is read here and immediately reduced to a number of minutes. It
+     never leaves this function. See `readHomeOrigin`: the precise home point
+     where one exists, and the area the student picked otherwise — which, for
+     ranking, is the difference between a signal and no signal at all. */
+  const home = await readHomeOrigin(userId);
 
   return recommendEvents(events, {
     ...context,
-    walkMinutesFor: (event) => (home ? walkMinutesBetween(home, event.point) : null),
+    walkMinutesFor: (event) => (home ? walkMinutesBetween(home.point, event.point) : null),
   });
 }
 

@@ -15,7 +15,7 @@ import { PlaceSource, ProviderRating, OpenState } from "@/components/product/pla
 import { valueLabel, valueTone } from "@/config/places";
 import { describeProximity, priceLevelLabel, priceLevelNote } from "@/domain/places";
 import { WALK_METRES_PER_MINUTE } from "@/server/engines/recommend";
-import { loadPlace } from "@/server/queries/places";
+import { loadPlace, withRoutedProximity } from "@/server/queries/places";
 import { describe as describeRelation, relate } from "@/domain/graph";
 import { isStudentVerified } from "@/services/db/schema";
 import { betterOption } from "@/server/engines/better-option";
@@ -75,8 +75,8 @@ export default async function PlacePage(props: PageProps<"/discover/[...id]">) {
 
   /* One lookup against the provider, by the id in the URL. A place that no
      longer exists is a 404 rather than a page rendered from a cached name. */
-  const place = await loadPlace(id, viewer.profile.citySlug);
-  if (!place) notFound();
+  const found = await loadPlace(id, viewer.profile.citySlug);
+  if (!found) notFound();
 
   const where = viewer.currency;
   const social = !viewer.profile.socialGoals.includes("private");
@@ -88,6 +88,24 @@ export default async function PlacePage(props: PageProps<"/discover/[...id]">) {
     profile: viewer.profile,
     budgetCents: money$.unset ? null : money$.reading.safeTodayCents,
   });
+
+  /* ---- the one screen worth routing for --------------------------------
+     `withRoutedProximity` exists, is complete, has an OSRM provider and a
+     Google Routes provider behind it and a cache in front of it — and had no
+     caller anywhere in the product. So the whole routing chain was dead code
+     while `/admin` and four documents listed routing as a capability, and
+     every distance the student ever saw was a straight line.
+
+     This is the surface its own comment names: one place, chosen, about to be
+     walked to. Not a list — routing is a request per place, and a feed of
+     forty would be forty requests to answer a question nobody has asked.
+
+     It degrades exactly as before when no provider is configured
+     (`routingConfigured()` returns false and the array comes back untouched)
+     or when the student has not given a home point, so the straight-line
+     distance remains the answer rather than becoming an error. */
+  const home = context.homePoint ?? null;
+  const place = home ? ((await withRoutedProximity([found], home))[0] ?? found) : found;
 
   const [scoredAll, saved, mentions, plans, graph, priceReports] = await Promise.all([
     loadPlaces(context),

@@ -35,6 +35,7 @@ const BASE_URL = `http://127.0.0.1:${PORT}`;
  * the suite.
  */
 const OVERPASS_PORT = 3312;
+const OSRM_PORT = 3313;
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -76,6 +77,16 @@ export default defineConfig({
       timeout: 20_000,
     },
     {
+      /* A routing provider, so the suite exercises the routing chain at all.
+         Until this existed nothing ever called it: `withRoutedProximity` had
+         no caller, so the providers, the cache and the straight-line fallback
+         were dead code that /admin listed as a working capability. */
+      command: `node tests/e2e/osrm-server.mjs ${OSRM_PORT}`,
+      url: `http://127.0.0.1:${OSRM_PORT}/route/v1/foot/0,0;1,1`,
+      reuseExistingServer: !process.env.CI,
+      timeout: 20_000,
+    },
+    {
       /* Production build, so the tests exercise what actually ships. */
       command: `pnpm build && pnpm start --port ${PORT}`,
       url: BASE_URL,
@@ -98,6 +109,7 @@ export default defineConfig({
         STUDENTOS_DATA_DIR: ".data/e2e",
         NODE_ENV: "production",
         OVERPASS_URL: `http://127.0.0.1:${OVERPASS_PORT}/api/interpreter`,
+        ROUTING_OSRM_URL: `http://127.0.0.1:${OSRM_PORT}`,
 
         /**
          * FORCE THE FILE STORE. This is not belt-and-braces; without it the
