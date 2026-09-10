@@ -39,7 +39,27 @@ import { store, storeKind, transaction } from "@/server/db/access";
  * ============================================================================
  */
 
-store.registerSeeder(seedDatabase);
+/**
+ * SAMPLE CONTENT IS A MODE, NOT A LABEL.
+ *
+ * This registration used to be unconditional, and `isSampleContent` decided
+ * only whether the UI drew a notice. So a production deployment that had done
+ * the honest thing — reviewed its cities and set `STUDENTOS_CONTENT_MODE=real`
+ * — got the notice removed and the invented rows written anyway: seeded
+ * events, deals, community posts, marketplace listings and price observations,
+ * indistinguishable to a student from the real thing precisely because the
+ * notice was now gone. The flag made the product quieter about sample content
+ * without making any less of it.
+ *
+ * The gate belongs here, at the only place that can prevent the rows existing.
+ * In real mode the store has no seeder at all and `readOrSeed` writes an empty
+ * database, which is what a city with nothing in it honestly is.
+ *
+ * The migrator stays registered in both modes — it is how a real store gains a
+ * table that did not exist when it was written — and gates its own seeding
+ * call internally for the same reason.
+ */
+if (isSampleContent) store.registerSeeder(seedDatabase);
 store.registerMigrator(migrateDatabase);
 
 /**

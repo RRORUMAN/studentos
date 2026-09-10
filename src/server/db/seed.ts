@@ -4,10 +4,12 @@ import { createHash } from "node:crypto";
 
 import { campuses, cities } from "@/data/cities";
 import { defaultPrivacy } from "@/domain/types";
+import { isSampleContent } from "@/services/env";
 import { seedDemoAccount } from "@/server/db/seed-demo";
 import { rollSeededGigsForward, seedWork } from "@/server/db/seed-work";
 import { seedTruth } from "@/server/db/seed-truth";
 import type { Database } from "@/server/db/store";
+import { emptyDatabase } from "@/server/db/schema";
 import {
   loopChannels,
   seedChallenges,
@@ -528,10 +530,130 @@ export async function seedDatabase(db: Database): Promise<void> {
  */
 export async function migrateDatabase(db: Database, from: number): Promise<void> {
   /* v2 introduced Work. A store written before it has an empty board, which
-     reads exactly like a city where nobody has posted — so seed it. */
-  if (from < 2 && db.opportunities.length === 0) {
+     reads exactly like a city where nobody has posted — so seed it.
+
+     Only in sample mode. The argument for backfilling here is that an empty
+     board is indistinguishable from a quiet one, and that argument is a demo
+     argument: on a real deployment an empty board IS a quiet one, and filling
+     it with invented gigs so it looks busier is the fabrication the content
+     mode exists to prevent. A real store crossing this version gets the empty
+     table it should have. */
+  if (isSampleContent && from < 2 && db.opportunities.length === 0) {
     seedWork(db, { seedId, iso, daysAgo, daysFromNow });
   }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Undoing a seed                                                              */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Every row id this seeder produces, by table.
+ *
+ * Built by running the seeder into a throwaway empty database and reading the
+ * ids back out. That is deliberately not a rule about how a seeded id *looks*:
+ * `seedId` happens to be a sha256 formatted as a uuid, and a heuristic over
+ * that shape would be a guess about which of a student's rows to delete. This
+ * is not a guess. A row is seeded if and only if this seeder, run now, from
+ * this content file, produces its id.
+ *
+ * The demo account is excluded — `seedDemoAccount` only writes when an
+ * operator set a password for it, and if they did, it is a real login they
+ * are using rather than sample content pretending to be a city.
+ */
+async function seededIdsByTable(): Promise<Map<string, Set<string>>> {
+  const probe = emptyDatabase();
+
+  seedAuthors(probe, new Date());
+  seedEventRows(probe, new Date());
+  seedDealRows(probe, new Date());
+  seedFactRows(probe, new Date());
+  seedGuideRows(probe, new Date());
+  seedCommunityRows(probe, new Date());
+  seedPosts(probe);
+  seedChat(probe);
+  seedListings(probe);
+  seedPrices(probe);
+  seedChallengeRows(probe, new Date());
+  seedTruth(probe, { seedId, iso, daysAgo });
+  seedWork(probe, { seedId, iso, daysAgo, daysFromNow });
+
+  const ids = new Map<string, Set<string>>();
+  for (const [table, rows] of Object.entries(probe)) {
+    if (!Array.isArray(rows)) continue;
+    const set = new Set<string>();
+    for (const row of rows) {
+      const id = (row as { id?: unknown }).id;
+      if (typeof id === "string") set.add(id);
+    }
+    if (set.size > 0) ids.set(table, set);
+  }
+  return ids;
+}
+
+export type SeedPurge = {
+  /** Rows removed, by table. Only tables that lost rows appear. */
+  removed: Record<string, number>;
+  total: number;
+};
+
+/**
+ * Remove the rows this seeder wrote, and only those.
+ *
+ * The counterpart to gating the seeder: gating stops a *new* deployment
+ * inventing content, and does nothing for a store that was seeded before
+ * somebody flipped the mode. Without this there was no way back at all —
+ * the invented events and the "student reports" that no student made simply
+ * stayed, with the notice that disclosed them now switched off.
+ *
+ * WHAT IT WILL NOT TOUCH. A student's own rows are not in the probe, so they
+ * are not in the id set, so they cannot be selected. Rows that reference a
+ * seeded row — a real student's RSVP to a seeded event, a save, a comment —
+ * are left alone here rather than cascaded: deleting a student's row because
+ * of what it points at is exactly the "never delete legitimate user data"
+ * line, and a dangling reference reads as an event that has passed, which
+ * every surface already handles.
+ */
+export async function purgeSeededRows(db: Database): Promise<SeedPurge> {
+  const seeded = await seededIdsByTable();
+  const removed: Record<string, number> = {};
+  let total = 0;
+
+  for (const [table, ids] of seeded) {
+    const rows = (db as unknown as Record<string, unknown>)[table];
+    if (!Array.isArray(rows)) continue;
+
+    const kept = rows.filter((row) => !ids.has((row as { id?: string }).id ?? ""));
+    const gone = rows.length - kept.length;
+    if (gone === 0) continue;
+
+    /* Replace in place: the store holds a reference to the array. */
+    rows.length = 0;
+    for (const row of kept) rows.push(row);
+
+    removed[table] = gone;
+    total += gone;
+  }
+
+  return { removed, total };
+}
+
+/** How many seeded rows are present, without removing anything. */
+export async function countSeededRows(db: Database): Promise<SeedPurge> {
+  const seeded = await seededIdsByTable();
+  const removed: Record<string, number> = {};
+  let total = 0;
+
+  for (const [table, ids] of seeded) {
+    const rows = (db as unknown as Record<string, unknown>)[table];
+    if (!Array.isArray(rows)) continue;
+    const hits = rows.filter((row) => ids.has((row as { id?: string }).id ?? "")).length;
+    if (hits === 0) continue;
+    removed[table] = hits;
+    total += hits;
+  }
+
+  return { removed, total };
 }
 
 /* -------------------------------------------------------------------------- */
