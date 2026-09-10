@@ -36,6 +36,7 @@ import {
   snoozeLifeOpsItem,
 } from "@/server/actions/lifeops";
 import { cn } from "@/lib/utils";
+import { useDialog } from "@/components/ui/use-dialog";
 
 /**
  * ============================================================================
@@ -485,9 +486,14 @@ function AddSheet({
     };
   }, [onClose]);
 
+  /* `aria-modal` claims nothing behind this is reachable; the trap is what
+     makes that true. See components/ui/use-dialog.ts. */
+  const dialogRef = useDialog(true);
+
   return (
     <div className="fixed inset-0 z-60 flex items-end justify-center bg-ink-950/40 sm:items-center" onClick={onClose}>
       <form
+        ref={dialogRef as React.RefObject<HTMLFormElement>}
         role="dialog"
         aria-modal="true"
         aria-labelledby="add-task-title"

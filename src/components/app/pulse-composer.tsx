@@ -10,6 +10,7 @@ import { useToast } from "@/components/ui/toast";
 import { createPost } from "@/server/actions/loop";
 import type { AttachmentCard } from "@/server/queries/loop";
 import { cn } from "@/lib/utils";
+import { useDialog } from "@/components/ui/use-dialog";
 
 /**
  * ============================================================================
@@ -365,6 +366,10 @@ export function ComposerSheet(props: ComposerProps) {
     };
   }, [open]);
 
+  /* `aria-modal` claims nothing behind this is reachable; the trap is what
+     makes that true. See components/ui/use-dialog.ts. */
+  const dialogRef = useDialog(true);
+
   return (
     <>
       <button
@@ -383,7 +388,13 @@ export function ComposerSheet(props: ComposerProps) {
           sheet at z-50 was painted over and its submit button could not be
           tapped. */}
       {open ? (
-        <div className="fixed inset-0 z-60 lg:hidden" role="dialog" aria-modal="true" aria-label="New post">
+        <div
+          ref={dialogRef as React.RefObject<HTMLDivElement>}
+          className="fixed inset-0 z-60 lg:hidden"
+          role="dialog"
+          aria-modal="true"
+          aria-label="New post"
+        >
           <button
             type="button"
             aria-label="Close"

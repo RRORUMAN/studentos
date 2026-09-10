@@ -11,6 +11,7 @@ import {
   updateTransaction,
 } from "@/server/actions/budget";
 import { cn, money } from "@/lib/utils";
+import { useDialog } from "@/components/ui/use-dialog";
 
 /**
  * ============================================================================
@@ -64,6 +65,10 @@ function Sheet({
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
 
+  /* `aria-modal` claims nothing behind this is reachable; the trap is what
+     makes that true. Mounted only while open, so `true` is the open state. */
+  const dialogRef = useDialog(true);
+
   return (
     <div className="fixed inset-0 z-100 flex items-end justify-center sm:items-center">
       <button
@@ -73,6 +78,7 @@ function Sheet({
         className="absolute inset-0 bg-ink-950/40 backdrop-blur-[2px]"
       />
       <section
+        ref={dialogRef as React.RefObject<HTMLElement>}
         role="dialog"
         aria-modal="true"
         aria-label={title}

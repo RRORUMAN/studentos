@@ -25,9 +25,30 @@
   --color-ink-100: #ececf1;
   --color-ink-200: #dcdce4;
   --color-ink-300: #bfbfcd;
-  --color-ink-400: #90909f;
-  --color-ink-500: #6d6d7d;
-  --color-ink-600: #4f4f5d;
+  /* ---- the muted end, rebalanced for contrast ----------------------------
+     `ink-400` was #90909f, which is 3.15:1 on a white card and 3.01:1 on the
+     paper background. WCAG AA wants 4.5:1 for body text, so it failed — in 485
+     places, on almost every screen, for exactly the secondary text a student
+     reads when they are tired: the price note under a card, the "checked on"
+     date, the hint under a form field.
+
+     Darkening 400 alone would have put it within four hex units of 500 and
+     collapsed the ramp, so the three muted steps moved together. The spacing
+     between adjacent steps is now 1.37, 1.41 and 1.25 — more even than the
+     scale it replaces — and all four clear AA:
+
+       ink-400  #71717f   4.60:1 on paper   4.80:1 on white
+       ink-500  #5c5c6a   6.30:1            6.57:1
+       ink-600  #464653   8.90:1            9.29:1
+       ink-700  #383843  11.09:1           11.57:1   (unchanged)
+
+     `ink-300` is deliberately untouched. It is borders, dividers and the
+     chevrons beside links — never body text — and darkening it would thicken
+     every rule in the product. The handful of places using it FOR text are a
+     separate, smaller fix. ---------------------------------------------- */
+  --color-ink-400: #71717f;
+  --color-ink-500: #5c5c6a;
+  --color-ink-600: #464653;
   --color-ink-700: #383843;
   --color-ink-800: #232330;
   --color-ink-900: #15151d;

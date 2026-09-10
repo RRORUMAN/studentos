@@ -95,3 +95,40 @@ test.describe("quick command", () => {
     await expect(options.first()).toContainText("Explore");
   });
 });
+
+test("keeps the keyboard inside the dialog", async ({ page }) => {
+  await signUpAndOnboard(page);
+
+  /**
+   * `role="dialog"` with `aria-modal="true"` is a promise to assistive
+   * technology that nothing behind the overlay is reachable. Five dialogs in
+   * this product made that promise and none of them kept it: Tab walked
+   * straight out of the panel into the page underneath, where a screen reader
+   * user was then reading content the dialog claimed had been sealed off.
+   */
+  const trigger = page.getByRole("button", { name: "Search StudentOS" });
+  await trigger.click();
+  const dialog = page.getByRole("dialog", { name: "Search StudentOS" });
+  await expect(dialog).toBeVisible();
+
+  /* Twenty tabs is far more than the panel holds, so an untrapped dialog is
+     certain to have escaped by the end of it. */
+  for (let press = 0; press < 20; press += 1) {
+    await page.keyboard.press("Tab");
+    const inside = await dialog.evaluate((node) => node.contains(document.activeElement));
+    expect(inside, `focus left the dialog after ${press + 1} tabs`).toBe(true);
+  }
+
+  /* And Shift+Tab wraps backwards rather than falling out of the top. */
+  for (let press = 0; press < 10; press += 1) {
+    await page.keyboard.press("Shift+Tab");
+    const inside = await dialog.evaluate((node) => node.contains(document.activeElement));
+    expect(inside, `focus left the dialog after ${press + 1} back-tabs`).toBe(true);
+  }
+
+  /* Closing hands focus back to what opened it, rather than dropping the
+     student at the top of the document. */
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect(trigger).toBeFocused();
+});

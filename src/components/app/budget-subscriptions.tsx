@@ -12,6 +12,7 @@ import {
   updateRecurring,
 } from "@/server/actions/budget";
 import { cn, money } from "@/lib/utils";
+import { useDialog } from "@/components/ui/use-dialog";
 
 /**
  * ============================================================================
@@ -359,10 +360,15 @@ function RecurringSheet({
     });
   };
 
+  /* `aria-modal` claims nothing behind this is reachable; the trap is what
+     makes that true. See components/ui/use-dialog.ts. */
+  const dialogRef = useDialog(true);
+
   return (
     <div className="fixed inset-0 z-100 flex items-end justify-center sm:items-center">
       <button type="button" aria-label="Close" onClick={onClose} className="absolute inset-0 bg-ink-950/40" />
       <section
+        ref={dialogRef as React.RefObject<HTMLElement>}
         role="dialog"
         aria-modal="true"
         aria-label={title}

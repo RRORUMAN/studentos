@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import { searchDestinations } from "@/domain/command";
+import { useDialog } from "@/components/ui/use-dialog";
 import { cn } from "@/lib/utils";
 
 /**
@@ -68,6 +69,7 @@ export function QuickCommand() {
 
   const inputRef = useRef<HTMLInputElement>(null);
 
+
   const results = useMemo(() => searchDestinations(query), [query]);
 
   /* The Ask row exists only once something has been typed. With an empty
@@ -80,6 +82,12 @@ export function QuickCommand() {
     setQuery("");
     setActive(0);
   }, []);
+
+  /* role="dialog" with aria-modal is a promise that nothing behind it is
+     reachable. Without a trap, Tab walked straight out of the panel and into
+     the page underneath. autoFocus is off because the effect below focuses the
+     input, which is the field a student wants, not the first button. */
+  const dialogRef = useDialog(open, { onEscape: close, autoFocus: false });
 
   const go = useCallback(
     (index: number) => {
@@ -157,7 +165,13 @@ export function QuickCommand() {
       {/* z-60 for the same reason the composer uses it: the bottom navigation
           is z-50 and paints over anything below it. */}
       {open ? (
-        <div className="fixed inset-0 z-60" role="dialog" aria-modal="true" aria-label="Search StudentOS">
+        <div
+          ref={dialogRef as React.RefObject<HTMLDivElement>}
+          className="fixed inset-0 z-60"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Search StudentOS"
+        >
           <button
             type="button"
             aria-label="Close search"
