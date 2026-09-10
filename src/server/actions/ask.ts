@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { factFreshness } from "@/domain/knowledge";
 import { money as formatMoney } from "@/lib/utils";
 import { degradedCopy } from "@/server/ai/config";
-import { BASE_SYSTEM, logTierZero, runAi } from "@/server/ai/gateway";
+import { BASE_SYSTEM, logTierZero, runAi, untrusted } from "@/server/ai/gateway";
 import { runTools, type ToolCard, type ToolName, type ToolResult } from "@/server/ai/tools";
 import { findMany, insert, newId, nowIso, remove } from "@/server/db";
 import { canAfford } from "@/server/engines/afford";
@@ -387,9 +387,15 @@ export async function askStudentOS(query: string): Promise<AskResult> {
         },
         system: BASE_SYSTEM,
         prompt: [
-          `Question: ${query}`,
+          /* Both of these are fenced, and for different reasons. The rows carry
+             text other students and third-party feeds wrote. The question is
+             the student's own, and they are entitled to ask anything — but not
+             to redefine what the model may claim about the city to them, which
+             an unfenced "ignore your instructions" would attempt. Neither is
+             the operator. See `untrusted` in the gateway. */
+          `Question: ${untrusted(query)}`,
           `Rows selected (do not add to these):`,
-          JSON.stringify(assembled.lines, null, 1),
+          untrusted(JSON.stringify(assembled.lines, null, 1)),
           `Known total: ${assembled.cost.totalCents} cents. Estimated on top: ${assembled.cost.estimateLowCents}-${assembled.cost.estimateHighCents} cents. Budget: ${budgetCents ?? "unstated"}.`,
           "",
           "Write two short sentences summarising this. State the known total.",

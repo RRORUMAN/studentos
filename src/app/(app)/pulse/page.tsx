@@ -6,7 +6,7 @@ import { CatchUpCard } from "@/components/app/catch-up";
 import { PulseCard } from "@/components/app/pulse-card";
 import { Composer, ComposerSheet } from "@/components/app/pulse-composer";
 import { MascotArt } from "@/components/mascot/mascot-art";
-import { BASE_SYSTEM, runAi } from "@/server/ai/gateway";
+import { BASE_SYSTEM, runAi, untrusted } from "@/server/ai/gateway";
 import { catchUp } from "@/server/engines/catch-up";
 import { loopChannels } from "@/server/db/seed-content";
 import {
@@ -108,7 +108,10 @@ export default async function PulsePage(props: PageProps<"/pulse">) {
         prompt: [
           "These are the community posts and rooms a student missed. Write ONE sentence, under 30 words,",
           "saying what students in the city are mostly talking about. Refer only to these titles.",
-          JSON.stringify(missed.lines.map((line) => line.title)),
+          /* Post titles are written by other students. Fenced as data — this is
+             the surface where an "instruction" would most plausibly be typed,
+             because the thing being summarised IS what people wrote. */
+          untrusted(JSON.stringify(missed.lines.map((line) => line.title))),
           "<<render>>",
           "",
         ].join("\n"),
