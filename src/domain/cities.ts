@@ -37,6 +37,8 @@ export type SearchableCity = {
   countryCode: string;
   /** True for a city with seeded local content behind it. Breaks ties. */
   deep?: boolean;
+  /** Municipality population, where the geography import found one. Breaks ties. */
+  population?: number | null;
 };
 
 export type CityHit<T extends SearchableCity> = {
@@ -162,7 +164,34 @@ export function searchCities<T extends SearchableCity>(
     hits.push({ city, score, matched });
   }
 
+  /**
+   * TIES BREAK ON SIZE, NOT ON THE ALPHABET.
+   *
+   * Every city matching "spain" scores identically — the query said nothing to
+   * tell them apart — so the tiebreak decides what a student actually sees.
+   * Alphabetical order was harmless while Spain had eight cities and all eight
+   * fitted under the limit. At twenty-two European countries and 225 cities it
+   * stopped being harmless: a country query returns an alphabetical dozen, and
+   * Seville, Valencia and Zaragoza became unreachable by typing "Spain" while
+   * Alicante and Córdoba were not. The limit had quietly turned into an
+   * editorial decision made by spelling.
+   *
+   * Population is the honest proxy for "did they mean this one" — it is
+   * already imported per city from Wikidata, and the alternative signals
+   * (student numbers, how many people picked it) are things this product
+   * either does not know or must not invent. A city with no population figure
+   * sorts last rather than first, then alphabetically, so the order stays
+   * deterministic and the tests can pin it.
+   *
+   * Name matches are unaffected: they outscore country matches by design, and
+   * this only orders within a score.
+   */
   return hits
-    .sort((a, b) => b.score - a.score || a.city.name.localeCompare(b.city.name))
+    .sort(
+      (a, b) =>
+        b.score - a.score ||
+        (b.city.population ?? 0) - (a.city.population ?? 0) ||
+        a.city.name.localeCompare(b.city.name),
+    )
     .slice(0, limit);
 }

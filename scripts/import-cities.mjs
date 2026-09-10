@@ -120,6 +120,191 @@ const CITIES = [
   { key: "zurich", search: "Zürich", country: "Q39" },
   { key: "istanbul", search: "Istanbul", country: "Q43" },
   { key: "athens", search: "Athens", country: "Q41" },
+  { key: "zaragoza", search: "Zaragoza", country: "Q29" },
+  { key: "murcia", search: "Murcia", country: "Q29" },
+  { key: "alicante", search: "Alicante", country: "Q29" },
+  { key: "santiago-de-compostela", search: "Santiago de Compostela", country: "Q29" },
+  { key: "pamplona", search: "Pamplona", country: "Q29" },
+  /* Two Spanish entities carry this name — the municipality and the city that
+     is its capital — so the search is ambiguous by the script's own rule and
+     it correctly refuses to pick. Pinned to the municipality, which is the
+     unit every other population figure in this file uses. */
+  { key: "cordoba", search: "Córdoba", country: "Q29", id: "Q5818" },
+  { key: "valladolid", search: "Valladolid", country: "Q29" },
+  { key: "oviedo", search: "Oviedo", country: "Q29" },
+  { key: "san-sebastian", search: "Donostia-San Sebastián", country: "Q29" },
+  { key: "palma", search: "Palma de Mallorca", country: "Q29" },
+  { key: "birmingham", search: "Birmingham", country: "Q145" },
+  { key: "leeds", search: "Leeds", country: "Q145" },
+  { key: "glasgow", search: "Glasgow", country: "Q145" },
+  { key: "liverpool", search: "Liverpool", country: "Q145" },
+  { key: "bristol", search: "Bristol", country: "Q145" },
+  { key: "nottingham", search: "Nottingham", country: "Q145" },
+  { key: "sheffield", search: "Sheffield", country: "Q145" },
+  { key: "newcastle", search: "Newcastle upon Tyne", country: "Q145" },
+  { key: "oxford", search: "Oxford", country: "Q145" },
+  { key: "cambridge", search: "Cambridge", country: "Q145" },
+  { key: "cardiff", search: "Cardiff", country: "Q145" },
+  { key: "coventry", search: "Coventry", country: "Q145" },
+  { key: "southampton", search: "Southampton", country: "Q145" },
+  { key: "aberdeen", search: "Aberdeen", country: "Q145" },
+  { key: "belfast", search: "Belfast", country: "Q145" },
+  { key: "york", search: "York", country: "Q145" },
+  { key: "bath", search: "Bath, Somerset", country: "Q145" },
+  { key: "exeter", search: "Exeter", country: "Q145" },
+  { key: "leicester", search: "Leicester", country: "Q145" },
+  { key: "brighton", search: "Brighton and Hove", country: "Q145" },
+  { key: "groningen", search: "Groningen", country: "Q55" },
+  { key: "leiden", search: "Leiden", country: "Q55" },
+  { key: "eindhoven", search: "Eindhoven", country: "Q55" },
+  { key: "delft", search: "Delft", country: "Q55" },
+  { key: "maastricht", search: "Maastricht", country: "Q55" },
+  { key: "tilburg", search: "Tilburg", country: "Q55" },
+  { key: "nijmegen", search: "Nijmegen", country: "Q55" },
+  { key: "enschede", search: "Enschede", country: "Q55" },
+  { key: "wageningen", search: "Wageningen", country: "Q55" },
+  { key: "the-hague", search: "The Hague", country: "Q55" },
+  { key: "heidelberg", search: "Heidelberg", country: "Q183" },
+  { key: "leipzig", search: "Leipzig", country: "Q183" },
+  { key: "dresden", search: "Dresden", country: "Q183" },
+  { key: "stuttgart", search: "Stuttgart", country: "Q183" },
+  { key: "dusseldorf", search: "Düsseldorf", country: "Q183" },
+  { key: "aachen", search: "Aachen", country: "Q183" },
+  { key: "bonn", search: "Bonn", country: "Q183" },
+  { key: "freiburg", search: "Freiburg im Breisgau", country: "Q183" },
+  { key: "munster", search: "Münster", country: "Q183" },
+  { key: "gottingen", search: "Göttingen", country: "Q183" },
+  { key: "tubingen", search: "Tübingen", country: "Q183" },
+  { key: "mannheim", search: "Mannheim", country: "Q183" },
+  { key: "karlsruhe", search: "Karlsruhe", country: "Q183" },
+  { key: "nuremberg", search: "Nuremberg", country: "Q183" },
+  { key: "bremen", search: "Bremen", country: "Q183" },
+  { key: "hannover", search: "Hannover", country: "Q183" },
+  { key: "bochum", search: "Bochum", country: "Q183" },
+  { key: "darmstadt", search: "Darmstadt", country: "Q183" },
+  { key: "jena", search: "Jena", country: "Q183" },
+  { key: "konstanz", search: "Konstanz", country: "Q183" },
+  { key: "marseille", search: "Marseille", country: "Q142" },
+  { key: "bordeaux", search: "Bordeaux", country: "Q142" },
+  { key: "lille", search: "Lille", country: "Q142" },
+  { key: "montpellier", search: "Montpellier", country: "Q142" },
+  { key: "nantes", search: "Nantes", country: "Q142" },
+  { key: "strasbourg", search: "Strasbourg", country: "Q142" },
+  { key: "grenoble", search: "Grenoble", country: "Q142" },
+  { key: "nice", search: "Nice", country: "Q142" },
+  { key: "rennes", search: "Rennes", country: "Q142" },
+  { key: "aix-en-provence", search: "Aix-en-Provence", country: "Q142" },
+  { key: "naples", search: "Naples", country: "Q38" },
+  { key: "padua", search: "Padua", country: "Q38" },
+  { key: "pisa", search: "Pisa", country: "Q38" },
+  { key: "venice", search: "Venice", country: "Q38" },
+  { key: "genoa", search: "Genoa", country: "Q38" },
+  { key: "bari", search: "Bari", country: "Q38" },
+  { key: "catania", search: "Catania", country: "Q38" },
+  { key: "pavia", search: "Pavia", country: "Q38" },
+  { key: "perugia", search: "Perugia", country: "Q38" },
+  { key: "siena", search: "Siena", country: "Q38" },
+  { key: "trento", search: "Trento", country: "Q38" },
+  { key: "coimbra", search: "Coimbra", country: "Q45" },
+  { key: "braga", search: "Braga", country: "Q45" },
+  { key: "aveiro", search: "Aveiro", country: "Q45" },
+  { key: "leuven", search: "Leuven", country: "Q31" },
+  { key: "ghent", search: "Ghent", country: "Q31" },
+  { key: "antwerp", search: "Antwerp", country: "Q31" },
+  { key: "liege", search: "Liège", country: "Q31" },
+  { key: "louvain-la-neuve", search: "Louvain-la-Neuve", country: "Q31" },
+  { key: "graz", search: "Graz", country: "Q40" },
+  { key: "innsbruck", search: "Innsbruck", country: "Q40" },
+  { key: "salzburg", search: "Salzburg", country: "Q40" },
+  { key: "linz", search: "Linz", country: "Q40" },
+  { key: "geneva", search: "Geneva", country: "Q39" },
+  { key: "lausanne", search: "Lausanne", country: "Q39" },
+  { key: "bern", search: "Bern", country: "Q39" },
+  { key: "basel", search: "Basel", country: "Q39" },
+  { key: "st-gallen", search: "St. Gallen", country: "Q39" },
+  { key: "lugano", search: "Lugano", country: "Q39" },
+  { key: "cork", search: "Cork", country: "Q27" },
+  { key: "galway", search: "Galway", country: "Q27" },
+  { key: "limerick", search: "Limerick", country: "Q27" },
+  { key: "maynooth", search: "Maynooth", country: "Q27" },
+  { key: "aarhus", search: "Aarhus", country: "Q35" },
+  { key: "odense", search: "Odense", country: "Q35" },
+  { key: "aalborg", search: "Aalborg", country: "Q35" },
+  { key: "gothenburg", search: "Gothenburg", country: "Q34" },
+  { key: "lund", search: "Lund", country: "Q34" },
+  { key: "uppsala", search: "Uppsala", country: "Q34" },
+  { key: "malmo", search: "Malmö", country: "Q34" },
+  { key: "linkoping", search: "Linköping", country: "Q34" },
+  { key: "umea", search: "Umeå", country: "Q34" },
+  { key: "bergen", search: "Bergen", country: "Q20" },
+  { key: "trondheim", search: "Trondheim", country: "Q20" },
+  { key: "tromso", search: "Tromsø", country: "Q20" },
+  { key: "tampere", search: "Tampere", country: "Q33" },
+  { key: "turku", search: "Turku", country: "Q33" },
+  { key: "oulu", search: "Oulu", country: "Q33" },
+  { key: "jyvaskyla", search: "Jyväskylä", country: "Q33" },
+  { key: "tartu", search: "Tartu", country: "Q191" },
+  { key: "wroclaw", search: "Wrocław", country: "Q36" },
+  { key: "poznan", search: "Poznań", country: "Q36" },
+  { key: "gdansk", search: "Gdańsk", country: "Q36" },
+  { key: "lodz", search: "Łódź", country: "Q36" },
+  { key: "lublin", search: "Lublin", country: "Q36" },
+  { key: "katowice", search: "Katowice", country: "Q36" },
+  { key: "brno", search: "Brno", country: "Q213" },
+  { key: "olomouc", search: "Olomouc", country: "Q213" },
+  { key: "ostrava", search: "Ostrava", country: "Q213" },
+  { key: "debrecen", search: "Debrecen", country: "Q28" },
+  { key: "szeged", search: "Szeged", country: "Q28" },
+  { key: "pecs", search: "Pécs", country: "Q28" },
+  { key: "thessaloniki", search: "Thessaloniki", country: "Q41" },
+  { key: "patras", search: "Patras", country: "Q41" },
+  { key: "heraklion", search: "Heraklion", country: "Q41" },
+  { key: "ankara", search: "Ankara", country: "Q43" },
+  { key: "izmir", search: "İzmir", country: "Q43" },
+  { key: "antalya", search: "Antalya", country: "Q43" },
+  { key: "bucharest", search: "Bucharest", country: "Q218" },
+  { key: "cluj-napoca", search: "Cluj-Napoca", country: "Q218" },
+  { key: "timisoara", search: "Timișoara", country: "Q218" },
+  { key: "iasi", search: "Iași", country: "Q218" },
+  { key: "brasov", search: "Brașov", country: "Q218" },
+  { key: "sofia", search: "Sofia", country: "Q219" },
+  { key: "plovdiv", search: "Plovdiv", country: "Q219" },
+  { key: "varna", search: "Varna", country: "Q219" },
+  { key: "zagreb", search: "Zagreb", country: "Q224" },
+  { key: "split", search: "Split", country: "Q224" },
+  { key: "rijeka", search: "Rijeka", country: "Q224" },
+  { key: "osijek", search: "Osijek", country: "Q224" },
+  { key: "belgrade", search: "Belgrade", country: "Q403" },
+  { key: "novi-sad", search: "Novi Sad", country: "Q403" },
+  { key: "nis", search: "Niš", country: "Q403" },
+  { key: "bratislava", search: "Bratislava", country: "Q214" },
+  { key: "kosice", search: "Košice", country: "Q214" },
+  { key: "ljubljana", search: "Ljubljana", country: "Q215" },
+  { key: "maribor", search: "Maribor", country: "Q215" },
+  { key: "vilnius", search: "Vilnius", country: "Q37" },
+  { key: "kaunas", search: "Kaunas", country: "Q37" },
+  { key: "klaipeda", search: "Klaipėda", country: "Q37" },
+  { key: "riga", search: "Riga", country: "Q211" },
+  { key: "kyiv", search: "Kyiv", country: "Q212" },
+  { key: "lviv", search: "Lviv", country: "Q212" },
+  { key: "kharkiv", search: "Kharkiv", country: "Q212" },
+  { key: "nicosia", search: "Nicosia", country: "Q229" },
+  { key: "limassol", search: "Limassol", country: "Q229" },
+  { key: "valletta", search: "Valletta", country: "Q233" },
+  { key: "msida", search: "Msida", country: "Q233" },
+  { key: "luxembourg-city", search: "Luxembourg City", country: "Q32" },
+  { key: "reykjavik", search: "Reykjavík", country: "Q189" },
+  { key: "sarajevo", search: "Sarajevo", country: "Q225" },
+  { key: "banja-luka", search: "Banja Luka", country: "Q225" },
+  { key: "mostar", search: "Mostar", country: "Q225" },
+  { key: "skopje", search: "Skopje", country: "Q221" },
+  { key: "tirana", search: "Tirana", country: "Q222" },
+  { key: "podgorica", search: "Podgorica", country: "Q236" },
+  { key: "chisinau", search: "Chișinău", country: "Q217" },
+  { key: "minsk", search: "Minsk", country: "Q184" },
+  { key: "andorra-la-vella", search: "Andorra la Vella", country: "Q228" },
+  { key: "vaduz", search: "Vaduz", country: "Q347" },
+  { key: "monaco", search: "Monaco", country: "Q235" },
   // Americas
   { key: "new-york", search: "New York City", country: "Q30" },
   { key: "boston", search: "Boston", country: "Q30" },
@@ -165,11 +350,66 @@ const CITIES = [
 /* Fetching                                                                    */
 /* -------------------------------------------------------------------------- */
 
-async function getJson(url, label) {
-  const response = await fetch(url, {
-    headers: { accept: "application/json", "user-agent": USER_AGENT },
-    signal: AbortSignal.timeout(60_000),
-  });
+/**
+ * A courtesy gap between calls to a public endpoint nobody is paying for.
+ *
+ * The search API is one call per city, and the city list is no longer the
+ * eighty it was written for: at 261 cities an unthrottled run walks into
+ * HTTP 429 somewhere in the middle, and because the failure lands on whichever
+ * city happened to be in flight, the same run fails at a different city each
+ * time. That looked like a data problem with an innocent city and was really a
+ * rate problem with us.
+ */
+const COURTESY_MS = 120;
+let nextSlot = 0;
+
+async function throttle() {
+  const now = Date.now();
+  const wait = Math.max(0, nextSlot - now);
+  nextSlot = Math.max(now, nextSlot) + COURTESY_MS;
+  if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+}
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Fetch JSON, backing off when the endpoint asks us to.
+ *
+ * 429 and 5xx are retried with exponential backoff, honouring `Retry-After`
+ * when the server sends one; every other status fails immediately, because a
+ * 404 will still be a 404 in four seconds and retrying it just makes the run
+ * slower and ruder. The retry budget is small on purpose — if Wikidata is
+ * genuinely down, the honest outcome is a failed import an operator can see,
+ * not a script that hangs for an hour and then writes a partial file.
+ */
+async function getJson(url, label, attempt = 0) {
+  await throttle();
+
+  let response;
+  try {
+    response = await fetch(url, {
+      headers: { accept: "application/json", "user-agent": USER_AGENT },
+      signal: AbortSignal.timeout(60_000),
+    });
+  } catch (error) {
+    /* A timeout or a dropped connection is worth one more try for the same
+       reason a 429 is: it says nothing about whether the data exists. */
+    if (attempt < 4) {
+      await sleep(2 ** attempt * 1000);
+      return getJson(url, label, attempt + 1);
+    }
+    throw error;
+  }
+
+  const retryable = response.status === 429 || response.status >= 500;
+  if (retryable && attempt < 4) {
+    const header = Number(response.headers.get("retry-after"));
+    const backoff = Number.isFinite(header) && header > 0 ? header * 1000 : 2 ** attempt * 1000;
+    process.stdout.write(`  ${label}: ${response.status}, retrying in ${Math.round(backoff / 1000)}s\n`);
+    await sleep(backoff);
+    return getJson(url, label, attempt + 1);
+  }
+
   if (!response.ok) {
     throw new Error(`${label} returned ${response.status} ${response.statusText}`);
   }

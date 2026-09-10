@@ -19,12 +19,16 @@ import { searchCities } from "../../src/domain/cities.ts";
  * ============================================================================
  */
 
+/* Mirrors what the city picker passes: `cityDirectory` rows are `CityContext`,
+   which carries `population`. Leaving it out here would test a shape no caller
+   actually uses, and would silently un-test the tiebreak below. */
 const searchable = allCoverageCities.map((city) => ({
   slug: city.key,
   name: city.name,
   country: city.country,
   countryCode: city.countryCode,
   deep: city.depth === "deep",
+  population: city.population,
 }));
 
 const first = (query: string) => searchCities(searchable, query)[0]?.city.name ?? null;
@@ -106,13 +110,40 @@ describe("searchCities", () => {
   });
 
   it("ranks a prefix above a substring", () => {
-    /* "bo" is in Bologna, Bogotá and Lisbon. The first two start with it. */
+    /* "bo" starts Bologna, Bogotá, Bochum, Bonn, Bordeaux and Boston, and sits
+       inside Lisbon, Aalborg and Strasbourg. The invariant is prefix-before-
+       substring, so it is asserted as that rather than as a list of city names
+       — the list version passed only while the directory was small enough to
+       enumerate, and broke on the European expansion without anything being
+       wrong with the ranking. */
     const hits = names("bo");
     assert.ok(hits.length >= 2);
-    assert.ok(
-      ["Bologna", "Bogotá", "Boston"].includes(hits[0] ?? ""),
-      `expected a prefix match first, got ${hits[0]}`,
-    );
+    const startsWithBo = (name: string) => name.toLowerCase().startsWith("bo");
+    assert.ok(startsWithBo(hits[0] ?? ""), `expected a prefix match first, got ${hits[0]}`);
+
+    /* And every prefix match must come before every substring match. */
+    const lastPrefix = hits.findLastIndex(startsWithBo);
+    const firstSubstring = hits.findIndex((name) => !startsWithBo(name));
+    if (firstSubstring !== -1) {
+      assert.ok(
+        lastPrefix < firstSubstring,
+        `substring match "${hits[firstSubstring]}" outranked prefix match "${hits[lastPrefix]}"`,
+      );
+    }
+  });
+
+  it("breaks a country-match tie on population, not on the alphabet", () => {
+    /* Every Spanish city scores the same for "spain" — the query said nothing
+       to separate them — so the tiebreak decides which twelve of eighteen a
+       student is shown. Alphabetical order made that decision by spelling, and
+       put Alicante and Córdoba on the list while Seville, Valencia and
+       Zaragoza fell off the end of the limit entirely. */
+    const spanish = names("spain");
+    assert.equal(spanish[0], "Madrid");
+    assert.equal(spanish[1], "Barcelona");
+    for (const city of ["Valencia", "Seville", "Zaragoza"]) {
+      assert.ok(spanish.includes(city), `${city} should be reachable by country search`);
+    }
   });
 
   it("takes the English name for a city that has one", () => {
