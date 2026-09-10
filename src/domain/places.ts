@@ -918,6 +918,101 @@ export function viewportFor(
   };
 }
 
+/* -------------------------------------------------------------------------- */
+/* Basemap tiles                                                               */
+/* -------------------------------------------------------------------------- */
+
+/** One XYZ tile, and where it sits in the viewport as a percentage. */
+export type MapTile = {
+  z: number;
+  x: number;
+  y: number;
+  /** Percent of the viewport, matching what `positionIn` returns for a point. */
+  left: number;
+  top: number;
+  /** Percent of the viewport width and height. Square in Mercator. */
+  width: number;
+  height: number;
+};
+
+/**
+ * The tiles that cover a viewport, and where to put them.
+ *
+ * WHY THIS IS HERE AND NOT IN THE COMPONENT. The pins are placed by
+ * `positionIn`, which projects through `mercator`. If the tiles were placed by
+ * any other arithmetic the two would disagree, and a map whose streets are a
+ * few pixels off its pins is worse than a map with no streets: it looks
+ * authoritative and puts the supermarket on the wrong corner. Both now derive
+ * from the same normalised Mercator, which is also exactly the XYZ scheme —
+ * `mercator` already returns the [0,1] coordinates a tile index is a slice of.
+ *
+ * ZOOM is chosen so the viewport is about `targetAcross` tiles wide. Too few
+ * and the streets are a blur under the pins; too many and a Discover screen
+ * fetches sixty images to draw a neighbourhood.
+ */
+export function tilesFor(
+  viewport: Viewport,
+  options: { targetAcross?: number; maxZoom?: number; maxTiles?: number } = {},
+): { tiles: MapTile[]; zoom: number } {
+  const targetAcross = options.targetAcross ?? 3;
+  const maxZoom = options.maxZoom ?? 19;
+  const maxTiles = options.maxTiles ?? 36;
+
+  const nw = mercator({ lat: viewport.north, lng: viewport.west });
+  const se = mercator({ lat: viewport.south, lng: viewport.east });
+
+  const spanX = se.x - nw.x;
+  const spanY = se.y - nw.y;
+  if (!(spanX > 0) || !(spanY > 0)) return { tiles: [], zoom: 0 };
+
+  /* The wider of the two axes decides, so a tall thin viewport is not served
+     tiles too coarse to read across its short side. */
+  const span = Math.max(spanX, spanY);
+  const zoom = Math.max(0, Math.min(maxZoom, Math.round(Math.log2(targetAcross / span))));
+  const n = 2 ** zoom;
+
+  const first = { x: Math.floor(nw.x * n), y: Math.floor(nw.y * n) };
+  const last = { x: Math.floor(se.x * n), y: Math.floor(se.y * n) };
+
+  const tiles: MapTile[] = [];
+  for (let x = first.x; x <= last.x; x += 1) {
+    for (let y = first.y; y <= last.y; y += 1) {
+      /* A viewport crossing the antimeridian or running past a pole would ask
+         for a tile that does not exist. Wrapping x is correct — the world
+         repeats sideways — but y does not wrap, so it is dropped. */
+      if (y < 0 || y >= n) continue;
+      const wrappedX = ((x % n) + n) % n;
+
+      tiles.push({
+        z: zoom,
+        x: wrappedX,
+        y,
+        left: ((x / n - nw.x) / spanX) * 100,
+        top: ((y / n - nw.y) / spanY) * 100,
+        width: (1 / n / spanX) * 100,
+        height: (1 / n / spanY) * 100,
+      });
+
+      if (tiles.length >= maxTiles) return { tiles, zoom };
+    }
+  }
+
+  return { tiles, zoom };
+}
+
+/**
+ * Fill an XYZ template. Returns null for a template with no placeholders,
+ * which is a misconfiguration rather than a URL worth requesting once per
+ * tile.
+ */
+export function tileUrl(template: string, tile: Pick<MapTile, "x" | "y" | "z">): string | null {
+  if (!/\{[xyz]\}/.test(template)) return null;
+  return template
+    .replace(/\{z\}/g, String(tile.z))
+    .replace(/\{x\}/g, String(tile.x))
+    .replace(/\{y\}/g, String(tile.y));
+}
+
 /**
  * A point as a percentage of the viewport, ready for `left` and `top`.
  *

@@ -492,3 +492,20 @@ export const isEphemeralStore = env.hosting.ephemeralFilesystem && !isRowStoreCo
  * about rows that are about to disappear.
  */
 export const isSampleContent = env.contentMode === "sample" || isEphemeralStore;
+
+/**
+ * The basemap a page should hand the map component, or null.
+ *
+ * Derived here rather than at each call site so "is a basemap configured" is
+ * one answer. The map is a client component and may not read `process.env`,
+ * so the value is passed down as a prop — this is the boundary.
+ *
+ * A URL with no `{z}/{x}/{y}` is treated as not configured: it cannot produce
+ * a tile, and thirty requests for the same string is a worse outcome than the
+ * plain ground. The component checks that too, and this is the earlier of the
+ * two so `/admin` reports it honestly.
+ */
+export const basemap: { urlTemplate: string; attribution: string | null } | null =
+  env.maps.tileUrl && /\{[xyz]\}/.test(env.maps.tileUrl)
+    ? { urlTemplate: env.maps.tileUrl, attribution: env.maps.tileAttribution ?? null }
+    : null;

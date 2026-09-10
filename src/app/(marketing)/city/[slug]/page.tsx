@@ -22,6 +22,7 @@ import {
 } from "@/data/cities";
 import { areaNamesForCity } from "@/data/neighbourhoods";
 import { sharePlansForCity } from "@/data/plans";
+import { basemap } from "@/services/env";
 import { requestDate } from "@/server/now";
 import { loadCityPlaces } from "@/server/queries/places";
 import { cn } from "@/lib/utils";
@@ -235,6 +236,7 @@ export default async function CityPage(props: PageProps<"/city/[slug]">) {
               centre={{ lat: cityCentre.lat, lng: cityCentre.lng }}
               unavailable={mapPlaces.ok ? null : { message: mapPlaces.message }}
               attribution={mapPlaces.ok ? mapPlaces.attribution : null}
+              basemap={basemap}
               now={now}
               timezone={city.timezone}
             />

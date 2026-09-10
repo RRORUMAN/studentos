@@ -15,6 +15,8 @@ import {
   type Viewport,
   describeProximity,
   positionIn,
+  tilesFor,
+  tileUrl,
   viewportFor,
 } from "@/domain/places";
 import { duration, ease, spring } from "@/lib/motion";
@@ -50,6 +52,11 @@ import { track } from "@/services/analytics";
  * tiles are drawn and attributed; without it the ground is plain and the map
  * says so. A plain ground with true positions is honest; borrowed tiles are
  * not.
+ *
+ * That paragraph was true of the intent and false of the code until now: the
+ * variable was parsed in `services/env.ts` and read by nothing, so setting it
+ * did nothing at all, while four documents told an operator it would put
+ * streets under the map. See `Basemap` below.
  * ============================================================================
  */
 
@@ -65,6 +72,14 @@ export type CityMapProps = {
   unavailable?: { message: string } | null;
   /** The licence line for whatever produced these rows. */
   attribution?: string | null;
+  /**
+   * A raster tile source, when the deployment has one.
+   *
+   * Passed in rather than read here: this is a client component, and
+   * `services/env.ts` is the only file allowed to touch `process.env`. Null is
+   * the normal case and draws the plain ground.
+   */
+  basemap?: { urlTemplate: string; attribution: string | null } | null;
   /** Passed in so the server and client agree on what "now" is. */
   now: Date;
   timezone: string;
@@ -78,6 +93,7 @@ export function CityMap({
   homePoint = null,
   unavailable = null,
   attribution,
+  basemap = null,
   now,
   timezone,
   className,
@@ -172,7 +188,7 @@ export function CityMap({
 
       {/* ---- canvas ------------------------------------------------------- */}
       <div className="relative aspect-[4/3] w-full overflow-hidden bg-ink-900 sm:aspect-[16/10]">
-        <Ground />
+        {basemap && viewport ? <Basemap viewport={viewport} basemap={basemap} /> : <Ground />}
 
         {homePoint && viewport ? <HomePin point={homePoint} viewport={viewport} /> : null}
 
@@ -221,9 +237,14 @@ export function CityMap({
           </div>
         ) : null}
 
-        {attribution ? (
-          <span className="absolute bottom-1.5 right-2 z-10 rounded bg-ink-950/70 px-1.5 py-0.5 text-[0.625rem] text-white/50">
-            {attribution}
+        {/* Two separate credits, because they credit two different people: the
+            provider of the ROWS, and the provider of the GROUND. Every raster
+            tile service requires the second as a condition of use, so it is
+            rendered whenever tiles are — and joined with the first rather than
+            replacing it. */}
+        {attribution || (basemap && basemap.attribution) ? (
+          <span className="absolute right-2 bottom-1.5 z-10 rounded bg-ink-950/70 px-1.5 py-0.5 text-[0.625rem] text-white/50">
+            {[attribution, basemap?.attribution].filter(Boolean).join(" · ")}
           </span>
         ) : null}
       </div>
@@ -364,6 +385,64 @@ function HomePin({ point, viewport }: { point: Coords; viewport: Viewport }) {
 /* -------------------------------------------------------------------------- */
 
 /**
+ * Real streets, when a deployment has paid for them.
+ *
+ * THIS IS THE PART THE COMMENT ABOVE PROMISED AND THE CODE DID NOT DO. The
+ * header of this file has said "with `NEXT_PUBLIC_MAP_TILE_URL` set, tiles are
+ * drawn and attributed" since the map was written, and four documents repeat
+ * it — the launch checklist, the setup guide, the data notes and
+ * `.env.example`. `env.map.tileUrl` was parsed in `services/env.ts` and read
+ * by nothing at all. Setting the variable did exactly nothing, which is the
+ * kind of claim this codebase exists not to make.
+ *
+ * The tiles are positioned by `tilesFor`, which projects through the same
+ * `mercator` the pins use. That is not tidiness: streets a few pixels out of
+ * register with the pins would be worse than no streets, because they look
+ * authoritative while putting the supermarket on the wrong corner.
+ *
+ * ATTRIBUTION IS NOT OPTIONAL. Every raster provider requires it, and it is
+ * rendered whenever tiles are, from `NEXT_PUBLIC_MAP_TILE_ATTRIBUTION`.
+ */
+function Basemap({
+  viewport,
+  basemap,
+}: {
+  viewport: Viewport;
+  basemap: { urlTemplate: string; attribution: string | null };
+}) {
+  const { tiles } = tilesFor(viewport);
+  const urls = tiles.map((tile) => ({ tile, url: tileUrl(basemap.urlTemplate, tile) }));
+
+  /* A template with no {z}/{x}/{y} cannot produce a tile, and requesting the
+     same URL thirty times would be worse than drawing nothing. */
+  if (urls.every((entry) => entry.url === null)) return <Ground />;
+
+  return (
+    <div className="absolute inset-0 overflow-hidden" aria-hidden>
+      {urls.map(({ tile, url }) =>
+        url ? (
+          // eslint-disable-next-line @next/next/no-img-element -- a tile server is not a known remote host for next/image, and these are already correctly sized.
+          <img
+            key={`${tile.z}/${tile.x}/${tile.y}`}
+            src={url}
+            alt=""
+            loading="lazy"
+            draggable={false}
+            className="absolute select-none"
+            style={{
+              left: `${tile.left}%`,
+              top: `${tile.top}%`,
+              width: `${tile.width}%`,
+              height: `${tile.height}%`,
+            }}
+          />
+        ) : null,
+      )}
+    </div>
+  );
+}
+
+/**
  * A plain ground, and deliberately so.
  *
  * There used to be a generated city here: random blocks, a river, arterial
@@ -372,9 +451,8 @@ function HomePin({ point, viewport }: { point: Coords; viewport: Viewport }) {
  * were fiction. Now that the pins are real, that fiction would be worse than
  * before: it would look like the shops sat on those streets.
  *
- * So: a grid, which claims nothing. When a deployment configures a tile
- * provider the streets are real and are attributed; until then this is an
- * honest backdrop for true positions.
+ * So: a grid, which claims nothing. It is what a deployment with no tile
+ * provider gets, and it is an honest backdrop for true positions.
  */
 function Ground() {
   return (
