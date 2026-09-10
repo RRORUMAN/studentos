@@ -6,7 +6,7 @@ import { Wordmark } from "@/components/brand/logo";
 import { MascotArt } from "@/components/mascot/mascot-art";
 import { ButtonLink } from "@/components/ui/button";
 import { Meter } from "@/components/ui/primitives";
-import { missionStepKindMeta } from "@/domain/missions";
+import { fillBudget, missionStepKindMeta } from "@/domain/missions";
 import { getCity } from "@/data/cities";
 import { loadSharedMission } from "@/server/queries/missions";
 import { getViewer } from "@/server/viewer";
@@ -52,7 +52,7 @@ export default async function SharedMissionPage(props: PageProps<"/m/[token]">) 
               {city?.name ?? "A mission"} · {progress.done} of {progress.total} done
             </p>
             <h1 className="mt-1 text-display-sm text-ink-950">{mission.title}</h1>
-            {template ? <p className="mt-1 text-[0.9375rem] text-ink-600">{template.tagline}</p> : null}
+            {template ? <p className="mt-1 text-[0.9375rem] text-ink-600">{fillBudget(template.tagline, mission.budgetCents, fmt)}</p> : null}
             {ownerName ? <p className="mt-1.5 text-[0.875rem] text-ink-500">Shared by {ownerEmoji} {ownerName}</p> : null}
           </div>
         </header>

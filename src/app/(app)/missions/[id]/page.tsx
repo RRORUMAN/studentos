@@ -6,6 +6,7 @@ import { notFound } from "next/navigation";
 import { MissionActions, MissionSteps } from "@/components/app/mission-steps";
 import { MascotArt } from "@/components/mascot/mascot-art";
 import { Meter } from "@/components/ui/primitives";
+import { fillBudget } from "@/domain/missions";
 import { findMany } from "@/server/db";
 import { loadMission } from "@/server/queries/missions";
 import { loadFriendIds } from "@/server/queries/social";
@@ -55,7 +56,7 @@ export default async function MissionPage(props: PageProps<"/missions/[id]">) {
             {mission.variant.social ? " · social build" : ""}
           </p>
           <h1 className="mt-1 text-display-xs text-ink-950 sm:text-display-sm">{mission.title}</h1>
-          {template ? <p className="mt-1.5 text-[0.9375rem] leading-relaxed text-ink-600">{template.tagline}</p> : null}
+          {template ? <p className="mt-1.5 text-[0.9375rem] leading-relaxed text-ink-600">{fillBudget(template.tagline, mission.budgetCents, fmt)}</p> : null}
         </div>
       </header>
 

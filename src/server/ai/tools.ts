@@ -24,6 +24,7 @@ import { loadOpenInvites } from "@/server/queries/plans";
 import { suggestedPeople } from "@/server/queries/social";
 import type { Viewer } from "@/server/viewer";
 import { money } from "@/lib/utils";
+import { fillBudget } from "@/domain/missions";
 
 /**
  * ============================================================================
@@ -644,19 +645,30 @@ export async function runTool<K extends ToolName>(name: K, rawArgs: unknown, ctx
       return {
         tool: name,
         args: a,
-        cards: templates.slice(0, a.limit).map((template) => ({
-          kind: "mission" as const,
-          id: template.key,
-          title: `${template.emoji} ${template.title}`,
-          detail: template.tagline,
-          priceCents: template.budgetCents === null ? null : Math.round((template.budgetCents * ratio) / 50) * 50,
-          href: `/missions/preview/${template.key}`,
-          reasons: [`${template.steps.length} steps`, template.durationDays === 1 ? "one day" : `${template.durationDays} days`],
-          source: "you" as const,
-          social: null,
-          at: null,
-          walkMinutes: null,
-        })),
+        cards: templates.slice(0, a.limit).map((template) => {
+          const scaledBudget =
+            template.budgetCents === null ? null : Math.round((template.budgetCents * ratio) / 50) * 50;
+          /* The card goes to the model AND to the student. A euro figure in
+             the name beside a scaled one in `priceCents` is a contradiction
+             the model would faithfully repeat. */
+          const fmt = (cents: number) => money(cents / 100, ctx.viewer.currency);
+          return {
+            kind: "mission" as const,
+            id: template.key,
+            title: `${template.emoji} ${fillBudget(template.title, scaledBudget, fmt)}`,
+            detail: fillBudget(template.tagline, scaledBudget, fmt),
+            priceCents: scaledBudget,
+            href: `/missions/preview/${template.key}`,
+            reasons: [
+              `${template.steps.length} steps`,
+              template.durationDays === 1 ? "one day" : `${template.durationDays} days`,
+            ],
+            source: "you" as const,
+            social: null,
+            at: null,
+            walkMinutes: null,
+          };
+        }),
         emptyReason: templates.length === 0 ? "You are already running every mission that fits right now." : undefined,
       };
     }

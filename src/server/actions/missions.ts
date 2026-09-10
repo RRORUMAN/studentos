@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { missionTemplate } from "@/config/missions";
-import { type Mission, type MissionVariant, missionProgress } from "@/domain/missions";
+import { fillBudget, type Mission, type MissionVariant, missionProgress } from "@/domain/missions";
 import { findMany, findOne, insert, newId, nowIso, transaction, update } from "@/server/db";
 import { buildMission, cityRatio } from "@/server/engines/missions";
 import { loadMissionCandidates } from "@/server/queries/missions";
@@ -79,7 +79,11 @@ export async function startMission(templateKey: string, variantInput?: Partial<M
     userId: viewer.user.id,
     templateKey,
     citySlug: viewer.profile.citySlug,
-    title: template.title,
+    /* Resolved against the SCALED cap, not the template's euro one, so the
+       stored name agrees with the figures stored alongside it — and keeps
+       agreeing if the student later moves to a city priced differently, since
+       both were frozen together at the moment the mission was started. */
+    title: fillBudget(template.title, built.budgetCents, (cents) => money(cents / 100, viewer.currency)),
     emoji: template.emoji,
     budgetCents: built.budgetCents,
     status: "active",

@@ -36,7 +36,7 @@ export const missionTemplates: readonly MissionTemplate[] = [
   },
   {
     key: "weekend-under-30",
-    title: "Weekend under €30",
+    title: "Weekend under {budget}",
     tagline: "Friday to Sunday, everything included, nothing boring.",
     emoji: "🎯",
     stages: [],
@@ -54,7 +54,7 @@ export const missionTemplates: readonly MissionTemplate[] = [
   },
   {
     key: "make-50-last",
-    title: "Make €50 last until Friday",
+    title: "Make {budget} last until Friday",
     tagline: "A tight week, planned so it does not feel like one.",
     emoji: "🫙",
     stages: [],
@@ -72,7 +72,7 @@ export const missionTemplates: readonly MissionTemplate[] = [
   },
   {
     key: "zero-euro-sunday",
-    title: "Zero-euro Sunday",
+    title: "Zero-spend Sunday",
     tagline: "A whole day out, nothing spent. Harder and better than it sounds.",
     emoji: "🌿",
     stages: [],
@@ -139,7 +139,7 @@ export const missionTemplates: readonly MissionTemplate[] = [
   {
     key: "cheap-date-night",
     title: "Cheap date night",
-    tagline: "Under €25 for two and it still counts.",
+    tagline: "Under {budget} for two and it still counts.",
     emoji: "🌙",
     stages: [],
     budgetCents: 2500,

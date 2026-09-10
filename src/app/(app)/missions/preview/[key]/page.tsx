@@ -5,7 +5,7 @@ import { notFound } from "next/navigation";
 
 import { StartMissionButton } from "@/components/app/mission-steps";
 import { missionTemplate } from "@/config/missions";
-import { missionStepKindMeta } from "@/domain/missions";
+import { fillBudget, missionStepKindMeta } from "@/domain/missions";
 import { buildMission, cityRatio } from "@/server/engines/missions";
 import { loadMissionCandidates } from "@/server/queries/missions";
 import { requestDate } from "@/server/now";
@@ -52,8 +52,8 @@ export default async function MissionPreviewPage(props: PageProps<"/missions/pre
         <span aria-hidden className="grid size-14 shrink-0 place-items-center rounded-2xl bg-paper-2 text-3xl">{template.emoji}</span>
         <div className="min-w-0 flex-1">
           <p className="font-mono text-micro uppercase tracking-[0.12em] text-ink-400">Preview · built from today&rsquo;s rows</p>
-          <h1 className="mt-1 text-display-xs text-ink-950 sm:text-display-sm">{template.title}</h1>
-          <p className="mt-1.5 text-[0.9375rem] leading-relaxed text-ink-600">{template.tagline}</p>
+          <h1 className="mt-1 text-display-xs text-ink-950 sm:text-display-sm">{fillBudget(template.title, built.budgetCents, fmt)}</h1>
+          <p className="mt-1.5 text-[0.9375rem] leading-relaxed text-ink-600">{fillBudget(template.tagline, built.budgetCents, fmt)}</p>
         </div>
       </header>
 

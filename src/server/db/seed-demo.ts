@@ -5,6 +5,8 @@ import { createHash } from "node:crypto";
 import { missionTemplate } from "@/config/missions";
 import { getCampus, getCity } from "@/data/cities";
 import { defaultPrivacy, type Profile } from "@/domain/types";
+import { fillBudget } from "@/domain/missions";
+import { money } from "@/lib/utils";
 import { suggestEnvelopes } from "@/server/engines/budget";
 import { hashPassword } from "@/server/auth/crypto";
 import type { Database } from "@/server/db/store";
@@ -368,7 +370,7 @@ export async function seedDemoAccount(db: Database): Promise<number> {
       userId,
       templateKey: template.key,
       citySlug: "madrid",
-      title: template.title,
+      title: fillBudget(template.title, template.budgetCents, (cents: number) => money(cents / 100)),
       emoji: template.emoji,
       budgetCents: template.budgetCents,
       status: "active",

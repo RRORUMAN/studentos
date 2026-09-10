@@ -9,6 +9,7 @@ import { ButtonLink } from "@/components/ui/button";
 import { Meter, SampleTag, Section, SectionHeader } from "@/components/ui/primitives";
 import { Reveal } from "@/components/ui/reveal";
 import { missionTemplates } from "@/config/missions";
+import { fillBudget } from "@/domain/missions";
 import { defaultCity } from "@/data/cities";
 import { missionPreview, moneyIn } from "@/services/ai/demo-planner";
 import { duration, ease } from "@/lib/motion";
@@ -76,7 +77,7 @@ export function MissionsSection() {
                   </span>
                   <span className="min-w-0">
                     <span className="block truncate text-[0.9375rem] font-medium">
-                      {template.title}
+                      {fillBudget(template.title, template.budgetCents, (cents) => money(cents / 100))}
                     </span>
                     <span
                       className={cn(
@@ -84,7 +85,7 @@ export function MissionsSection() {
                         active ? "text-paper/60" : "text-ink-500",
                       )}
                     >
-                      {template.tagline}
+                      {fillBudget(template.tagline, template.budgetCents, (cents) => money(cents / 100))}
                     </span>
                   </span>
                 </button>

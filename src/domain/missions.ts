@@ -67,6 +67,20 @@ export type MissionStepTemplate = {
 
 export type MissionTemplate = {
   key: string;
+  /**
+   * The name, with `{budget}` where the cap belongs.
+   *
+   * It used to be the finished string — "Weekend under €30" — while the engine
+   * scaled `budgetCents` into the city's own currency for every figure
+   * underneath it. So a student in Stockholm read "Weekend under €30" above a
+   * plan that added up to kronor, and a student in Prague read it above
+   * koruna. The two halves of the same screen disagreed, and the half that was
+   * wrong was the one in the largest type.
+   *
+   * `{budget}` is filled by `fillBudget()` from the scaled cap and the
+   * city's currency, so the name and the arithmetic under it can no longer
+   * drift apart. A title with no placeholder is left exactly as written.
+   */
   title: string;
   /** One line that sells it. */
   tagline: string;
@@ -150,6 +164,31 @@ export function missionProgress(steps: readonly Pick<MissionStep, "doneAt" | "sk
 /** What the mission costs, counting only steps that are still in it. */
 export function missionTotalCents(steps: readonly Pick<MissionStep, "priceCents" | "skippedAt">[]): Cents {
   return steps.filter((step) => !step.skippedAt).reduce((sum, step) => sum + step.priceCents, 0);
+}
+
+/**
+ * Fill `{budget}` in a mission name or tagline with the city's own money.
+ *
+ * `formatMoney` takes CENTS, matching the `fmt` the mission engine and every
+ * mission surface already pass around — money is integer cents everywhere in
+ * this codebase, and a helper that quietly wanted major units would be a
+ * divide-by-100 waiting to happen at whichever call site forgot.
+ *
+ * A null cap means the mission is not about money — "First 7 days" has no
+ * `{budget}` in it and nothing to substitute — so the placeholder is dropped
+ * along with the word in front of it rather than printing "under {budget}" or
+ * a bare "under". Titles without the placeholder pass through untouched.
+ */
+export function fillBudget(
+  title: string,
+  budgetCents: Cents | null,
+  formatMoney: (cents: Cents) => string,
+): string {
+  if (!title.includes("{budget}")) return title;
+  if (budgetCents === null) {
+    return title.replace(/\s*\b(under|of)?\s*\{budget\}/i, "").replace(/\s{2,}/g, " ").trim();
+  }
+  return title.replace("{budget}", formatMoney(budgetCents));
 }
 
 export const missionStepKindMeta: Record<MissionStepKind, { label: string; emoji: string }> = {

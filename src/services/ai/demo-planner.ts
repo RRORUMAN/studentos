@@ -1,5 +1,6 @@
 import { mascotLine } from "@/brand/mascot.config";
 import { missionTemplate } from "@/config/missions";
+import { fillBudget } from "@/domain/missions";
 import { defaultCity, getCity } from "@/data/cities";
 import { affordCheck, safeThisWeek, safeToday } from "@/data/budget";
 import { peoplePool } from "@/data/social";
@@ -645,8 +646,9 @@ export type MissionPreview = {
 
 /**
  * A priced preview of a mission template for the landing page. Prices come
- * from the city's anchors, so "Weekend under €30" is a real €30 in Berlin and
- * a real one in London.
+ * from the city's anchors, and the mission's NAME is filled from that same
+ * scaled figure, so it reads "Weekend under £26" in London rather than naming
+ * a euro amount over a plan that adds up to pounds.
  */
 export function missionPreview(key: string, citySlug: string): MissionPreview | null {
   const template = missionTemplate(key);
@@ -685,8 +687,17 @@ export function missionPreview(key: string, citySlug: string): MissionPreview | 
 
   return {
     key: template.key,
-    title: template.title,
-    tagline: template.tagline,
+    /* The name is filled from the SCALED budget in the city's own currency.
+       The comment above this function used to say the quiet part out loud —
+       that "Weekend under €30" was "a real €30 in Berlin and a real one in
+       London" — which is two different amounts under one euro-denominated
+       name, on the marketing page that exists to show the scaling working. */
+    title: fillBudget(template.title, budget === null ? null : budget * 100, (cents) =>
+      formatIn(city, cents / 100),
+    ),
+    tagline: fillBudget(template.tagline, budget === null ? null : budget * 100, (cents) =>
+      formatIn(city, cents / 100),
+    ),
     emoji: template.emoji,
     steps,
     total: round(sum(steps.map((step) => step.price))),

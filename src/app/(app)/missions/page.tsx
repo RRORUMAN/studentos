@@ -5,6 +5,7 @@ import Link from "next/link";
 import { StartMissionButton } from "@/components/app/mission-steps";
 import { MascotArt } from "@/components/mascot/mascot-art";
 import { Meter } from "@/components/ui/primitives";
+import { fillBudget } from "@/domain/missions";
 import { cityRatio } from "@/server/engines/missions";
 import { loadMissionCatalogue, loadMissions } from "@/server/queries/missions";
 import { requireViewer } from "@/server/viewer";
@@ -85,8 +86,12 @@ export default async function MissionsPage() {
                 <div className="flex items-start gap-3">
                   <span aria-hidden className="grid size-11 shrink-0 place-items-center rounded-xl bg-paper-2 text-xl">{template.emoji}</span>
                   <div className="min-w-0 flex-1">
-                    <h3 className="text-[1rem] font-semibold text-ink-950">{template.title}</h3>
-                    <p className="mt-0.5 text-[0.8125rem] leading-snug text-ink-500">{template.tagline}</p>
+                    <h3 className="text-[1rem] font-semibold text-ink-950">
+                      {fillBudget(template.title, budget, fmt)}
+                    </h3>
+                    <p className="mt-0.5 text-[0.8125rem] leading-snug text-ink-500">
+                      {fillBudget(template.tagline, budget, fmt)}
+                    </p>
                   </div>
                 </div>
                 <p className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-micro uppercase tracking-[0.08em] text-ink-400">
