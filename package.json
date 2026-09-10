@@ -18,6 +18,7 @@
     "db:verify": "node scripts/db-verify.mjs",
     "ai:verify": "node --experimental-strip-types --import ./scripts/test-register.mjs scripts/ai-verify.mjs",
     "places:verify": "node --experimental-strip-types --import ./scripts/test-register.mjs scripts/places-verify.mjs",
+    "stripe:verify": "node --experimental-strip-types --import ./scripts/test-register.mjs scripts/stripe-verify.mjs",
     "cities:import": "node scripts/import-cities.mjs",
     "areas:import": "node scripts/import-neighbourhoods.mjs",
     "areas:discover": "node scripts/import-areas.mjs",

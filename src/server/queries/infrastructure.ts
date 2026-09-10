@@ -45,6 +45,31 @@ export type InfrastructureReport = {
   blockers: ServiceStatus[];
 };
 
+/**
+ * What a Stripe key is, read from its prefix. Never returns any part of the key.
+ *
+ * `startsWith("sk_live")` was the whole test here, and it called a RESTRICTED
+ * live key — `rk_live_…` — "Test mode." on the one page whose entire job is
+ * telling the operator the truth about what is connected. Restricted keys are
+ * the right thing to deploy: this application only ever creates checkout and
+ * portal sessions and reads a subscription, so a key scoped to those cannot
+ * issue a refund or move money if the server is ever compromised. A readiness
+ * page that punishes the safer choice by mislabelling it teaches the operator
+ * to deploy the more dangerous one.
+ */
+function describeStripeKey(key: string): { live: boolean; restricted: boolean; label: string } {
+  /* Both forms carry the mode in the same place: sk_live_… / rk_live_… /
+     pk_test_…, so the substring is the reliable test and the prefix only says
+     which kind of key it is. */
+  const live = key.includes("_live_");
+  const restricted = key.startsWith("rk_");
+  return {
+    live,
+    restricted,
+    label: `${live ? "Live" : "Test"} mode${restricted ? ", restricted key" : ""}.`,
+  };
+}
+
 export async function loadInfrastructure(): Promise<InfrastructureReport> {
   const persistence = await storePersistence();
   const services: ServiceStatus[] = [];
@@ -143,9 +168,21 @@ export async function loadInfrastructure(): Promise<InfrastructureReport> {
   /* ---- billing ---------------------------------------------------------- */
 
   const missingPrices = missingPriceIds();
-  const billingLevel: ServiceLevel = !env.stripe.secretKey
+  const secret = env.stripe.secretKey ? describeStripeKey(env.stripe.secretKey) : null;
+  const publishable = env.stripe.publishableKey ? describeStripeKey(env.stripe.publishableKey) : null;
+
+  /**
+   * A live secret key beside a test publishable key, or the reverse.
+   *
+   * Worth its own state because the failure is late and confusing: the server
+   * happily creates a live session and the browser refuses it, or the checkout
+   * succeeds against test data that will never appear on a real invoice.
+   */
+  const modeMismatch = Boolean(secret && publishable && secret.live !== publishable.live);
+
+  const billingLevel: ServiceLevel = !secret
     ? "missing"
-    : missingPrices.length > 0 || !env.stripe.webhookSecret
+    : missingPrices.length > 0 || !env.stripe.webhookSecret || modeMismatch
       ? "degraded"
       : "ready";
 
@@ -153,23 +190,26 @@ export async function loadInfrastructure(): Promise<InfrastructureReport> {
     key: "billing",
     label: "Payments (Stripe)",
     level: billingLevel,
-    state: !env.stripe.secretKey
+    state: !secret
       ? "No secret key."
       : [
-          env.stripe.secretKey.startsWith("sk_live") ? "Live mode." : "Test mode.",
+          secret.label,
+          modeMismatch ? `The publishable key is ${publishable?.live ? "live" : "test"} mode.` : null,
           env.stripe.webhookSecret ? "Webhook signing secret set." : "No webhook signing secret.",
-          missingPrices.length === 0
-            ? "All six price ids set."
-            : `Missing: ${missingPrices.join(", ")}.`,
-        ].join(" "),
+          missingPrices.length === 0 ? "All six price ids set." : `Missing: ${missingPrices.join(", ")}.`,
+        ]
+          .filter(Boolean)
+          .join(" "),
     consequence:
       billingLevel === "ready"
         ? null
-        : !env.stripe.secretKey
+        : !secret
           ? "Nobody can subscribe. Paid features stay locked, which is the correct failure."
-          : missingPrices.length > 0
-            ? "Checkout fails for the plans whose price id is missing."
-            : "Payments complete but no entitlement is ever granted: the webhook cannot be verified.",
+          : modeMismatch
+            ? "The two keys are from different modes, so checkout fails at the browser or bills against data the other mode cannot see."
+            : missingPrices.length > 0
+              ? "Checkout fails for the plans whose price id is missing."
+              : "Payments complete but no entitlement is ever granted: the webhook cannot be verified.",
     blocksLaunch: billingLevel !== "ready",
   });
 
