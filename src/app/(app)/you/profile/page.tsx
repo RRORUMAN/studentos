@@ -68,6 +68,7 @@ export default async function Page() {
             bio: viewer.profile.bio ?? "",
             avatarEmoji: viewer.profile.avatarEmoji,
             interests: [...viewer.profile.interests],
+            language: viewer.profile.language ?? "en",
             homeArea: viewer.profile.homeArea ?? "",
             maxTravelMinutes: viewer.profile.maxTravelMinutes,
             priceSensitivity: viewer.profile.priceSensitivity,

@@ -15,6 +15,8 @@ import { destroySession } from "@/server/auth/session";
 import { findMany, findOne, nowIso, remove, transaction, update } from "@/server/db";
 import { requireUserId } from "@/server/viewer";
 import { formatLocaleFor } from "@/lib/locale";
+import { interfaceLanguages } from "@/config/regions";
+import { defaultCityContext, resolveCity } from "@/data/cities";
 
 /**
  * ============================================================================
@@ -47,6 +49,12 @@ const profileSchema = z.object({
   diets: z.array(z.string()).max(20),
   transport: z.array(z.enum(["walk", "transit", "bike", "scooter", "car", "taxi"])).max(6).optional(),
   socialGoals: z.array(z.string()).max(12).optional(),
+  /**
+   * Number and date formatting. Chosen at onboarding and, until now, never
+   * changeable — a setting picked in the first two minutes and then frozen
+   * for the life of the account.
+   */
+  language: z.string().trim().max(12).optional(),
 });
 
 export async function updateProfile(input: z.input<typeof profileSchema>): Promise<ProfileResult> {
@@ -56,6 +64,13 @@ export async function updateProfile(input: z.input<typeof profileSchema>): Promi
   if (!parsed.success) {
     return { ok: false, message: parsed.error.issues[0]?.message ?? "Check the form." };
   }
+
+  /* The city decides what a locale can be, so it is read before the write. */
+  const profile = await findOne("profiles", (row) => row.userId === userId);
+  const city = profile ? (resolveCity(profile.citySlug) ?? defaultCityContext) : defaultCityContext;
+  const language = interfaceLanguages.some((entry) => entry.code === parsed.data.language)
+    ? parsed.data.language
+    : null;
 
   await update("profiles", (row) => row.userId === userId, {
     displayName: parsed.data.displayName,
@@ -68,6 +83,10 @@ export async function updateProfile(input: z.input<typeof profileSchema>): Promi
     diets: parsed.data.diets,
     ...(parsed.data.transport && parsed.data.transport.length > 0 ? { transport: parsed.data.transport } : {}),
     ...(parsed.data.socialGoals ? { socialGoals: parsed.data.socialGoals as never } : {}),
+    /* `locale` is derived, never sent by the client: it is what actually
+       formats every price and date, and letting a form set it directly would
+       put an arbitrary string in front of `Intl`. */
+    ...(language ? { language, locale: formatLocaleFor(language, city) } : {}),
   });
 
   revalidatePath("/you");

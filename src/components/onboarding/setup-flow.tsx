@@ -489,8 +489,23 @@ function CityStep({ answers, update }: StepProps) {
         ) : null}
       </div>
 
+      {/* ---- what this control actually does ------------------------------
+          It was labelled "Interface language" under the hint "Prices and dates
+          always use the city's format. This only changes the interface."
+          Both halves were the opposite of the truth.
+
+          There is no translation layer in this codebase — no dictionary, no
+          message catalogue, no `t()`. The interface is in English whatever is
+          picked here. What the choice DOES do is feed `formatLocaleFor`, which
+          sets `profile.locale`, which is what formats every price and every
+          date in the product.
+
+          So the control is real and useful and was described backwards. It is
+          named for its effect now. Sixteen translations is a project; claiming
+          them in a hint is one line, and that is exactly why the line had to
+          go rather than the languages. */}
       <label className="block pt-2">
-        <span className="mb-1.5 block text-sm font-medium text-ink-800">Interface language</span>
+        <span className="mb-1.5 block text-sm font-medium text-ink-800">Number and date format</span>
         <select
           value={answers.language}
           onChange={(event) => update({ language: event.target.value })}
@@ -503,7 +518,8 @@ function CityStep({ answers, update }: StepProps) {
           ))}
         </select>
         <span className="mt-1 block text-[0.8125rem] text-ink-500">
-          Prices and dates always use the city&rsquo;s format. This only changes the interface.
+          How prices, dates and numbers are written for you. The interface itself is in English
+          for now. You can change this later in your profile.
         </span>
       </label>
 

@@ -6,6 +6,7 @@ import { useState, useTransition } from "react";
 import { OptionRow, SelectChip } from "@/components/onboarding/controls";
 import { Button } from "@/components/ui/button";
 import { diets, interestGroups, notificationTopics, priceSensitivities, travelLimits } from "@/config/onboarding";
+import { interfaceLanguages } from "@/config/regions";
 import type { PrivacySettings } from "@/domain/types";
 import {
   deleteAccount,
@@ -48,6 +49,7 @@ export function ProfileForm({
     maxTravelMinutes: number;
     priceSensitivity: "cheapest" | "value" | "balanced" | "occasional-splurge";
     diets: string[];
+    language: string;
   };
   neighbourhoods: readonly string[];
 }) {
@@ -200,6 +202,30 @@ export function ProfileForm({
             />
           ))}
         </div>
+      </section>
+
+      {/* Chosen at onboarding and, until now, impossible to change: a setting
+          picked in the first two minutes and then frozen for the life of the
+          account. It is also not what it was called there — see the note in
+          `setup-flow.tsx`. There is no translation layer in this product; what
+          this sets is `profile.locale`, which formats every price and date. */}
+      <section className="rounded-xl border border-ink-200 bg-white p-5">
+        <h2 className="mb-1 text-[1.0625rem] font-semibold text-ink-950">Number and date format</h2>
+        <p className="mb-3 text-[0.8125rem] text-ink-500">
+          How prices, dates and numbers are written for you. The interface itself is in English
+          for now.
+        </p>
+        <select
+          value={form.language}
+          onChange={(event) => setForm({ ...form, language: event.target.value })}
+          className="h-11 w-full rounded-lg border border-ink-200 bg-white px-3 text-[0.9375rem] text-ink-900"
+        >
+          {interfaceLanguages.map((language) => (
+            <option key={language.code} value={language.code}>
+              {language.endonym} · {language.label}
+            </option>
+          ))}
+        </select>
       </section>
 
       <section className="rounded-xl border border-ink-200 bg-white p-5">
