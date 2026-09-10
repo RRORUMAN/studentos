@@ -81,7 +81,48 @@ const COUNTRIES = {
   AT: { entity: "Q40", lang: "de", name: "Austria" },
   BE: { entity: "Q31", lang: "nl", name: "Belgium", alsoLabels: ["fr", "de"] },
   HU: { entity: "Q28", lang: "hu", name: "Hungary" },
-  GR: { entity: "Q41", lang: "el", name: "Greece" },
+  GR: { entity: "Q41", lang: "en", name: "Greece", alsoLabels: ["el"] },
+
+  /* ---- beyond Europe --------------------------------------------------------
+     LABEL LANGUAGE IS ENGLISH WHERE THE LOCAL SCRIPT IS NOT LATIN, and that is
+     a deliberate departure from the rule above. Asking Wikidata for the
+     Japanese label gives a name in kanji, and `fold()` keeps only [a-z0-9], so
+     it folds to the empty string: unsearchable, and unmatchable to a city. The
+     local-script label still comes across as an ALIAS, so a student who types
+     it still finds their university -- it simply is not the stored name.
+
+     Greece moved to the same rule above, which is what lets Athens attach its
+     universities at all: it was importing Greek labels that folded to nothing.
+     ------------------------------------------------------------------------- */
+  US: { entity: "Q30", lang: "en", name: "United States" },
+  CA: { entity: "Q16", lang: "en", name: "Canada", alsoLabels: ["fr"] },
+  AU: { entity: "Q408", lang: "en", name: "Australia" },
+  NZ: { entity: "Q664", lang: "en", name: "New Zealand" },
+  CH: { entity: "Q39", lang: "de", name: "Switzerland", alsoLabels: ["fr", "it", "en"] },
+  NO: { entity: "Q20", lang: "nb", name: "Norway", alsoLabels: ["en"] },
+  TR: { entity: "Q43", lang: "tr", name: "Turkey", alsoLabels: ["en"] },
+  BR: { entity: "Q155", lang: "pt", name: "Brazil" },
+  MX: { entity: "Q96", lang: "es", name: "Mexico" },
+  AR: { entity: "Q414", lang: "es", name: "Argentina" },
+  CL: { entity: "Q298", lang: "es", name: "Chile" },
+  CO: { entity: "Q739", lang: "es", name: "Colombia" },
+  ZA: { entity: "Q258", lang: "en", name: "South Africa" },
+  KE: { entity: "Q114", lang: "en", name: "Kenya" },
+  NG: { entity: "Q1033", lang: "en", name: "Nigeria" },
+  GH: { entity: "Q117", lang: "en", name: "Ghana" },
+  MA: { entity: "Q1028", lang: "fr", name: "Morocco", alsoLabels: ["ar", "en"] },
+  EG: { entity: "Q79", lang: "en", name: "Egypt", alsoLabels: ["ar"] },
+  IL: { entity: "Q801", lang: "en", name: "Israel", alsoLabels: ["he"] },
+  AE: { entity: "Q878", lang: "en", name: "United Arab Emirates", alsoLabels: ["ar"] },
+  QA: { entity: "Q846", lang: "en", name: "Qatar", alsoLabels: ["ar"] },
+  IN: { entity: "Q668", lang: "en", name: "India", alsoLabels: ["hi"] },
+  SG: { entity: "Q334", lang: "en", name: "Singapore" },
+  MY: { entity: "Q833", lang: "en", name: "Malaysia", alsoLabels: ["ms"] },
+  TH: { entity: "Q869", lang: "en", name: "Thailand", alsoLabels: ["th"] },
+  JP: { entity: "Q17", lang: "en", name: "Japan", alsoLabels: ["ja"] },
+  KR: { entity: "Q884", lang: "en", name: "South Korea", alsoLabels: ["ko"] },
+  TW: { entity: "Q865", lang: "en", name: "Taiwan", alsoLabels: ["zh"] },
+  HK: { entity: "Q8646", lang: "en", name: "Hong Kong", alsoLabels: ["zh"] },
 };
 
 /* -------------------------------------------------------------------------- */

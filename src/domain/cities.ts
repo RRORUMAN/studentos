@@ -54,7 +54,15 @@ export type CityHit<T extends SearchableCity> = {
  * list is short on purpose — every entry is a claim that somebody would type
  * that, and a long list of guesses is worse than a short list of observations.
  */
-const ALIASES: Record<string, readonly string[]> = {
+/**
+ * Names a city is also known by, folded on use.
+ *
+ * Exported because more than one thing needs it: the city search a student
+ * types into, and the job adapter deciding whether a posting that says
+ * "Munchen" belongs to Munich. A second copy of this table is a second place
+ * to forget Koln.
+ */
+export const CITY_ALIASES: Record<string, readonly string[]> = {
   munich: ["munchen", "muenchen"],
   cologne: ["koln", "koeln"],
   vienna: ["wien"],
@@ -110,7 +118,7 @@ export function searchCities<T extends SearchableCity>(
   for (const city of cities) {
     const name = fold(city.name);
     const country = fold(city.country);
-    const aliases = ALIASES[city.slug] ?? [];
+    const aliases = CITY_ALIASES[city.slug] ?? [];
 
     let score = 0;
     let matched: CityHit<T>["matched"] = "name";

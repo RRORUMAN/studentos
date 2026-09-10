@@ -1,4 +1,5 @@
 import "server-only";
+import { arbeitnowProvider } from "@/server/work/arbeitnow";
 
 import { z } from "zod";
 
@@ -261,6 +262,10 @@ function unconfigured(slug: string, label: string, missing: string): JobProvider
  */
 export function providers(): readonly JobProvider[] {
   return [
+    /* The one external source that is real and needs no key. Everything else
+       here is either a partner feed somebody configured or a placeholder
+       saying what is missing. */
+    arbeitnowProvider(),
     ...env.workFeeds.map(feedProvider),
     unconfigured(
       "campus",

@@ -268,26 +268,44 @@ describe("the multi-country registry", () => {
 
   it("never puts a whole country's universities in one city by accident", () => {
     /**
-     * THE GREEK BUG. `fold` keeps only [a-z0-9], so any name in a non-Latin
-     * script folds to the empty string: "Αθήνα" and "Θεσσαλονίκη" both become
-     * "". The city matcher compares folded strings for equality, so without a
-     * guard `"" === ""` is true and EVERY Greek institution is assigned to
-     * whichever Greek city is listed first — silently, and looking entirely
-     * plausible on screen.
+     * THE GREEK BUG, and its fix, which changed what this test can assert.
      *
-     * Athens therefore has no institutions attached, which is the honest
-     * answer: we cannot read the town, so we do not claim to know it.
+     * `fold` keeps only [a-z0-9], so a name in a non-Latin script folds to the
+     * empty string: "Αθήνα" and "Θεσσαλονίκη" both become "". The city matcher
+     * compares folded strings for equality, so without a guard `"" === ""` is
+     * true and EVERY Greek institution lands in whichever Greek city is listed
+     * first — silently, and looking entirely plausible on screen.
+     *
+     * Two things now prevent that. `citySlugFor` refuses an empty fold, so an
+     * unreadable town is "unknown" rather than "matches everything". And the
+     * import asks Wikidata for ENGLISH labels wherever the local script is not
+     * Latin, so Greek municipalities arrive as "Athens" and can be matched
+     * honestly rather than not at all.
+     *
+     * So Athens legitimately has institutions now. The invariant that matters
+     * is unchanged and is what is asserted: a city only ever holds the
+     * institutions whose own municipality is that city.
      */
-    assert.equal(fold("Αθήνα"), "");
-    assert.equal(institutionsInCity("athens").length, 0);
+    assert.equal(fold("Αθήνα"), "", "fold still cannot read Greek, which is why the guard exists");
 
-    /* And no city has absorbed an implausible share of one country. */
     const greek = institutions.filter((row) => row.countryCode === "GR");
-    assert.ok(greek.length > 0, "Greece should still be searchable");
-    assert.equal(
-      greek.filter((row) => row.citySlug !== null).length,
-      0,
-      "no Greek institution should be attached to a city while fold() cannot read Greek",
+    assert.ok(greek.length > 0, "Greece should be in the registry");
+
+    /* Every Athens attachment is genuinely in Athens... */
+    for (const row of institutionsInCity("athens")) {
+      assert.equal(
+        fold(row.city),
+        "athens",
+        `${row.officialName} is filed under Athens but its municipality is "${row.city}"`,
+      );
+    }
+
+    /* ...and the rest of Greece is not quietly swept in with it. Thessaloniki
+       and Komotini are real Greek university towns and are not Athens. */
+    const attached = greek.filter((row) => row.citySlug !== null).length;
+    assert.ok(
+      attached < greek.length,
+      "every Greek institution attached to a city would mean the matcher stopped discriminating",
     );
   });
 
