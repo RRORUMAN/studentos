@@ -260,6 +260,42 @@ export async function resolveReports(formData: FormData): Promise<void> {
       if (decision === "restore") target.hiddenAt = null;
     }
 
+    /* ---- marketplace listings ------------------------------------------
+       A listing is unambiguously our own row — `createListing` writes it and
+       `setListingStatus` already knows how to withdraw one. What it did not
+       have was a path for anybody but its author, so three scam reports on a
+       listing left an admin looking at copy saying it could not be hidden,
+       with only "Close it" on offer. Withdrawing is the existing state for a
+       listing that is off the board, so a hide sets it and a restore returns
+       it to active. */
+    if (targetKind === "listing") {
+      const listing = db.listings.find((row) => row.id === targetId);
+      if (listing) {
+        if (decision === "hide") listing.status = "withdrawn";
+        if (decision === "restore") listing.status = "active";
+      }
+    }
+
+    /* ---- gigs -----------------------------------------------------------
+       THE MIRROR IMAGE, and the worse of the two. `reportOpportunity` already
+       sets `moderation: "pending"` on a scam report, and every read path
+       filters on `published` — so ONE report takes a gig off the board
+       immediately. Nothing anywhere wrote it back: not the poster editing it,
+       not this function, not any other. A single malicious report permanently
+       destroyed a legitimate student's listing, and the student had no way to
+       find out why or undo it.
+
+       Guarded on `postedByUserId`, because a row from a provider feed is not
+       ours to publish or withhold — it says what the feed says, and the ingest
+       is the only thing that may write its state. */
+    if (targetKind === "opportunity") {
+      const gig = db.opportunities.find((row) => row.id === targetId);
+      if (gig && gig.postedByUserId !== null) {
+        if (decision === "hide") gig.moderation = "hidden";
+        if (decision === "restore") gig.moderation = "published";
+      }
+    }
+
     for (const report of db.contentReports) {
       if (report.targetKind !== targetKind || report.targetId !== targetId) continue;
       if (report.status !== "open") continue;

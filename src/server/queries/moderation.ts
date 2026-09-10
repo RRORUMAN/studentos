@@ -66,14 +66,22 @@ export async function loadReportQueue(): Promise<readonly QueuedReport[]> {
   const open = await findMany("contentReports", (row) => row.status === "open");
   if (open.length === 0) return [];
 
-  const [posts, comments, profiles] = await Promise.all([
+  /* Listings and gigs are loaded for the same reason posts are: without them
+     a reported scam listing rendered as "Nothing to quote — this target has no
+     text of its own", so an admin had to decide on a report about text they
+     could not see. */
+  const [posts, comments, profiles, listings, opportunities] = await Promise.all([
     findMany("posts", () => true),
     findMany("comments", () => true),
     findMany("profiles", () => true),
+    findMany("listings", () => true),
+    findMany("opportunities", () => true),
   ]);
 
   const postById = new Map(posts.map((row) => [row.id, row]));
   const commentById = new Map(comments.map((row) => [row.id, row]));
+  const listingById = new Map(listings.map((row) => [row.id, row]));
+  const opportunityById = new Map(opportunities.map((row) => [row.id, row]));
   const profileById = new Map(profiles.map((row) => [row.userId, row]));
 
   const groups = new Map<string, ContentReport[]>();
@@ -92,6 +100,8 @@ export async function loadReportQueue(): Promise<readonly QueuedReport[]> {
     const post = first.targetKind === "post" ? postById.get(first.targetId) : undefined;
     const comment = first.targetKind === "comment" ? commentById.get(first.targetId) : undefined;
     const profile = first.targetKind === "user" ? profileById.get(first.targetId) : undefined;
+    const listing = first.targetKind === "listing" ? listingById.get(first.targetId) : undefined;
+    const gig = first.targetKind === "opportunity" ? opportunityById.get(first.targetId) : undefined;
 
     /**
      * A post, comment or user we no longer have is not a decision anyone can
@@ -118,7 +128,7 @@ export async function loadReportQueue(): Promise<readonly QueuedReport[]> {
       reason: worst,
       mixedReasons: reasons.size > 1,
       since: rows[rows.length - 1].createdAt,
-      excerpt: excerptOf(post, comment, profile),
+      excerpt: excerptOf(post, comment, profile, listing, gig),
       hidden: Boolean(post?.hiddenAt ?? comment?.hiddenAt),
       hideable: hideableTargetKinds.includes(first.targetKind),
     });
@@ -148,6 +158,8 @@ function excerptOf(
   post: { title: string; body: string | null } | undefined,
   comment: { body: string } | undefined,
   profile: { displayName: string; handle: string; bio: string | null } | undefined,
+  listing: { title: string; detail: string | null } | undefined,
+  gig: { title: string; description: string | null } | undefined,
 ): string | null {
   const text = post
     ? [post.title, post.body].filter(Boolean).join(" — ")
@@ -155,7 +167,11 @@ function excerptOf(
       ? comment.body
       : profile
         ? [`@${profile.handle}`, profile.displayName, profile.bio].filter(Boolean).join(" · ")
-        : null;
+        : listing
+          ? [listing.title, listing.detail].filter(Boolean).join(" — ")
+          : gig
+            ? [gig.title, gig.description].filter(Boolean).join(" — ")
+            : null;
 
   if (!text) return null;
   return text.length > 280 ? `${text.slice(0, 279)}…` : text;

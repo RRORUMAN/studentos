@@ -83,7 +83,31 @@ export const reportTargetKinds = [
  * is a signal worth reading and acting on upstream, and the queue says so
  * instead of offering a Take it down button that would do nothing.
  */
-export const hideableTargetKinds: readonly ReportTargetKind[] = ["post", "comment"];
+/**
+ * What an admin can actually act on from the queue.
+ *
+ * It was `["post", "comment"]`, and the two omissions were the two where money
+ * changes hands. A reported scam LISTING could be taken down by nobody but its
+ * own author — `setListingStatus` requires `sellerId === userId` — so an admin
+ * holding three scam reports was shown copy explaining this target could not
+ * be hidden, and offered "Close it" as the only option.
+ *
+ * An OPPORTUNITY had the opposite failure. `reportOpportunity` withholds a gig
+ * on the first scam report and every read filters on `published`, so one
+ * report removes it — and nothing anywhere wrote it back. A single malicious
+ * report permanently destroyed a legitimate student's gig with no way to undo
+ * it. Both directions now resolve; see `resolveReports`.
+ *
+ * A place, an event or a deal stays off this list on purpose: those come from
+ * a provider, and a report against one is a signal we pass on rather than a
+ * row we can hide.
+ */
+export const hideableTargetKinds: readonly ReportTargetKind[] = [
+  "post",
+  "comment",
+  "listing",
+  "opportunity",
+];
 
 /**
  * Reasons that mean somebody could get hurt or robbed, listed first in the
