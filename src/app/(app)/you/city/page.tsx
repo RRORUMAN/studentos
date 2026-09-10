@@ -8,6 +8,7 @@ import { MascotArt } from "@/components/mascot/mascot-art";
 import { Badge } from "@/components/ui/primitives";
 import { fmtDayLabel, fmtTime } from "@/lib/dates";
 import { cityDirectory, cityStatusLabel, cityStatusNote } from "@/data/cities";
+import { areaNamesForCity } from "@/data/neighbourhoods";
 import { describeProximity, priceLevelLabel } from "@/domain/places";
 import { loadPlacesByIds } from "@/server/queries/places";
 import { recordUpgradeTrigger } from "@/server/actions/upgrade";
@@ -39,6 +40,7 @@ export default async function MyCityPage() {
   const now = requestDate();
 
   const city = viewer.city;
+  const areaNames = areaNamesForCity(viewer.profile.citySlug, city.neighbourhoods);
 
   const [saved, responses, groups, events, deals, envelopes] = await Promise.all([
     findMany("saved", (row) => row.userId === viewer.user.id),
@@ -130,8 +132,12 @@ export default async function MyCityPage() {
             <Row key={row.inviteId} href={`/anyone-down/${row.inviteId}`} title="Anyone Down? group" meta="Open chat" />
           ))}
         </Block>
-        <Block title="Neighbourhoods here" icon={<MapPin className="size-4" />} href="/discover" empty={city.deep ? "" : `No neighbourhood data for ${city.name} yet. Students add it as they post.`}>
-          {city.neighbourhoods.slice(0, 6).map((area) => (
+        {/* The chips come from the area registry, which covers all eighty
+            cities, rather than from the hand-written list that covers five.
+            The block links to Where to live rather than to Discover, because
+            that is the screen these names are actually for. */}
+        <Block title="Neighbourhoods here" icon={<MapPin className="size-4" />} href="/neighbourhoods" empty={`We do not have the districts of ${city.name} yet.`}>
+          {areaNames.slice(0, 6).map((area) => (
             <li key={area} className="rounded-full bg-paper-2 px-3 py-1.5 text-[0.8125rem] font-medium text-ink-700">{area}</li>
           ))}
         </Block>

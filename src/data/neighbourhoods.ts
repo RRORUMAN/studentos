@@ -1,3 +1,4 @@
+import { discoveredAreas } from "@/data/neighbourhoods/areas.generated";
 import { neighbourhoodGeo } from "@/data/neighbourhoods/geo.generated";
 import type { Neighbourhood, NeighbourhoodTrait, TraitBand } from "./types";
 
@@ -6,6 +7,20 @@ import type { Neighbourhood, NeighbourhoodTrait, TraitBand } from "./types";
  * NEIGHBOURHOODS
  * ----------------------------------------------------------------------------
  * The five deep cities, as places you could live rather than as names.
+ *
+ * TWO TIERS, AND THE SEAM BETWEEN THEM IS THE POINT. What is written below is
+ * five cities somebody knows: a character line, a rent band, seven trait
+ * scores and a commute to each campus. What is joined on at the bottom of this
+ * file, from `neighbourhoods/areas.generated.ts`, is the other seventy-five
+ * cities as Wikidata knows them — a name, a point, a QID, and nothing else at
+ * all. There is no middle tier where a machine guessed what Favoriten is like,
+ * and there will not be one.
+ *
+ * That is the whole reason `character`, `rent` and `traits` are nullable. The
+ * type used to require them, which meant the only way to have neighbourhoods
+ * in Vienna was to invent Vienna, so the product had neighbourhoods in five
+ * cities and a blank screen in seventy-five. Letting the type say "not known"
+ * cost three question marks and bought seventy-five cities.
  *
  * WHAT THESE NUMBERS ARE, stated before anyone reads one
  *
@@ -312,7 +327,7 @@ const GEO = new Map(neighbourhoodGeo.map((row) => [row.slug, row]));
  * geographic question about that area answers "I don't know" instead of
  * guessing — which is why this join does not throw the way the city one does.
  */
-export const neighbourhoods: readonly Neighbourhood[] = EDITORIAL.map((area) => {
+const WRITTEN: readonly Neighbourhood[] = EDITORIAL.map((area) => {
   const geo = GEO.get(area.slug);
   return {
     ...area,
@@ -322,16 +337,113 @@ export const neighbourhoods: readonly Neighbourhood[] = EDITORIAL.map((area) => 
   };
 });
 
+/**
+ * The other seventy-five cities, discovered rather than written.
+ *
+ * These carry four facts and no judgements: a name, a point, the Wikidata item
+ * that vouches for both, and the city they are in. `character`, `rent` and
+ * `traits` are null, because those are things a person who lives somewhere
+ * knows and a SPARQL query does not, and writing them anyway is the single
+ * thing this codebase refuses to do. `commuteMinutes` is empty for the same
+ * reason: nobody has timed the journey from Favoriten to a Vienna campus, so
+ * `commuteTo` answers null and the ranking leaves commute out entirely.
+ *
+ * THE SLUG IS PREFIXED WITH THE CITY, and that is not decoration. `slug` is
+ * the identity stored in `Profile.areaSlug`, and roughly a dozen of these
+ * cities have an area called Centro, Centrum, Zentrum or Old Town. Unprefixed,
+ * a student in Turin who set their home area would have been reading
+ * Bologna's, silently — the two rows would have been the same row. The
+ * importer guarantees uniqueness within a city; the city prefix turns that
+ * into uniqueness everywhere, by construction rather than by luck.
+ */
+const DISCOVERED: readonly Neighbourhood[] = discoveredAreas.map((area) => ({
+  slug: `${area.citySlug}-${area.slug}`,
+  citySlug: area.citySlug,
+  name: area.name,
+  character: null,
+  commuteMinutes: {},
+  rent: null,
+  traits: null,
+  lat: area.lat,
+  lng: area.lng,
+  wikidataId: area.wikidataId,
+}));
+
+/**
+ * Written first, then discovered.
+ *
+ * Order matters here because `findNeighbourhood` and `getNeighbourhood` both
+ * return the first match, so a city that ever gains editorial rows alongside
+ * imported ones resolves to the written one — the row with something in it —
+ * rather than to whichever came back from Wikidata first.
+ */
+export const neighbourhoods: readonly Neighbourhood[] = [...WRITTEN, ...DISCOVERED];
+
 /* -------------------------------------------------------------------------- */
 /* Lookups                                                                     */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * Indexed rather than scanned.
+ *
+ * This was a `filter` over the whole table, which was free when the table was
+ * twenty-six rows in five cities. It is now around nine hundred rows in
+ * eighty, `neighbourhoodsForCity` is called more than once per render on at
+ * least two screens, and `areaSlugForPlace` calls it once per place on a page
+ * that shows sixty of them. Two module-level maps, built once at import.
+ */
+const BY_CITY = ((): ReadonlyMap<string, readonly Neighbourhood[]> => {
+  const index = new Map<string, Neighbourhood[]>();
+  for (const area of neighbourhoods) {
+    const rows = index.get(area.citySlug);
+    if (rows) rows.push(area);
+    else index.set(area.citySlug, [area]);
+  }
+  return index;
+})();
+
+const BY_SLUG = new Map(neighbourhoods.map((area) => [area.slug, area]));
+
+const NONE: readonly Neighbourhood[] = Object.freeze([]);
+
 export function neighbourhoodsForCity(citySlug: string): readonly Neighbourhood[] {
-  return neighbourhoods.filter((area) => area.citySlug === citySlug);
+  return BY_CITY.get(citySlug) ?? NONE;
 }
 
 export function getNeighbourhood(slug: string): Neighbourhood | undefined {
-  return neighbourhoods.find((area) => area.slug === slug);
+  return BY_SLUG.get(slug);
+}
+
+/**
+ * The district names of a city, for anything that shows a list of names.
+ *
+ * Four screens needed this and four screens each read `City.neighbourhoods` —
+ * the hand-written display list that exists for five cities and is empty for
+ * the other seventy-five. That is how a public page came to render "Most of
+ * Vienna's good evenings happen in  — and almost none of them on the street
+ * the guidebook names", with a clause containing nothing, and how the
+ * onboarding home step came to show a heading over no chips.
+ *
+ * `alsoKnownAs` is that hand-written list, passed in rather than imported, so
+ * this module stays free of a dependency on the city directory. Registry names
+ * come first because they are the ones the rest of the product can reason
+ * about — they have a slug, a coordinate and, in five cities, a rent band —
+ * and the hand-written extras follow. Deduplicated case- and whitespace-
+ * insensitively; "El Born" and "el born " are one district.
+ */
+export function areaNamesForCity(
+  citySlug: string,
+  alsoKnownAs: readonly string[] = [],
+): readonly string[] {
+  const seen = new Set<string>();
+  const names: string[] = [];
+  for (const name of [...neighbourhoodsForCity(citySlug).map((area) => area.name), ...alsoKnownAs]) {
+    const key = name.trim().toLowerCase();
+    if (key.length === 0 || seen.has(key)) continue;
+    seen.add(key);
+    names.push(name);
+  }
+  return names;
 }
 
 /**
@@ -346,11 +458,27 @@ export function getNeighbourhood(slug: string): Neighbourhood | undefined {
  */
 export function findNeighbourhood(citySlug: string, label: string | null): Neighbourhood | undefined {
   if (!label) return undefined;
-  const wanted = normalise(label);
-  return neighbourhoods.find(
-    (area) => area.citySlug === citySlug && (normalise(area.name) === wanted || area.slug === wanted),
-  );
+  return BY_LABEL.get(`${citySlug}|${normalise(label)}`);
 }
+
+/**
+ * Every way a stored label might name an area, within its city.
+ *
+ * Both the normalised display name and the slug, because `Profile.homeArea`
+ * holds whatever the student typed or tapped and the two have never been the
+ * same string. First writer wins, which is why `neighbourhoods` puts the
+ * editorial rows ahead of the imported ones: in a city that has both, a label
+ * matching each resolves to the row with something in it.
+ */
+const BY_LABEL = ((): ReadonlyMap<string, Neighbourhood> => {
+  const index = new Map<string, Neighbourhood>();
+  for (const area of neighbourhoods) {
+    for (const key of [`${area.citySlug}|${normalise(area.name)}`, `${area.citySlug}|${area.slug}`]) {
+      if (!index.has(key)) index.set(key, area);
+    }
+  }
+  return index;
+})();
 
 function normalise(value: string): string {
   return value
@@ -361,9 +489,14 @@ function normalise(value: string): string {
     .replace(/(^-|-$)/g, "");
 }
 
-/** True while the band is a written estimate rather than a reading from students. */
+/**
+ * True while the band is a written estimate rather than a reading from students.
+ *
+ * False for an area with no band at all -- there is no estimate to caveat, and
+ * the interface shows a dash instead of a figure.
+ */
 export function rentIsEstimated(area: Neighbourhood): boolean {
-  return area.rent.basis === "seed-estimate";
+  return area.rent?.basis === "seed-estimate";
 }
 
 /** Door-to-door minutes to one campus, or null when we have no figure for it. */

@@ -82,8 +82,13 @@ export function NeighbourhoodMatcher({
      hard-coded: a London ceiling slider that stops at €900 is useless, and one
      that starts at €400 is useless in Madrid. */
   const [floor, ceiling] = useMemo(() => {
-    const lows = areas.map((area) => area.rent.room[0]);
-    const highs = areas.map((area) => area.rent.room[1]);
+    /* Only the priced areas set the slider range. An imported neighbourhood
+       has no rent, and letting it contribute an Infinity would collapse the
+       scale for every area that does. */
+    const priced = areas.filter((area) => area.rent !== null);
+    if (priced.length === 0) return [200, 2_000];
+    const lows = priced.map((area) => area.rent!.room[0]);
+    const highs = priced.map((area) => area.rent!.room[1]);
     return [Math.floor(Math.min(...lows) / 50) * 50, Math.ceil(Math.max(...highs) / 50) * 50];
   }, [areas]);
 
@@ -93,8 +98,41 @@ export function NeighbourhoodMatcher({
       return { ...current, [trait]: next };
     });
 
+  /**
+   * WHETHER THERE IS ANYTHING HERE TO RANK BY.
+   *
+   * In seventy-five cities every area is an import: a real name at a real
+   * point, with no rent band, no trait scores and no commute figure. Moving a
+   * budget slider over that set changes nothing, because every area scores the
+   * same neutral 0.5 whatever the slider says — so the controls would be four
+   * fieldsets of dead input, which is the one thing this codebase says it never
+   * ships. Better to show the areas, say plainly what is and is not known about
+   * them, and leave the controls for the cities where they do something.
+   *
+   * The test is per-area rather than per-city so a city gains the controls the
+   * moment its first area is priced or rated, without a list of city slugs
+   * anywhere.
+   */
+  const rankable = useMemo(
+    () => areas.some((area) => area.rent !== null || area.traits !== null),
+    [areas],
+  );
+
   return (
     <div className="space-y-4">
+      {!rankable ? (
+        <section className="flex items-start gap-2 rounded-2xl bg-white p-5 text-[0.9375rem] leading-relaxed text-ink-600 shadow-[var(--shadow-flat)] ring-1 ring-ink-950/6">
+          <Info className="mt-0.5 size-4 shrink-0 text-ink-400" />
+          <span>
+            These are the real districts of the city, imported from Wikidata with their
+            names and positions. Nobody has priced a room or rated what any of them is
+            like yet, so there is nothing honest to rank them by — the list is
+            alphabetical, and the sliders will appear here once there is.
+          </span>
+        </section>
+      ) : null}
+
+      {rankable ? (
       <section className="rounded-2xl bg-white p-5 shadow-[var(--shadow-flat)] ring-1 ring-ink-950/6">
         {campuses.length > 0 ? (
           <fieldset>
@@ -183,6 +221,7 @@ export function NeighbourhoodMatcher({
           </div>
         </fieldset>
       </section>
+      ) : null}
 
       <ol className="space-y-3">
         {results.map((result, index) => (
@@ -197,15 +236,21 @@ export function NeighbourhoodMatcher({
         ))}
       </ol>
 
-      <p className="flex items-start gap-2 rounded-xl bg-paper-2 p-3.5 text-[0.8125rem] leading-relaxed text-ink-600">
-        <Info className="mt-0.5 size-4 shrink-0 text-ink-400" />
-        <span>
-          Rent bands are written estimates to sanity-check listings against, not a live market
-          reading. Commutes are door-to-door and honest to about five minutes. Student counts are
-          only shown once enough people in an area have opted in for a count to describe a group
-          rather than a person.
-        </span>
-      </p>
+      {/* The caveat belongs under the figures it caveats. In a city with no
+          rent bands and no commute figures it would be a disclaimer about
+          numbers that are not on the page, which reads as a warning and warns
+          about nothing. */}
+      {rankable ? (
+        <p className="flex items-start gap-2 rounded-xl bg-paper-2 p-3.5 text-[0.8125rem] leading-relaxed text-ink-600">
+          <Info className="mt-0.5 size-4 shrink-0 text-ink-400" />
+          <span>
+            Rent bands are written estimates to sanity-check listings against, not a live market
+            reading. Commutes are door-to-door and honest to about five minutes. Student counts are
+            only shown once enough people in an area have opted in for a count to describe a group
+            rather than a person.
+          </span>
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -233,7 +278,21 @@ function MatchCard({
   showRent: boolean;
 }) {
   const { area } = result;
-  const [low, high] = area.rent.room;
+  const rent = area.rent;
+  const traits = area.traits;
+
+  /**
+   * An area nobody has measured shows no number at all.
+   *
+   * `fit` is always computed, because an unknown component scores a neutral
+   * 0.5 and the arithmetic has to produce something — but for an imported area
+   * with no rent, no commute and no traits, all three components are that 0.5
+   * and `fit` comes out at exactly 50 every time. Printing "50 / Fit" in
+   * the same weight and position as a fit that was actually earned would be
+   * the product asserting a measurement it never took, on every neighbourhood
+   * in seventy-five cities. So: the badge says what it is instead.
+   */
+  const listed = result.evidence === "listed";
 
   return (
     <li
@@ -246,24 +305,36 @@ function MatchCard({
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-[1.0625rem] font-semibold text-ink-950">{area.name}</h2>
-            {rank === 0 ? <Badge accent="signal" tone="solid">Best fit</Badge> : null}
+            {rank === 0 && !listed ? <Badge accent="signal" tone="solid">Best fit</Badge> : null}
             {isHome ? <Badge accent="flow">Where you live</Badge> : null}
           </div>
-          <p className="mt-1 text-[0.9375rem] leading-relaxed text-ink-600">{area.character}</p>
+          {/* Nothing rather than a filler sentence: an imported area is a real
+              name in a real place that nobody has written about yet. */}
+          {area.character ? (
+            <p className="mt-1 text-[0.9375rem] leading-relaxed text-ink-600">{area.character}</p>
+          ) : null}
         </div>
         <div className="shrink-0 text-right">
-          <p className="font-mono text-[1.375rem] leading-none font-semibold text-ink-950">
-            {result.fit}
-          </p>
-          <p className="mt-1 text-[0.6875rem] tracking-wide text-ink-400 uppercase">Fit</p>
+          {listed ? (
+            <p className="max-w-[7.5rem] text-[0.6875rem] leading-tight tracking-wide text-ink-400 uppercase">
+              Not rated yet
+            </p>
+          ) : (
+            <>
+              <p className="font-mono text-[1.375rem] leading-none font-semibold text-ink-950">
+                {result.fit}
+              </p>
+              <p className="mt-1 text-[0.6875rem] tracking-wide text-ink-400 uppercase">Fit</p>
+            </>
+          )}
         </div>
       </div>
 
       <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">
         <Figure
           label="Room, monthly"
-          value={`${fmt(low)}–${fmt(high)}`}
-          note={area.rent.basis === "seed-estimate" ? "Estimate" : "From students"}
+          value={rent ? `${fmt(rent.room[0])}–${fmt(rent.room[1])}` : "—"}
+          note={rent ? (rent.basis === "seed-estimate" ? "Estimate" : "From students") : "Nobody has priced this area"}
         />
         <Figure
           label="To campus"
@@ -277,7 +348,11 @@ function MatchCard({
         />
       </dl>
 
-      {showRent ? (
+      {/* `showRent` says the student set a ceiling; `knows.rent` says this area
+          has a band to judge against it. Both are needed, because the "unknown"
+          verdict reads "No budget set" — true when the student named none, a
+          flat contradiction on an unpriced area for a student who did. */}
+      {showRent && result.knows.rent ? (
         <div className="mt-3">
           <Badge accent={verdictAccent[result.rentVerdict]}>
             {rentVerdictLabel[result.rentVerdict]}
@@ -305,21 +380,31 @@ function MatchCard({
         </p>
       ) : null}
 
-      <details className="group mt-3">
-        <summary className="cursor-pointer list-none text-[0.8125rem] font-medium text-ink-500 hover:text-ink-950">
-          What it is like <span className="group-open:hidden">→</span>
-        </summary>
-        <dl className="mt-2.5 grid grid-cols-2 gap-x-4 gap-y-1.5 sm:grid-cols-3">
-          {traitOrder.map((trait) => (
-            <div key={trait} className="flex items-baseline justify-between gap-2">
-              <dt className="text-[0.8125rem] text-ink-500">{traitLabel[trait]}</dt>
-              <dd className="text-[0.8125rem] font-medium text-ink-800">
-                {traitBandLabel[area.traits[trait]]}
-              </dd>
-            </div>
-          ))}
-        </dl>
-      </details>
+      {/* A disclosure that opens onto seven dashes is worse than no disclosure:
+          it invites a tap and answers it with nothing. An unrated area says so
+          once, in a line, and keeps the action below that does still work. */}
+      {traits ? (
+        <details className="group mt-3">
+          <summary className="cursor-pointer list-none text-[0.8125rem] font-medium text-ink-500 hover:text-ink-950">
+            What it is like <span className="group-open:hidden">→</span>
+          </summary>
+          <dl className="mt-2.5 grid grid-cols-2 gap-x-4 gap-y-1.5 sm:grid-cols-3">
+            {traitOrder.map((trait) => (
+              <div key={trait} className="flex items-baseline justify-between gap-2">
+                <dt className="text-[0.8125rem] text-ink-500">{traitLabel[trait]}</dt>
+                <dd className="text-[0.8125rem] font-medium text-ink-800">
+                  {traitBandLabel[traits[trait]]}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </details>
+      ) : (
+        <p className="mt-3 text-[0.8125rem] leading-relaxed text-ink-500">
+          Imported from Wikidata: we have the name and where it is, and nobody has
+          written up what it is like or what a room costs there yet.
+        </p>
+      )}
 
       <Link
         href={`/discover?q=${encodeURIComponent(area.name)}`}

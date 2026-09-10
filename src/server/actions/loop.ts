@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { placeExists } from "@/server/queries/places";
-import type { ChatAttachment, ReportReason } from "@/domain/types";
+import { AUTO_HIDE_REPORTS } from "@/config/moderation";
+import type { ChatAttachment, ReportReason, ReportTargetKind } from "@/domain/types";
 import { loopChannels } from "@/server/db/seed-content";
 import { findOne, insert, newId, nowIso, transaction } from "@/server/db";
 import { normalisePollOptions } from "@/server/engines/catch-up";
@@ -438,5 +439,59 @@ export async function reportContent(
     resolution: null,
   });
 
+  /**
+   * THE PART THAT WAS MISSING, and it was the part that mattered.
+   *
+   * Until now `contentReports` had three writers and no readers anywhere in
+   * the codebase. Reporting a scam wrote a row and returned success; nothing
+   * read the row, nothing set `hiddenAt`, and the post stayed up. The comment
+   * above said "only an admin action sets hiddenAt", which was true in the
+   * sense that no such action existed.
+   *
+   * There is a queue now — `/admin/reports` — but a queue is only as fast as
+   * whoever is watching it, and "a student reported a scam at 2am" is not a
+   * problem that should wait for someone to log in. So a target that enough
+   * DIFFERENT students have independently reported is hidden pending review.
+   *
+   * DIFFERENT students, counted by distinct `userId`, because the whole
+   * argument against auto-hiding is that one person could silence anybody, and
+   * that argument does not survive the threshold. One report still hides
+   * nothing. Hiding is also reversible and reviewed: the queue shows a hidden
+   * item and an admin can put it straight back.
+   */
+  await autoHideIfPiledOn(parsed.data.targetKind, parsed.data.targetId);
+
   return { ok: true, id };
+}
+
+async function autoHideIfPiledOn(targetKind: ReportTargetKind, targetId: string): Promise<void> {
+  /* A user cannot be hidden — there is no `hiddenAt` on a profile, and hiding
+     a person is a suspension, which is a decision a human makes. */
+  if (targetKind !== "post" && targetKind !== "comment") return;
+
+  await transaction((db) => {
+    /* Two lookups rather than one indexed by a variable table name: a post and
+       a comment are different row types, and `db[table].find(...)` over the
+       union asks TypeScript to call a method whose parameter types do not
+       agree. Both branches want the same field, so the cost of writing it out
+       is one line. */
+    const target =
+      targetKind === "post"
+        ? db.posts.find((row) => row.id === targetId)
+        : db.comments.find((row) => row.id === targetId);
+    if (!target || target.hiddenAt !== null) return;
+
+    const reporters = new Set(
+      db.contentReports
+        .filter(
+          (row) =>
+            row.targetKind === targetKind && row.targetId === targetId && row.status === "open",
+        )
+        .map((row) => row.userId)
+        .filter((id): id is string => id !== null),
+    );
+    if (reporters.size < AUTO_HIDE_REPORTS) return;
+
+    target.hiddenAt = nowIso();
+  });
 }

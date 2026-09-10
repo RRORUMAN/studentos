@@ -109,6 +109,32 @@ export type NeighbourhoodMatch = {
   studentsLiving: number | null;
   /** True while the rent band is a written estimate, not a reading. */
   rentEstimated: boolean;
+  /**
+   * Which of the three components was scored on something real, and which was
+   * scored 0.5 because nothing is known.
+   *
+   * WITHOUT THIS, THE FIT NUMBER LIES BY OMISSION. Every unknown signal scores
+   * a neutral 0.5, which is the right thing to do to a ranking and the wrong
+   * thing to show a person: an imported area in Vienna knows no rent, no
+   * commute and no traits, scores 0.5 three times, and comes out as "50% fit"
+   * — a number with the same shape and typography as the 50% earned by an area
+   * that was measured on all three and landed in the middle. One of those is a
+   * finding and the other is a shrug, and a student cannot tell them apart.
+   *
+   * So the engine reports what it knew, and `evidence` below reduces it to the
+   * question a surface actually asks.
+   */
+  knows: { rent: boolean; commute: boolean; traits: boolean };
+  /**
+   * `"scored"` when at least one component was real, `"listed"` when none was.
+   *
+   * A `"listed"` area is a real place with a real name in a real position that
+   * nobody has said anything about yet. It belongs on the screen — leaving it
+   * off would tell a student in Vienna the city has no neighbourhoods — but it
+   * does not belong in a league table, and a surface showing one must show the
+   * name without the percentage.
+   */
+  evidence: "scored" | "listed";
   /** Facts, ordered, that produced this position. */
   reasons: string[];
   /** The honest counterweight. Empty only when there genuinely is not one. */
@@ -130,7 +156,12 @@ export type NeighbourhoodMatch = {
  * used for the label.
  */
 export function scoreRent(area: Neighbourhood, ceiling: number | null): { score: number; verdict: RentVerdict } {
+  /* Two different unknowns, one answer. Either the student has not said what
+     they can pay, or nobody has priced this area -- an imported neighbourhood
+     carries a name and a coordinate and no rent. Neutral, never zero and never
+     a pass, which is this codebase's rule for a missing signal. */
   if (ceiling === null || ceiling <= 0) return { score: 0.5, verdict: "unknown" };
+  if (area.rent === null) return { score: 0.5, verdict: "unknown" };
 
   const [low, high] = area.rent.room;
   if (low > ceiling) {
@@ -176,6 +207,9 @@ export function scoreTraits(
   area: Neighbourhood,
   priorities: Partial<Record<NeighbourhoodTrait, Priority>>,
 ): number {
+  /* An area nobody has rated cannot be scored on what it is like. */
+  if (area.traits === null) return 0.5;
+
   let total = 0;
   let weight = 0;
   for (const [trait, priority] of Object.entries(priorities) as [NeighbourhoodTrait, Priority][]) {
@@ -233,6 +267,16 @@ export function matchNeighbourhoods(input: MatchInput): readonly NeighbourhoodMa
 
     const studentsLiving = input.density?.get(area.slug) ?? null;
 
+    /* What was measured, as opposed to what was assumed neutral. Rent counts
+       as known only when there is both a band and a ceiling to judge it
+       against; traits only when the area is rated AND the student named a
+       priority, because an unasked question is not an answer either. */
+    const knows = {
+      rent: area.rent !== null && prefs.rentCeiling !== null && prefs.rentCeiling > 0,
+      commute: commuteMinutes !== null,
+      traits: area.traits !== null && Object.values(prefs.priorities).some(Boolean),
+    };
+
     return {
       area,
       fit: Math.max(0, Math.min(100, fit)),
@@ -240,13 +284,34 @@ export function matchNeighbourhoods(input: MatchInput): readonly NeighbourhoodMa
       rentVerdict: rent.verdict,
       commuteMinutes,
       studentsLiving,
-      rentEstimated: area.rent.basis === "seed-estimate",
+      rentEstimated: area.rent?.basis === "seed-estimate",
+      knows,
+      evidence: knows.rent || knows.commute || knows.traits ? "scored" : "listed",
       reasons: reasonsFor(area, prefs, commuteMinutes, rent.verdict, studentsLiving, fmt),
       tradeoffs: tradeoffsFor(area, prefs, commuteMinutes, rent.verdict, fmt),
     };
   });
 
-  return [...scored].sort((a, b) => b.fit - a.fit || a.area.name.localeCompare(b.area.name));
+  /**
+   * Measured areas first, then fit, then the name.
+   *
+   * The first key is the one that needs defending. An area nobody has priced
+   * or rated scores a neutral 0.5 on every component and lands on exactly 50,
+   * which would put it above a real, measured, honestly-mediocre 44 — so the
+   * ranking would be led by the areas it knows least about, and the top of the
+   * list would be the emptiest part of it. Sorting known evidence above no
+   * evidence is not a thumb on the scale; it is the difference between a
+   * ranking and an alphabetised list wearing a ranking's clothes.
+   *
+   * Note this is stable within each group: in a city where nothing is measured
+   * every area is `listed`, the first key does nothing, every fit ties, and the
+   * result is alphabetical — which is the honest presentation of a set of
+   * places we know the names of and nothing more.
+   */
+  const rank = (entry: NeighbourhoodMatch) => (entry.evidence === "scored" ? 1 : 0);
+  return [...scored].sort(
+    (a, b) => rank(b) - rank(a) || b.fit - a.fit || a.area.name.localeCompare(b.area.name),
+  );
 }
 
 /* -------------------------------------------------------------------------- */
@@ -282,7 +347,7 @@ function reasonsFor(
   if (commuteMinutes !== null && commuteMinutes <= prefs.maxCommuteMinutes) {
     reasons.push(`${commuteMinutes} min to campus`);
   }
-  if (verdict === "comfortable") {
+  if (verdict === "comfortable" && area.rent) {
     reasons.push(`Rooms from ${fmt(area.rent.room[0])} a month`);
   }
 
@@ -293,7 +358,8 @@ function reasonsFor(
      the loudest district in the city. */
   for (const [trait, priority] of Object.entries(prefs.priorities) as [NeighbourhoodTrait, Priority][]) {
     if (!priority) continue;
-    const band = area.traits[trait];
+    const band = area.traits?.[trait];
+    if (band === undefined) continue;
     if (band >= 3) reasons.push(`${traitLabel[trait]}: ${BAND_WORD[band]}`);
   }
 
@@ -319,7 +385,7 @@ function tradeoffsFor(
 ): string[] {
   const out: string[] = [];
 
-  if (verdict === "over") out.push(`Rooms start around ${fmt(area.rent.room[0])} a month`);
+  if (verdict === "over" && area.rent) out.push(`Rooms start around ${fmt(area.rent.room[0])} a month`);
   else if (verdict === "tight") out.push(`Cheaper rooms go early here`);
 
   if (commuteMinutes !== null && commuteMinutes > prefs.maxCommuteMinutes) {
@@ -328,14 +394,16 @@ function tradeoffsFor(
 
   for (const [trait, priority] of Object.entries(prefs.priorities) as [NeighbourhoodTrait, Priority][]) {
     if (priority !== 2) continue;
-    if (area.traits[trait] <= 1) out.push(`Weak on ${traitLabel[trait].toLowerCase()}`);
+    if ((area.traits?.[trait] ?? 9) <= 1) out.push(`Weak on ${traitLabel[trait].toLowerCase()}`);
   }
 
   return out.slice(0, 3);
 }
 
 /** The strongest trait band in an area, for a one-line summary chip. */
-export function standoutTrait(area: Neighbourhood): { trait: NeighbourhoodTrait; band: TraitBand } {
+export function standoutTrait(area: Neighbourhood): { trait: NeighbourhoodTrait; band: TraitBand } | null {
+  /* No ratings, no standout. The chip is simply not rendered. */
+  if (area.traits === null) return null;
   const entries = Object.entries(area.traits) as [NeighbourhoodTrait, TraitBand][];
   return entries.reduce(
     (best, [trait, band]) => (band > best.band ? { trait, band } : best),

@@ -2,7 +2,7 @@
 
 import { ArrowLeft, ArrowRight, Loader2, Lock } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useCallback, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 
 import { MoneyInput, OptionRow, Progress, SelectChip } from "@/components/onboarding/controls";
 import { MascotArt } from "@/components/mascot/mascot-art";
@@ -27,6 +27,7 @@ import { cityDirectory, cityStatusLabel, resolveCity } from "@/data/cities";
 import { searchCities } from "@/domain/cities";
 import { UniversityPicker } from "@/components/onboarding/university-picker";
 import { interfaceLanguages } from "@/config/regions";
+import { areaNamesFor } from "@/server/actions/areas";
 import { completeOnboarding, type OnboardingInput } from "@/server/actions/onboarding";
 import { cn } from "@/lib/utils";
 
@@ -104,6 +105,9 @@ const INITIAL: Answers = {
 };
 
 const DRAFT_KEY = `${brand.slug}:onboarding-draft`;
+
+/** One frozen empty array, so "no areas yet" is a stable reference. */
+const NO_AREAS: readonly string[] = Object.freeze([]);
 
 function toggle(list: string[], value: string): string[] {
   return list.includes(value) ? list.filter((entry) => entry !== value) : [...list, value];
@@ -588,8 +592,57 @@ function UniversityStep({ answers, update }: StepProps) {
 }
 
 function HomeStep({ answers, update }: StepProps) {
-  const city = answers.citySlug ? resolveCity(answers.citySlug) : null;
-  const neighbourhoods = city?.neighbourhoods ?? [];
+  /**
+   * The city's districts, fetched rather than bundled.
+   *
+   * `city.neighbourhoods` — a hand-written list that exists for five cities —
+   * used to be the only source here, which is why this step had nothing to tap
+   * for the other seventy-five. The area registry covers all eighty now, but it
+   * is around nine hundred rows and this is the screen where download cost is
+   * paid by someone with no reason yet to wait, so it comes over the wire for
+   * the one city the student picked. See `src/server/actions/areas.ts`.
+   *
+   * A failed or slow fetch costs nothing: the chips are an accelerator and the
+   * free-text box below is the actual answer, always present and never gated on
+   * this having arrived.
+   */
+  const citySlug = answers.citySlug;
+
+  /**
+   * The result is stored WITH the city it belongs to, and read back only when
+   * the two still agree.
+   *
+   * That is what makes this correct when a student taps back and picks a
+   * different city: the previous city's chips are gone on the render that
+   * changes `citySlug`, not on whenever its request happens to settle. It also
+   * means the effect never has to clear anything, which matters because
+   * `setState` called synchronously in an effect body is a cascading render
+   * and React's own lint rule refuses it.
+   */
+  const [fetched, setFetched] = useState<{ citySlug: string; names: readonly string[] } | null>(
+    null,
+  );
+
+  useEffect(() => {
+    if (!citySlug) return;
+    /* A response that arrives after the student has moved on is dropped rather
+       than rendered — belt to the braces of the check below. */
+    let live = true;
+    areaNamesFor(citySlug)
+      .then((names) => {
+        if (live) setFetched({ citySlug, names });
+      })
+      .catch(() => {
+        /* The chips are an accelerator; the free-text box below is the answer.
+           A failed lookup costs nothing and must not stall onboarding. */
+        if (live) setFetched({ citySlug, names: [] });
+      });
+    return () => {
+      live = false;
+    };
+  }, [citySlug]);
+
+  const neighbourhoods = fetched && fetched.citySlug === citySlug ? fetched.names : NO_AREAS;
 
   return (
     <>

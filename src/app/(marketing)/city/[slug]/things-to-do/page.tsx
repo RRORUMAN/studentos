@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 
 import { CityCollection } from "@/components/marketing/city-collection";
 import { getCity } from "@/data/cities";
+import { areaNamesForCity } from "@/data/neighbourhoods";
 import { requestDate } from "@/server/now";
 import { loadCityPlaces } from "@/server/queries/places";
 import { loopForCity } from "@/data/loop";
@@ -38,6 +39,8 @@ export default async function ThingsToDoPage(props: PageProps<"/city/[slug]/thin
   const { slug } = await props.params;
   const city = getCity(slug);
   if (!city) notFound();
+
+  const areaNames = areaNamesForCity(city.slug, city.neighbourhoods);
 
   const now = requestDate();
 
@@ -83,11 +86,21 @@ export default async function ThingsToDoPage(props: PageProps<"/city/[slug]/thin
           <p className="mt-2 text-[0.9375rem] leading-relaxed text-ink-800">
             {city.hook}
           </p>
-          <p className="mt-3 text-[0.8125rem] leading-relaxed text-ink-500">
-            Most of {city.name}&rsquo;s good evenings happen in{" "}
-            {city.neighbourhoods.slice(0, 3).join(", ")} — and almost none of them on the street the
-            guidebook names.
-          </p>
+          {/* A SENTENCE WITH A HOLE IN IT. This read `city.neighbourhoods`,
+              which is hand-written and empty for seventy-five of the eighty
+              cities, so on most of these public pages it rendered as "Most of
+              Vienna's good evenings happen in  — and almost none of them on
+              the street the guidebook names": a clause with nothing in it,
+              an em dash hanging off nothing, on an indexed page. The area
+              registry covers every city; where even that is empty the sentence
+              is not printed rather than printed broken. */}
+          {areaNames.length > 0 ? (
+            <p className="mt-3 text-[0.8125rem] leading-relaxed text-ink-500">
+              Most of {city.name}&rsquo;s good evenings happen in{" "}
+              {areaNames.slice(0, 3).join(", ")} — and almost none of them on the street the
+              guidebook names.
+            </p>
+          ) : null}
         </div>
       }
     />

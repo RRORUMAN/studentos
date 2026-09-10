@@ -353,8 +353,18 @@ export type Neighbourhood = {
   slug: string;
   citySlug: string;
   name: string;
-  /** One line a student who lives there would say. Not a tourism blurb. */
-  character: string;
+  /**
+   * One line a student who lives there would say. Not a tourism blurb.
+   *
+   * NULL FOR AN IMPORTED AREA, and that nullability is what lets this product
+   * know about neighbourhoods in eighty cities instead of five. A coordinate
+   * and a name can be imported from Wikidata; what a place is LIKE cannot, and
+   * generating a sentence about somewhere nobody has been is exactly the
+   * fabrication this codebase exists without. So an imported area is a real
+   * name in a real position with nothing said about it, and the interface
+   * renders the silence rather than filling it.
+   */
+  character: string | null;
   /**
    * Door-to-door minutes to each campus in the city, keyed by campus slug, by
    * whatever students there actually use — metro in Madrid, a bike in
@@ -362,8 +372,10 @@ export type Neighbourhood = {
    * a range and mean nothing.
    */
   commuteMinutes: Readonly<Record<string, number>>;
-  rent: RentBand;
-  traits: Readonly<Record<NeighbourhoodTrait, TraitBand>>;
+  /** Null when nobody has priced this area. `scoreRent` returns "unknown". */
+  rent: RentBand | null;
+  /** Null when nobody has rated this area. `scoreTraits` scores it neutral. */
+  traits: Readonly<Record<NeighbourhoodTrait, TraitBand>> | null;
   /**
    * The area's own centre, from Wikidata via `scripts/import-neighbourhoods.mjs`.
    *

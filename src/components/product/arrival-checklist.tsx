@@ -136,9 +136,15 @@ export function ArrivalChecklist({
                           <span className="tnum">{task.cost}</span>
                         </>
                       ) : null}
+                      {/* "Check the official source" is an instruction, and an
+                          instruction with no link under it is a dead end. A
+                          legal row only points at a source where we hold a
+                          checked one for that country; where we do not, the
+                          badge says what is actually true about the row
+                          instead of telling the student to click nothing. */}
                       {task.legal ? (
                         <span className="rounded-xs bg-amber/15 px-1.5 py-0.5 text-[0.625rem] font-medium tracking-wide text-amber uppercase">
-                          Check the official source
+                          {task.source ? "Check the official source" : "Depends on your nationality"}
                         </span>
                       ) : null}
                     </span>

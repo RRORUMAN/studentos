@@ -40,6 +40,18 @@ export default async function NeighbourhoodsPage() {
   const city = resolveCity(citySlug);
   const areas = neighbourhoodsForCity(citySlug);
 
+  /**
+   * THREE STATES, NOT TWO, and the middle one is new.
+   *
+   * This page used to ask only whether the city had areas at all, because
+   * either it was one of the five written-up cities or it was empty. Now every
+   * city has areas, and seventy-five of them have areas that carry a name and
+   * a point and nothing else — so promising a list "ranked against what you
+   * can pay" to a student in Vienna would be describing a ranking the page
+   * cannot perform.
+   */
+  const rankable = areas.some((area) => area.rent !== null || area.traits !== null);
+
   return (
     <div className="page max-w-2xl py-6 sm:py-8">
       <Link
@@ -55,9 +67,11 @@ export default async function NeighbourhoodsPage() {
         <div>
           <h1 className="text-display-xs text-ink-950 sm:text-display-sm">Where should I live?</h1>
           <p className="mt-1.5 text-[0.9375rem] leading-relaxed text-ink-600">
-            {areas.length > 0
-              ? `Every neighbourhood in ${city?.name ?? "your city"}, ranked against what you can pay, how far you will travel and what you actually want nearby.`
-              : `Nobody has written up the neighbourhoods in ${city?.name ?? "your city"} yet, so there is nothing here to rank.`}
+            {areas.length === 0
+              ? `We do not have the neighbourhoods of ${city?.name ?? "your city"} yet, so there is nothing here to show.`
+              : rankable
+                ? `Every neighbourhood in ${city?.name ?? "your city"}, ranked against what you can pay, how far you will travel and what you actually want nearby.`
+                : `The ${areas.length} districts of ${city?.name ?? "your city"}, by name and position. What a room costs and what each one is like is not written up yet, and we would rather list them than invent it.`}
           </p>
         </div>
       </header>
@@ -67,10 +81,17 @@ export default async function NeighbourhoodsPage() {
           <Matcher citySlug={citySlug} viewer={viewer} />
         ) : (
           <div className="rounded-2xl bg-white p-5 text-[0.9375rem] leading-relaxed text-ink-600 shadow-[var(--shadow-flat)] ring-1 ring-ink-950/6">
+            {/* This used to describe the five-city state — "this works in the
+                cities with full local data" — which was the honest answer when
+                the alternative was inventing seventy-five cities. It is now
+                the answer for a short list of cities whose districts Wikidata
+                genuinely does not record, so it says that instead of implying
+                a tier the student has not qualified for. */}
             <p>
-              This works in the cities with full local data. Your city has the budget, arrival and
-              planning tools, and areas appear here once there are rent bands and commute figures
-              worth ranking rather than guesses dressed as a score.
+              We import every city&rsquo;s districts from Wikidata, and for{" "}
+              {city?.name ?? "your city"} it has none we could stand behind — so rather than
+              list something approximate, there is nothing here. Everything else in the product
+              works normally.
             </p>
             <Link
               href="/ask/questions"

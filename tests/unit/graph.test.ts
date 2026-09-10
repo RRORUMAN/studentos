@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { neighbourhoods, findNeighbourhood, neighbourhoodsForCity } from "../../src/data/neighbourhoods.ts";
+import type { Neighbourhood } from "../../src/data/types.ts";
 import {
   MIN_COHORT,
   areaDensity,
@@ -261,10 +262,14 @@ describe("neighbourhood rows", () => {
 
   it("keeps every rent band the right way round", () => {
     for (const area of neighbourhoods) {
-      assert.ok(area.rent.room[0] < area.rent.room[1], `${area.name} room band inverted`);
-      if (area.rent.studio) {
-        assert.ok(area.rent.studio[0] < area.rent.studio[1], `${area.name} studio band inverted`);
-        assert.ok(area.rent.studio[0] > area.rent.room[0], `${area.name} studio cheaper than a room`);
+      /* An imported area carries no band at all, which is not a band the
+         wrong way round. Only priced areas have an ordering to check. */
+      const rent = area.rent;
+      if (!rent) continue;
+      assert.ok(rent.room[0] < rent.room[1], `${area.name} room band inverted`);
+      if (rent.studio) {
+        assert.ok(rent.studio[0] < rent.studio[1], `${area.name} studio band inverted`);
+        assert.ok(rent.studio[0] > rent.room[0], `${area.name} studio cheaper than a room`);
       }
     }
   });
@@ -279,6 +284,23 @@ describe("neighbourhood rows", () => {
 /* -------------------------------------------------------------------------- */
 /* Matching                                                                    */
 /* -------------------------------------------------------------------------- */
+
+/**
+ * An editorial area, with its band proved present rather than assumed.
+ *
+ * Rent is nullable now that imported areas carry a name and a coordinate and
+ * nothing else. These cases are about how a *priced* area ranks, so they say
+ * out loud that they picked one -- rather than reaching through the null with
+ * a non-null assertion that would go quiet on the day the row loses its band.
+ */
+type PricedArea = Neighbourhood & { rent: NonNullable<Neighbourhood["rent"]> };
+
+function priced(slug: string): PricedArea {
+  const area = neighbourhoods.find((a) => a.slug === slug);
+  assert.ok(area, `no area called ${slug}`);
+  assert.ok(area.rent, `${slug} carries no rent band, so it cannot stand in for a priced one`);
+  return area as PricedArea;
+}
 
 const prefs = (over: Partial<LivingPreferences> = {}): LivingPreferences => ({
   campusSlug: "ucm",
@@ -299,14 +321,14 @@ describe("neighbourhood match", () => {
   });
 
   it("labels a band that straddles the ceiling as tight rather than affordable", () => {
-    const area = neighbourhoods.find((a) => a.slug === "wedding")!;
+    const area = priced("wedding");
     assert.equal(scoreRent(area, area.rent.room[1] - 50).verdict, "tight");
     assert.equal(scoreRent(area, area.rent.room[1] + 200).verdict, "comfortable");
     assert.equal(scoreRent(area, area.rent.room[0] - 50).verdict, "over");
   });
 
   it("drops rent out of the ranking entirely when no ceiling is set", () => {
-    const area = neighbourhoods.find((a) => a.slug === "wedding")!;
+    const area = priced("wedding");
     const { score, verdict } = scoreRent(area, null);
     assert.equal(verdict, "unknown");
     assert.equal(score, 0.5);

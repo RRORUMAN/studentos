@@ -5,6 +5,7 @@ import { z } from "zod";
 
 import { type AiSettingKey, aiSettingMeta } from "@/config/ai";
 import { tierOrder } from "@/config/entitlements";
+import { reportTargetKinds } from "@/config/moderation";
 import { cityDirectory } from "@/data/cities";
 import { institutionById } from "@/data/institutions";
 import { nowIso, remove, transaction } from "@/server/db";
@@ -199,4 +200,82 @@ export async function reviewInstitution(formData: FormData): Promise<void> {
 
   await note(null);
   revalidatePath("/admin");
+}
+
+/* -------------------------------------------------------------------------- */
+/* Moderation                                                                  */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Act on every open report against one target.
+ *
+ * `hide` takes the content down and resolves the reports; `restore` puts it
+ * back and dismisses them; `dismiss` leaves the content alone and closes the
+ * reports. All three are one decision about one target, which is why they take
+ * a target rather than a report id — five students reporting one post is one
+ * judgement, and a queue that makes it five gets the same post hidden four
+ * times.
+ *
+ * `restore` exists because of the auto-hide rule in `reportContent`: three
+ * students agreeing hides something without anyone reading it, and a rule that
+ * can only ever hide is a rule that eventually silences somebody who was
+ * right. This is the way back.
+ */
+export async function resolveReports(formData: FormData): Promise<void> {
+  const admin = await requireAdmin();
+
+  const parsed = z
+    .object({
+      targetKind: z.enum(reportTargetKinds),
+      targetId: z.string().min(1).max(80),
+      decision: z.enum(["hide", "restore", "dismiss"]),
+    })
+    .safeParse({
+      targetKind: formData.get("targetKind"),
+      targetId: formData.get("targetId"),
+      decision: formData.get("decision"),
+    });
+
+  if (!parsed.success) {
+    await note("That moderation decision did not validate.");
+    revalidatePath("/admin");
+    return;
+  }
+
+  const { targetKind, targetId, decision } = parsed.data;
+
+  await transaction((db) => {
+    /* The content, where the content is something this product stores. A place
+       comes from a provider and a report against one is a signal we pass on
+       rather than a row we can hide. */
+    const target =
+      targetKind === "post"
+        ? db.posts.find((row) => row.id === targetId)
+        : targetKind === "comment"
+          ? db.comments.find((row) => row.id === targetId)
+          : null;
+
+    if (target) {
+      if (decision === "hide") target.hiddenAt = target.hiddenAt ?? nowIso();
+      if (decision === "restore") target.hiddenAt = null;
+    }
+
+    for (const report of db.contentReports) {
+      if (report.targetKind !== targetKind || report.targetId !== targetId) continue;
+      if (report.status !== "open") continue;
+      /* "resolved" means the report was right and something happened;
+         "dismissed" means it was looked at and nothing needed to. Keeping them
+         apart is what makes the table worth reading later — a reporter whose
+         reports are always dismissed and one whose are always upheld are two
+         different people. */
+      report.status = decision === "hide" ? "resolved" : "dismissed";
+      report.resolvedAt = nowIso();
+      report.resolution = `${decision} by ${admin.user.id}`;
+    }
+  });
+
+  await note(null);
+  revalidatePath("/admin");
+  revalidatePath("/pulse");
+  if (targetKind === "post") revalidatePath(`/pulse/${targetId}`);
 }

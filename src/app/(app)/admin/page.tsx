@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
 import { AiControls, AiToolList, CityStatusControls, FlagControls, QuotaControls } from "@/components/app/admin-controls";
 import { Meter } from "@/components/ui/primitives";
 import { Delta, FunnelBars, Sparkline } from "@/components/app/admin-charts";
 import { type AiSettingKey, aiSettingMeta } from "@/config/ai";
 import { upgradeTriggerMeta, type UpgradeTrigger } from "@/config/entitlements";
+import { AUTO_HIDE_REPORTS, reportReasonLabel, urgentReasons } from "@/config/moderation";
 import { cityDirectory } from "@/data/cities";
 import type { CityStatus } from "@/data/types";
 import { providerHealth } from "@/server/work/providers";
@@ -15,8 +17,10 @@ import { loadInfrastructure } from "@/server/queries/infrastructure";
 import { aiConfig, degradedCopy, spendSince } from "@/server/ai/config";
 import { toolMeta, type ToolName, toolSchemas } from "@/server/ai/tools";
 import { type FlagName, flagMeta, loadSettings } from "@/server/queries/settings";
-import { reviewInstitution } from "@/server/actions/admin";
+import { loadReportQueue } from "@/server/queries/moderation";
+import { resolveReports, reviewInstitution } from "@/server/actions/admin";
 import { requireAdmin } from "@/server/viewer";
+import { fmtDayLabel } from "@/lib/dates";
 import { cn, money } from "@/lib/utils";
 
 export const metadata: Metadata = {
@@ -50,6 +54,11 @@ export default async function AdminPage() {
     loadInstitutionAdmin(),
     loadDataHealth(new Date()),
   ]);
+
+  /* Loaded after the batch above rather than inside it: it reads the tables
+     the moderation actions write, and it is the one thing on this page that
+     someone may be looking at because it is urgent. */
+  const queue = await loadReportQueue();
 
   const dayStart = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate())).toISOString();
   const spentToday = await spendSince(dayStart);
@@ -606,6 +615,132 @@ export default async function AdminPage() {
           </ul>
         </div>
       ) : null}
+
+      {/* ---- reports --------------------------------------------------------- */}
+      <SectionHead
+        title="Reports"
+        detail={`Every open report, grouped by what was reported and ordered by how much it matters rather than by how old it is. This queue is new: until now the three report actions in the product wrote rows into \`contentReports\` and nothing anywhere read one, so reporting a scam returned success and left the post up. Anything ${AUTO_HIDE_REPORTS} different students have independently reported is already hidden by the time it appears here — the decision left on those is whether to put it back.`}
+      />
+
+      {queue.length === 0 ? (
+        <p className="mt-4 rounded-xl bg-paper p-4 text-[0.875rem] text-ink-500 ring-1 ring-ink-950/6">
+          Nothing open. This is the good state, and it is also the state a broken report button
+          produces — the counterpart to watch is whether reports are arriving at all.
+        </p>
+      ) : (
+        <ul className="mt-4 space-y-2">
+          {queue.map((entry) => (
+            <li
+              key={`${entry.targetKind}:${entry.targetId}`}
+              className="rounded-xl bg-white p-4 ring-1 ring-ink-950/6"
+            >
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <p className="flex flex-wrap items-center gap-2">
+                  <span
+                    className={cn(
+                      "rounded-full px-2.5 py-1 text-[0.75rem] font-semibold",
+                      urgentReasons.includes(entry.reason)
+                        ? "bg-pulse-soft text-pulse-deep"
+                        : "bg-ink-100 text-ink-700",
+                    )}
+                  >
+                    {reportReasonLabel[entry.reason]}
+                  </span>
+                  {entry.mixedReasons ? (
+                    <span className="text-[0.75rem] text-ink-500">and other reasons</span>
+                  ) : null}
+                  {entry.hidden ? (
+                    <span className="rounded-full bg-amber-soft px-2.5 py-1 text-[0.75rem] font-semibold text-amber-deep">
+                      Hidden
+                    </span>
+                  ) : null}
+                </p>
+                <p className="font-mono text-[0.6875rem] uppercase tracking-[0.1em] text-ink-400">
+                  {entry.targetKind} · {entry.reporters}{" "}
+                  {entry.reporters === 1 ? "reporter" : "reporters"} · since{" "}
+                  {fmtDayLabel(entry.since, "UTC")}
+                </p>
+              </div>
+
+              {entry.excerpt ? (
+                <p className="mt-2 text-[0.875rem] leading-relaxed text-ink-700">{entry.excerpt}</p>
+              ) : (
+                <p className="mt-2 text-[0.875rem] text-ink-500">
+                  Nothing to quote — this target has no text of its own.
+                </p>
+              )}
+
+              {entry.reports.some((report) => report.note) ? (
+                <ul className="mt-2 space-y-1">
+                  {entry.reports
+                    .filter((report) => report.note)
+                    .slice(0, 3)
+                    .map((report) => (
+                      <li key={report.id} className="text-[0.8125rem] leading-relaxed text-ink-500">
+                        &ldquo;{report.note}&rdquo;
+                      </li>
+                    ))}
+                </ul>
+              ) : null}
+
+              {!entry.hideable ? (
+                <p className="mt-2 text-[0.8125rem] leading-relaxed text-ink-500">
+                  This lives in someone else&rsquo;s data — a place from OpenStreetMap, a job from a
+                  provider&rsquo;s feed — so there is nothing here to take down. Read it, act on it
+                  upstream, and close it.
+                </p>
+              ) : null}
+
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                {!entry.hideable ? null : entry.hidden ? (
+                  <form action={resolveReports}>
+                    <input type="hidden" name="targetKind" value={entry.targetKind} />
+                    <input type="hidden" name="targetId" value={entry.targetId} />
+                    <input type="hidden" name="decision" value="restore" />
+                    <button
+                      type="submit"
+                      className="rounded-full bg-mint-soft px-3 py-1.5 text-[0.8125rem] font-medium text-mint-deep transition-opacity hover:opacity-80"
+                    >
+                      Put it back
+                    </button>
+                  </form>
+                ) : (
+                  <form action={resolveReports}>
+                    <input type="hidden" name="targetKind" value={entry.targetKind} />
+                    <input type="hidden" name="targetId" value={entry.targetId} />
+                    <input type="hidden" name="decision" value="hide" />
+                    <button
+                      type="submit"
+                      className="rounded-full bg-pulse-soft px-3 py-1.5 text-[0.8125rem] font-medium text-pulse-deep transition-opacity hover:opacity-80"
+                    >
+                      Take it down
+                    </button>
+                  </form>
+                )}
+                <form action={resolveReports}>
+                  <input type="hidden" name="targetKind" value={entry.targetKind} />
+                  <input type="hidden" name="targetId" value={entry.targetId} />
+                  <input type="hidden" name="decision" value="dismiss" />
+                  <button
+                    type="submit"
+                    className="rounded-full px-3 py-1.5 text-[0.8125rem] font-medium text-ink-500 transition-colors hover:bg-ink-100"
+                  >
+                    {entry.hideable ? "Nothing wrong with it" : "Close it"}
+                  </button>
+                </form>
+                {entry.targetKind === "post" ? (
+                  <Link
+                    href={`/pulse/${entry.targetId}`}
+                    className="text-[0.8125rem] font-medium text-flow hover:underline"
+                  >
+                    Open it
+                  </Link>
+                ) : null}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
 
       <DataHealth report={dataHealth} />
 

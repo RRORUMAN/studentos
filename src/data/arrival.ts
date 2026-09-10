@@ -1,15 +1,24 @@
-import type { ArrivalTask } from "./types";
+import { resolveCity } from "@/data/cities";
+import type { ArrivalTask, CityContext } from "./types";
 
 /**
  * ARRIVAL MODE
  * ----------------------------------------------------------------------------
- * The first-two-weeks list. In the product this is generated per city from the
- * city record plus official sources; here the Madrid variant is seeded and the
- * generic variant is the fallback.
+ * The first-two-weeks list.
  *
- * Anything touching immigration, residency or tax is flagged `legal: true`.
- * Those rows always render the official source link and the disclaimer below —
- * the product must never be the authority on a legal requirement.
+ * TWO TIERS. `arrivalTasksByCity` holds a list somebody wrote for one specific
+ * city, with that city's card names, that city's prices and that city's
+ * authorities. `genericTasks` below builds the list for every other city out of
+ * what is true everywhere plus whatever the city record actually carries. The
+ * seam matters: see the long comment above `genericTasks` for what happened
+ * when the fallback was simply an alias for Madrid's list.
+ *
+ * Anything touching immigration, residency or tax is flagged `legal: true` and
+ * renders the disclaimer below. It renders an official source link where we
+ * hold a checked source for that country — and where we do not it links
+ * nothing, because a link to the wrong country's ministry is worse than no
+ * link at all. The product must never be the authority on a legal requirement,
+ * and must never appear to be one for a country it knows nothing about.
  */
 
 export const legalDisclaimer =
@@ -98,11 +107,140 @@ export const arrivalTasksByCity: Record<string, readonly ArrivalTask[]> = {
   ],
 };
 
-/** Cities without a seeded list fall back to the generic version. */
-export const genericArrivalTasks: readonly ArrivalTask[] = arrivalTasksByCity.madrid;
+/* -------------------------------------------------------------------------- */
+/* The fallback, for the seventy-nine cities with no seeded list               */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * ============================================================================
+ * WHAT THIS REPLACED, because it was the worst thing in the codebase
+ * ----------------------------------------------------------------------------
+ * This line used to read:
+ *
+ *   export const genericArrivalTasks = arrivalTasksByCity.madrid;
+ *
+ * One city has a seeded list. So every student in the other seventy-nine
+ * opened Arrival Mode — the screen for their first two weeks in a country they
+ * have never lived in — and was told, as fact, to get the Abono Joven if they
+ * are under 26, that it costs about €20 a month, that a SIM is €8–€15, that a
+ * gym is €15–€25, and that the authority for their residency is the Spanish
+ * Ministry of Foreign Affairs. In Seoul. In Toronto. In Lagos.
+ *
+ * Every one of those is a specific, checkable, confidently-worded claim about
+ * the wrong country, on the screen where a student is least able to tell and
+ * most likely to act. The residency row is the one that matters: it is flagged
+ * `legal: true`, which makes the interface render its source link with extra
+ * weight, and the link went to a Spanish ministry.
+ *
+ * THE FIX IS NOT TO WRITE SEVENTY-NINE MORE LISTS from memory — that would be
+ * the same failure in more places. It is to say only what is true everywhere,
+ * and to fill in the specifics from data the product actually holds:
+ * `City.transport` carries a real card name, a real student note and a real
+ * official URL for each city, imported and checked. Where there is no such
+ * datum, the task says what to look for instead of naming something that does
+ * not exist there.
+ *
+ * NOTHING BELOW NAMES A PRICE. A cost is a claim about one country's economy
+ * and this list is read in eighty. The city's own price anchors are on the
+ * city screen, where they are dated and attributed.
+ * ============================================================================
+ */
+function genericTasks(city: CityContext | null): readonly ArrivalTask[] {
+  const where = city?.name ?? "your city";
+  const transport = city?.transport ?? null;
+
+  return [
+    {
+      id: "transport",
+      label: "Transport pass",
+      detail: transport
+        ? `${transport.card} — ${transport.studentNote} Sort it before you start buying single tickets, which is where the money goes in week one.`
+        : `Find the student or under-26 travel pass in ${where} before you buy single tickets. Almost every city has one, and it is usually the largest saving available to you in your first month.`,
+      effort: "An hour, once",
+      /* The city's own transport authority, or nothing. Never a stand-in. */
+      source: transport ? { label: transport.card, url: transport.officialUrl } : undefined,
+    },
+    {
+      id: "sim",
+      label: "Local SIM",
+      detail:
+        "A prepaid local SIM usually works the day you buy it and usually needs only your passport. Leave the contract until you have a local bank account and an address.",
+      effort: "Half an hour in a phone shop",
+    },
+    {
+      id: "banking",
+      label: "Somewhere to be paid and to pay from",
+      detail:
+        "A digital account you can open from your phone covers the first weeks. A local account matters when a landlord, an employer or the university needs one, and what it asks for depends on the country — check what proof of address they accept before you go in.",
+      effort: "Minutes in an app, longer in a branch",
+      legal: true,
+    },
+    {
+      id: "registration",
+      label: "Registration and residency",
+      detail: city
+        ? `What ${city.country} requires of you depends on your nationality, your course and how long you are staying, and it is the one thing here that has a deadline attached. Your university's international office deals with this for students in your exact position every year — they are the fastest correct answer, and they are free.`
+        : "What is required depends on your nationality, your course and how long you are staying. Your university's international office handles this for students in your exact position every year.",
+      effort: "Appointment based, book early",
+      legal: true,
+      /* NO LINK, deliberately, and this is the whole point of the rewrite: the
+         only immigration URL this file has ever held is Spain's, and handing
+         that to a student in Seoul is worse than handing them nothing. When a
+         checked per-country source exists — the shape `work-rights.ts` already
+         uses, an authority plus a URL plus the date it was confirmed to
+         resolve — it belongs here. Until then this row names the authority a
+         student can actually reach. */
+    },
+    {
+      id: "discounts",
+      label: "Student discounts worth having",
+      detail:
+        "Your university card, whatever the national youth or student card is called here, and museum or transport concessions. Three things cover most of what you will use; the rest is marketing.",
+      effort: "An afternoon, once",
+    },
+    {
+      id: "supermarket",
+      label: "Find your cheap supermarket",
+      detail:
+        "Work out which supermarket near you is the cheap one and which market is cheaper still. This single decision moves your weekly spend more than any other habit you will form this month.",
+      effort: "One walk around your neighbourhood",
+    },
+    {
+      id: "gym",
+      label: "Gym or sport",
+      detail:
+        "University clubs are almost always cheaper than a private gym and come with people attached, which is the part that matters in month one. Municipal sports centres are the next cheapest.",
+      effort: "Sign up in person",
+    },
+    {
+      id: "community",
+      label: "Join your university community",
+      detail:
+        "Find your campus feed and two societies. This is the step that decides whether the year is social or lonely, and it is free.",
+      effort: "Ten minutes",
+    },
+    {
+      id: "first-event",
+      label: "Go to one thing in week one",
+      detail:
+        "Anything free with other new students. The first event is the hardest and the only one that matters.",
+      effort: "One evening",
+    },
+  ];
+}
+
+/**
+ * The list with no city attached at all.
+ *
+ * Used where a city is genuinely not known. It is the generic list above with
+ * every interpolation taking its fallback branch, which is why that branch had
+ * to be written to stand on its own rather than to read as a degraded version
+ * of something better.
+ */
+export const genericArrivalTasks: readonly ArrivalTask[] = genericTasks(null);
 
 export function arrivalTasksFor(citySlug: string): readonly ArrivalTask[] {
-  return arrivalTasksByCity[citySlug] ?? genericArrivalTasks;
+  return arrivalTasksByCity[citySlug] ?? genericTasks(resolveCity(citySlug));
 }
 
 /* -------------------------------------------------------------------------- */

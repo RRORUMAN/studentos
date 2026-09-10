@@ -110,8 +110,23 @@ export default async function EventsPage(props: PageProps<"/events">) {
   const tabLabel = (entry: (typeof eventTabs)[number]) =>
     entry.value === "under-10" ? `Under ${money(10, where)}` : entry.label;
 
-  const emptyLine =
-    tab === "campus" && !viewer.profile.campusSlug
+  /**
+   * WHETHER THIS CITY HAS AN EVENT SOURCE AT ALL, which is a different
+   * question from whether this tab matched anything.
+   *
+   * `scored` is every event in the city before the tab filters it. When that is
+   * empty, no filter is responsible: nothing has been connected here. Five
+   * cities have seeded events and the other seventy-five have none, so for most
+   * students every tab was showing a line blaming the filter — "Nothing free
+   * listed in this view yet" — under a "Show everything" button that led to
+   * another empty screen. It read as a broken product rather than a new one,
+   * and it was a claim about Krakow made from a gap in our data.
+   */
+  const cityHasNoEvents = scored.length === 0;
+
+  const emptyLine = cityHasNoEvents
+    ? `No event source is connected for ${viewer.city.name} yet, so this is our gap rather than a quiet week. Places are live here — those come from OpenStreetMap and work everywhere.`
+    : tab === "campus" && !viewer.profile.campusSlug
       ? "Add your university to see campus events."
       : tab === "free"
         ? "Nothing free listed in this view yet."
@@ -195,11 +210,25 @@ export default async function EventsPage(props: PageProps<"/events">) {
             <MascotArt state="empty" className="size-16" />
             <p className="mt-4 text-[0.9375rem] text-ink-700">{emptyLine}</p>
             <div className="mt-4 flex flex-wrap justify-center gap-2">
+              {/* "Show everything" is the right offer when a filter hid the
+                  rows and a dead end when there are none — it reloads the same
+                  empty screen. With no source connected, the useful thing is
+                  the part of the product that does work in this city. */}
               <Link
-                href={tab === "campus" && !viewer.profile.campusSlug ? "/you/profile" : "/events"}
+                href={
+                  cityHasNoEvents
+                    ? "/discover"
+                    : tab === "campus" && !viewer.profile.campusSlug
+                      ? "/you/profile"
+                      : "/events"
+                }
                 className="rounded-full bg-ink-950 px-4 py-2 text-[0.875rem] font-medium text-paper"
               >
-                {tab === "campus" && !viewer.profile.campusSlug ? "Add your university" : "Show everything"}
+                {cityHasNoEvents
+                  ? "Explore places instead"
+                  : tab === "campus" && !viewer.profile.campusSlug
+                    ? "Add your university"
+                    : "Show everything"}
               </Link>
               {tab !== "week" ? (
                 <Link

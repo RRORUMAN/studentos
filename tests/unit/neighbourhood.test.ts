@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { cityGeo } from "@/data/cities/geo.generated";
 import { neighbourhoods, neighbourhoodsForCity } from "@/data/neighbourhoods";
 import { AREA_RADIUS_METRES, areaForPoint } from "@/server/engines/neighbourhood";
 
@@ -119,14 +120,17 @@ describe("the geography behind it", () => {
      * would quietly attach every place in one city to an area in another.
      * Twenty-five kilometres is generous for a city neighbourhood and tight
      * enough to catch a continent-level mistake.
+     *
+     * THE CENTRES ARE READ, NOT RESTATED. This block used to be five hand-
+     * written coordinates, which was fine while five cities had areas and
+     * became a failing assertion the moment the other seventy-five did — the
+     * test would have been reporting "no centre known for abu-dhabi" rather
+     * than anything about geography. Reading `cityGeo` means the check covers
+     * every city the product has, and covers each new one automatically.
      */
-    const centres: Record<string, { lat: number; lng: number }> = {
-      madrid: { lat: 40.41694, lng: -3.70333 },
-      barcelona: { lat: 41.3825, lng: 2.17694 },
-      london: { lat: 51.50722, lng: -0.1275 },
-      amsterdam: { lat: 52.36667, lng: 4.88333 },
-      berlin: { lat: 52.51667, lng: 13.38333 },
-    };
+    const centres: Record<string, { lat: number; lng: number }> = Object.fromEntries(
+      cityGeo.map((city) => [city.key, { lat: city.lat, lng: city.lng }]),
+    );
 
     for (const area of neighbourhoods) {
       if (area.lat === null || area.lng === null) continue;

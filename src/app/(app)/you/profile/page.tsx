@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ProfileForm } from "@/components/app/settings-forms";
 import { MoveDatesForm, UniversityForm } from "@/components/app/university-form";
 import { campusesForCity } from "@/data/cities";
+import { areaNamesForCity } from "@/data/neighbourhoods";
 import { requireViewer } from "@/server/viewer";
 
 export const metadata: Metadata = {
@@ -15,6 +16,22 @@ export const metadata: Metadata = {
 export default async function Page() {
   const viewer = await requireViewer();
   const campuses = campusesForCity(viewer.profile.citySlug);
+
+  /**
+   * The chips a student picks their neighbourhood from.
+   *
+   * This used to read `viewer.city.neighbourhoods` alone — a hand-written list
+   * of display names that exists for five cities and is empty for the other
+   * seventy-five, which is why this section shipped with a free-text box and a
+   * comment about a student in Tallinn deciding the product was broken. The
+   * area registry now covers every city, so the chips come from there first
+   * and the hand-written names are folded in behind them.
+   *
+   * The free-text box stays. Both lists together still will not contain the
+   * name of every place somebody lives, and the box is what makes being
+   * missing from our data cost nothing.
+   */
+  const areaNames = areaNamesForCity(viewer.profile.citySlug, viewer.city.neighbourhoods);
 
   return (
     <div className="page max-w-2xl py-6 sm:py-8">
@@ -45,7 +62,7 @@ export default async function Page() {
         />
 
         <ProfileForm
-          neighbourhoods={viewer.city.neighbourhoods}
+          neighbourhoods={areaNames}
           initial={{
             displayName: viewer.profile.displayName,
             bio: viewer.profile.bio ?? "",

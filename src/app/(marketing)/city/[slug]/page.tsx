@@ -20,6 +20,7 @@ import {
   getCity,
   resolveCity,
 } from "@/data/cities";
+import { areaNamesForCity } from "@/data/neighbourhoods";
 import { sharePlansForCity } from "@/data/plans";
 import { requestDate } from "@/server/now";
 import { loadCityPlaces } from "@/server/queries/places";
@@ -57,6 +58,7 @@ export default async function CityPage(props: PageProps<"/city/[slug]">) {
   const mapPlaces = await loadCityPlaces({ citySlug: city.slug, radiusMetres: 2_500, limit: 60 });
 
   const campuses = campusesForCity(city.slug);
+  const areaNames = areaNamesForCity(city.slug, city.neighbourhoods);
   const plans = sharePlansForCity(city.slug);
 
   const anchors = [
@@ -269,8 +271,15 @@ export default async function CityPage(props: PageProps<"/city/[slug]">) {
             <Reveal>
               <Eyebrow index="05">Where students live</Eyebrow>
               <h2 className="mt-3 text-display-sm text-ink-950">Neighbourhoods to know</h2>
+              {/* This was `city.neighbourhoods` — hand-written, present for
+                  five cities, empty for seventy-five — under a heading that
+                  promised "Neighbourhoods to know". Most of these public pages
+                  therefore carried a section title, a paragraph describing the
+                  chips, and no chips. The registry knows the districts of every
+                  city, and where the two sources disagree the caption below
+                  says which one is speaking. */}
               <ul className="mt-5 flex flex-wrap gap-2">
-                {city.neighbourhoods.map((area) => (
+                {areaNames.map((area) => (
                   <li
                     key={area}
                     className={cn(
@@ -282,8 +291,9 @@ export default async function CityPage(props: PageProps<"/city/[slug]">) {
                 ))}
               </ul>
               <p className="mt-5 max-w-md text-sm leading-relaxed text-ink-500">
-                In the product these carry their own price anchors and feeds. Right now they are
-                the list students keep repeating when someone asks where to look for a room.
+                {city.neighbourhoods.length > 0
+                  ? "In the product these carry their own price anchors and feeds. Right now they are the list students keep repeating when someone asks where to look for a room."
+                  : `The districts of ${city.name} as Wikidata records them — names and positions, which is what we have here so far. What a room costs in each one comes from students, and that starts when there are students here.`}
               </p>
             </Reveal>
 

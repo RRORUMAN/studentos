@@ -25,6 +25,7 @@ import { SaveButton } from "@/components/app/save-button";
 import { ShareButton } from "@/components/app/share-button";
 import { useToast } from "@/components/ui/toast";
 import { blockStudent, followStudent, unfollowStudent } from "@/server/actions/friends";
+import { AUTO_HIDE_REPORTS } from "@/config/moderation";
 import { deletePost, reportContent, toggleUpvote, votePoll } from "@/server/actions/loop";
 import type { AttachmentCard, FeedPost } from "@/server/queries/loop";
 import { ago, cn } from "@/lib/utils";
@@ -327,7 +328,17 @@ export function PostMenu({
       const result = await reportContent(targetKind, targetId, reason);
       toast(
         result.ok
-          ? { title: "Reported", description: "A moderator will look at it. Nothing is hidden by one report." }
+          ? {
+              title: "Reported",
+              /* This used to say "A moderator will look at it", which was not
+                 true: the report was written to a table nothing read. There is
+                 a queue now, and there is also a rule that does not wait for
+                 it, so the message says both — and says plainly that one
+                 report on its own changes nothing, because a student who
+                 expects a post to vanish and watches it stay will report it
+                 four more times. */
+              description: `A moderator sees it. One report hides nothing on its own; ${AUTO_HIDE_REPORTS} different people reporting the same thing takes it down straight away.`,
+            }
           : { title: "Could not report that", description: result.message, tone: "warning" },
       );
     });
