@@ -83,6 +83,41 @@ const COUNTRIES = {
   HU: { entity: "Q28", lang: "hu", name: "Hungary" },
   GR: { entity: "Q41", lang: "en", name: "Greece", alsoLabels: ["el"] },
 
+  /* ---- the rest of Europe ---------------------------------------------------
+     LATIN SCRIPT TAKES THE LOCAL LABEL, following the rule above: a student
+     types what is written above the door, and "Univerzita Komenského" is that.
+
+     CYRILLIC AND GREEK TAKE THE ENGLISH LABEL, following the Greece precedent
+     immediately above and for the same mechanical reason -- `fold()` keeps only
+     [a-z0-9], so a Cyrillic label folds to the empty string and the institution
+     becomes both unsearchable and unmatchable to a city. The local-script name
+     still comes across as an alias, so a student typing "Софийски университет"
+     still finds it; it simply is not the stored name.
+     ------------------------------------------------------------------------ */
+  RO: { entity: "Q218", lang: "ro", name: "Romania", alsoLabels: ["en", "hu"] },
+  HR: { entity: "Q224", lang: "hr", name: "Croatia", alsoLabels: ["en"] },
+  SK: { entity: "Q214", lang: "sk", name: "Slovakia", alsoLabels: ["en"] },
+  SI: { entity: "Q215", lang: "sl", name: "Slovenia", alsoLabels: ["en"] },
+  LT: { entity: "Q37", lang: "lt", name: "Lithuania", alsoLabels: ["en"] },
+  LV: { entity: "Q211", lang: "lv", name: "Latvia", alsoLabels: ["en"] },
+  IS: { entity: "Q189", lang: "is", name: "Iceland", alsoLabels: ["en"] },
+  LU: { entity: "Q32", lang: "fr", name: "Luxembourg", alsoLabels: ["de", "lb", "en"] },
+  MT: { entity: "Q233", lang: "en", name: "Malta", alsoLabels: ["mt"] },
+  BA: { entity: "Q225", lang: "bs", name: "Bosnia and Herzegovina", alsoLabels: ["hr", "en"] },
+  AL: { entity: "Q222", lang: "sq", name: "Albania", alsoLabels: ["en"] },
+  MD: { entity: "Q217", lang: "ro", name: "Moldova", alsoLabels: ["en"] },
+  AD: { entity: "Q228", lang: "ca", name: "Andorra", alsoLabels: ["es", "en"] },
+  LI: { entity: "Q347", lang: "de", name: "Liechtenstein", alsoLabels: ["en"] },
+  MC: { entity: "Q235", lang: "fr", name: "Monaco", alsoLabels: ["en"] },
+
+  BG: { entity: "Q219", lang: "en", name: "Bulgaria", alsoLabels: ["bg"] },
+  RS: { entity: "Q403", lang: "en", name: "Serbia", alsoLabels: ["sr", "sh"] },
+  UA: { entity: "Q212", lang: "en", name: "Ukraine", alsoLabels: ["uk"] },
+  BY: { entity: "Q184", lang: "en", name: "Belarus", alsoLabels: ["be", "ru"] },
+  MK: { entity: "Q221", lang: "en", name: "North Macedonia", alsoLabels: ["mk"] },
+  ME: { entity: "Q236", lang: "en", name: "Montenegro", alsoLabels: ["sr", "sh"] },
+  CY: { entity: "Q229", lang: "en", name: "Cyprus", alsoLabels: ["el", "tr"] },
+
   /* ---- beyond Europe --------------------------------------------------------
      LABEL LANGUAGE IS ENGLISH WHERE THE LOCAL SCRIPT IS NOT LATIN, and that is
      a deliberate departure from the rule above. Asking Wikidata for the

@@ -1,3 +1,4 @@
+import { allCoverageCities } from "@/config/regions";
 import { fold, type Institution } from "@/domain/institutions";
 import { curated } from "@/data/institutions/curated";
 import { institutions as emirates } from "@/data/institutions/ae.generated";
@@ -47,6 +48,28 @@ import { institutions as turkey } from "@/data/institutions/tr.generated";
 import { institutions as taiwan } from "@/data/institutions/tw.generated";
 import { institutions as unitedStates } from "@/data/institutions/us.generated";
 import { institutions as southAfrica } from "@/data/institutions/za.generated";
+import { institutions as romania } from "@/data/institutions/ro.generated";
+import { institutions as croatia } from "@/data/institutions/hr.generated";
+import { institutions as slovakia } from "@/data/institutions/sk.generated";
+import { institutions as slovenia } from "@/data/institutions/si.generated";
+import { institutions as lithuania } from "@/data/institutions/lt.generated";
+import { institutions as latvia } from "@/data/institutions/lv.generated";
+import { institutions as iceland } from "@/data/institutions/is.generated";
+import { institutions as luxembourg } from "@/data/institutions/lu.generated";
+import { institutions as malta } from "@/data/institutions/mt.generated";
+import { institutions as bosnia } from "@/data/institutions/ba.generated";
+import { institutions as albania } from "@/data/institutions/al.generated";
+import { institutions as moldova } from "@/data/institutions/md.generated";
+import { institutions as andorra } from "@/data/institutions/ad.generated";
+import { institutions as liechtenstein } from "@/data/institutions/li.generated";
+import { institutions as monaco } from "@/data/institutions/mc.generated";
+import { institutions as bulgaria } from "@/data/institutions/bg.generated";
+import { institutions as serbia } from "@/data/institutions/rs.generated";
+import { institutions as ukraine } from "@/data/institutions/ua.generated";
+import { institutions as belarus } from "@/data/institutions/by.generated";
+import { institutions as northMacedonia } from "@/data/institutions/mk.generated";
+import { institutions as montenegro } from "@/data/institutions/me.generated";
+import { institutions as cyprus } from "@/data/institutions/cy.generated";
 
 /**
  * ============================================================================
@@ -304,6 +327,112 @@ function citySlugFor(countryCode: string, city: string, region: string | null): 
 }
 
 /* -------------------------------------------------------------------------- */
+/* The cities nobody hand-listed                                               */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Which coverage cities have a hand-written metro claim. Everything else falls
+ * through to geography below.
+ */
+const HAND_CLAIMED: ReadonlySet<string> = new Set(METROS.map((metro) => metro.citySlug));
+
+/**
+ * How far from a city's centre an institution is still "in" that city.
+ *
+ * Deliberately tight. The METROS note above explains why a metro must not
+ * swallow its region: a student attached to a city two hours away gets that
+ * city's transport card and price anchors, both of which are wrong for them.
+ * Twenty kilometres is about the radius inside which a city's transport pass
+ * and its price level are the ones a student actually meets, and it is small
+ * enough that two coverage cities rarely both claim the same institution —
+ * where they do, the nearer wins.
+ */
+const METRO_RADIUS_KM = 20;
+
+function haversineKm(aLat: number, aLng: number, bLat: number, bLng: number): number {
+  const R = 6371;
+  const dLat = ((bLat - aLat) * Math.PI) / 180;
+  const dLng = ((bLng - aLng) * Math.PI) / 180;
+  const lat1 = (aLat * Math.PI) / 180;
+  const lat2 = (bLat * Math.PI) / 180;
+  const h =
+    Math.sin(dLat / 2) ** 2 + Math.sin(dLng / 2) ** 2 * Math.cos(lat1) * Math.cos(lat2);
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+/**
+ * Attach an institution to a coverage city by WHERE IT IS.
+ *
+ * The name-matching above cannot serve the cities added with the European
+ * expansion, and not for want of typing: it compares a hand-written town name
+ * against the label Wikidata holds, which is in the country's own language for
+ * a Latin-script country and folds to the empty string for a Cyrillic or Greek
+ * one. That is why `citySlugFor` has to guard against an empty fold, and why
+ * every Greek institution would otherwise have landed in Athens. Hand-writing
+ * "Praha", "Warszawa", "Кyiv" and "Λευκωσία" for two hundred more cities would
+ * be two hundred more chances to make exactly that mistake, silently.
+ *
+ * Coordinates have no language. Both sides of this comparison come from the
+ * same Wikidata import, so an institution is placed by the same authority that
+ * placed the city.
+ *
+ * IT ONLY EVER ADDS. A city with a hand-written metro claim is skipped
+ * entirely, so no existing assignment changes and no curated decision — the
+ * Comunidad de Madrid as one travel area, Catalonia deliberately not — is
+ * overridden by arithmetic. This runs for an institution the hand-written
+ * rules left with no city at all, where the alternative is not a better answer
+ * but no answer.
+ */
+/**
+ * Attach by the city's own name, for the 29% of institutions Wikidata has no
+ * coordinate for.
+ *
+ * Geography is the better signal and runs first, but it cannot run at all for
+ * 3,929 of these rows — Katholieke Universiteit Leuven among them, which is
+ * not a row a European student product can afford to leave unattached. What
+ * those rows do have is a town: KU Leuven says "Leuven", and there is a
+ * coverage city called Leuven in the same country.
+ *
+ * COUNTRY SCOPING IS NOT DECORATION HERE. Haute École Louvain en Hainaut
+ * records its town as "Bergen" — the Dutch name for Mons — and Bergen is also
+ * a coverage city in Norway. Without the country check that institution moves
+ * to Norway, and it would look entirely plausible on the screen.
+ *
+ * Cities with a hand-written metro claim are skipped, as above, so this can
+ * only add. It matches the English display name, which is why it catches
+ * Leuven and not Warszawa — but every city whose English name differs from its
+ * local one is a city that already has a hand-written claim or a coordinate.
+ */
+function coverageCityByName(countryCode: string, city: string): string | null {
+  const town = fold(city);
+  if (town.length === 0) return null;
+
+  for (const entry of allCoverageCities) {
+    if (entry.countryCode !== countryCode) continue;
+    const slug = entry.slug ?? entry.key;
+    if (HAND_CLAIMED.has(slug)) continue;
+    if (fold(entry.name) === town) return slug;
+  }
+  return null;
+}
+
+function nearestCoverageCity(countryCode: string, lat: number | null, lng: number | null): string | null {
+  if (lat === null || lng === null) return null;
+
+  let best: { slug: string; km: number } | null = null;
+  for (const city of allCoverageCities) {
+    if (city.countryCode !== countryCode) continue;
+    if (HAND_CLAIMED.has(city.slug ?? city.key)) continue;
+    if (!Number.isFinite(city.lat) || !Number.isFinite(city.lng)) continue;
+
+    const km = haversineKm(lat, lng, city.lat, city.lng);
+    if (km > METRO_RADIUS_KM) continue;
+    if (!best || km < best.km) best = { slug: city.slug ?? city.key, km };
+  }
+  return best?.slug ?? null;
+}
+
+/* -------------------------------------------------------------------------- */
 /* Merge                                                                       */
 /* -------------------------------------------------------------------------- */
 
@@ -379,6 +508,31 @@ const GENERATED: readonly (readonly Institution[])[] = [
   taiwan,
   unitedStates,
   southAfrica,
+
+  /* ---- the rest of Europe, imported with the twenty-two country profiles
+     that gave those countries a city in the first place. ---- */
+  romania,
+  croatia,
+  slovakia,
+  slovenia,
+  lithuania,
+  latvia,
+  iceland,
+  luxembourg,
+  malta,
+  bosnia,
+  albania,
+  moldova,
+  andorra,
+  liechtenstein,
+  monaco,
+  bulgaria,
+  serbia,
+  ukraine,
+  belarus,
+  northMacedonia,
+  montenegro,
+  cyprus,
 ];
 
 function build(): Institution[] {
@@ -428,7 +582,16 @@ function build(): Institution[] {
 
   for (const row of imported) {
     if (consumed.has(row.id)) continue;
-    merged.push({ ...row, citySlug: citySlugFor(row.countryCode, row.city, row.region) });
+    /* Three attempts, most authoritative first: the hand-written metro claim,
+       then where the institution actually is, then what its town is called.
+       The last two only ever consider cities nobody hand-claimed, so a curated
+       decision is never overridden — see the notes on each. */
+    const citySlug =
+      citySlugFor(row.countryCode, row.city, row.region) ??
+      nearestCoverageCity(row.countryCode, row.lat, row.lng) ??
+      coverageCityByName(row.countryCode, row.city);
+
+    merged.push({ ...row, citySlug });
   }
 
   merged.sort((a, b) => a.officialName.localeCompare(b.officialName));

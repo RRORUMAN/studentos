@@ -1,0 +1,202 @@
+
+/**
+ * ============================================================================
+ * ICELAND -- HIGHER EDUCATION INSTITUTIONS
+ * ----------------------------------------------------------------------------
+ * GENERATED FILE. Do not edit by hand; your edit will be overwritten.
+ *
+ *   node scripts/import-institutions.mjs IS
+ *
+ * Source      Wikidata, via the public SPARQL endpoint at
+ *             https://query.wikidata.org/sparql
+ * Selection   Everything that is a higher education institution
+ *             (Q38723 or a subclass), located in Iceland (Q189),
+ *             with no dissolution date, and with a municipality on record.
+ * Fetched     2026-09-10
+ * Rows        9
+ *
+ * `sourceId` is the Wikidata QID: https://www.wikidata.org/wiki/Q...
+ *
+ * `citySlug` and `campusSlug` are null in every row here and are filled in by
+ * `src/data/institutions/index.ts` from the metro table and the curated list.
+ * Neighbourhoods are never imported -- see the note in the import script.
+ * ============================================================================
+ */
+
+import type { Institution } from "@/domain/institutions";
+
+const FETCHED_ON = "2026-09-10";
+
+export const institutions: readonly Institution[] = [
+  {
+    id: "is-q1134292",
+    officialName: "Listaháskóli Íslands",
+    shortName: null,
+    aliases: ["IAA", "Iceland Academy of the Arts", "Iceland University of the Arts", "LHÍ", "Listaháskólinn", "Myndlista og handíðaskóli Íslands"],
+    countryCode: "IS",
+    city: "Reykjavík",
+    region: "Höfuðborgarsvæðið",
+    citySlug: null,
+    campusSlug: null,
+    type: "university",
+    website: "http://www.lhi.is/",
+    lat: null,
+    lng: null,
+    source: "wikidata",
+    sourceId: "Q1134292",
+    verified: false,
+    lastUpdatedAt: FETCHED_ON,
+  },
+  {
+    id: "is-q1463356",
+    officialName: "Háskólinn á Akureyri",
+    shortName: null,
+    aliases: ["University of Akureyri"],
+    countryCode: "IS",
+    city: "Akureyri",
+    region: "Norðurland eystra",
+    citySlug: null,
+    campusSlug: null,
+    type: "university",
+    website: "https://www.unak.is/",
+    lat: 65.6855,
+    lng: -18.1224,
+    source: "wikidata",
+    sourceId: "Q1463356",
+    verified: false,
+    lastUpdatedAt: FETCHED_ON,
+  },
+  {
+    id: "is-q1523183",
+    officialName: "Hólaskóli",
+    shortName: null,
+    aliases: ["Háskólinn á Hólum", "Hólar Agricultural College", "Hólar University College"],
+    countryCode: "IS",
+    city: "Hólar í Hjaltadal",
+    region: "Norðurland vestra",
+    citySlug: null,
+    campusSlug: null,
+    type: "university",
+    website: "http://www.holar.is",
+    lat: 65.7336,
+    lng: -19.1135,
+    source: "wikidata",
+    sourceId: "Q1523183",
+    verified: false,
+    lastUpdatedAt: FETCHED_ON,
+  },
+  {
+    id: "is-q1542418",
+    officialName: "Háskólinn í Reykjavík",
+    shortName: null,
+    aliases: ["Háskóli Reykjavíkur", "HR", "Reykjavík University"],
+    countryCode: "IS",
+    city: "Reykjavík",
+    region: "Höfuðborgarsvæðið",
+    citySlug: null,
+    campusSlug: null,
+    type: "university",
+    website: "https://www.ru.is/",
+    lat: 64.12361,
+    lng: -21.92694,
+    source: "wikidata",
+    sourceId: "Q1542418",
+    verified: false,
+    lastUpdatedAt: FETCHED_ON,
+  },
+  {
+    id: "is-q16429196",
+    officialName: "Tækniskóli Íslands",
+    shortName: null,
+    aliases: ["Technical University of Iceland"],
+    countryCode: "IS",
+    city: "Reykjavík",
+    region: "Höfuðborgarsvæðið",
+    citySlug: null,
+    campusSlug: null,
+    type: "university",
+    website: "https://www.thi.is/",
+    lat: null,
+    lng: null,
+    source: "wikidata",
+    sourceId: "Q16429196",
+    verified: false,
+    lastUpdatedAt: FETCHED_ON,
+  },
+  {
+    id: "is-q196559",
+    officialName: "Háskóli Íslands",
+    shortName: null,
+    aliases: ["Háma", "Heimspekideild Háskóla Íslands", "HÍ", "University of Iceland"],
+    countryCode: "IS",
+    city: "Reykjavík",
+    region: null,
+    citySlug: null,
+    campusSlug: null,
+    type: "university",
+    website: "https://www.hi.is/",
+    lat: 64.14056,
+    lng: -21.94944,
+    source: "wikidata",
+    sourceId: "Q196559",
+    verified: false,
+    lastUpdatedAt: FETCHED_ON,
+  },
+  {
+    id: "is-q3107095",
+    officialName: "Háskólinn á Bifröst",
+    shortName: null,
+    aliases: ["Bifröst University", "Viðskiptaháskólinn á Bifröst"],
+    countryCode: "IS",
+    city: "Borgarnes",
+    region: "Vesturland",
+    citySlug: null,
+    campusSlug: null,
+    type: "university",
+    website: "http://www.bifrost.is/",
+    lat: 64.7668,
+    lng: -21.5519,
+    source: "wikidata",
+    sourceId: "Q3107095",
+    verified: false,
+    lastUpdatedAt: FETCHED_ON,
+  },
+  {
+    id: "is-q3481997",
+    officialName: "Landbúnaðarháskóli Íslands",
+    shortName: null,
+    aliases: ["Agricultural University of Iceland", "AUI", "LbhÍ"],
+    countryCode: "IS",
+    city: "Borgarnes",
+    region: "Vesturland",
+    citySlug: null,
+    campusSlug: null,
+    type: "applied-sciences",
+    website: "http://www.lbhi.is/",
+    lat: 64.56111,
+    lng: -21.76972,
+    source: "wikidata",
+    sourceId: "Q3481997",
+    verified: false,
+    lastUpdatedAt: FETCHED_ON,
+  },
+  {
+    id: "is-q5985674",
+    officialName: "Menntavísindasvið Háskóla Íslands",
+    shortName: null,
+    aliases: ["Menntavísindasvið", "MVS", "University of Iceland -School of Education"],
+    countryCode: "IS",
+    city: "Reykjavík",
+    region: "Höfuðborgarsvæðið",
+    citySlug: null,
+    campusSlug: null,
+    type: "university",
+    website: "https://www.hi.is/menntavisindasvid",
+    lat: 64.13687,
+    lng: -21.90259,
+    source: "wikidata",
+    sourceId: "Q5985674",
+    verified: false,
+    lastUpdatedAt: FETCHED_ON,
+  },
+];
