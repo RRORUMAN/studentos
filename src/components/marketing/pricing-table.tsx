@@ -13,6 +13,7 @@ import {
   planHasFeature,
   quotas,
   tierOrder,
+  sellableFeatures,
   type Feature,
 } from "@/config/entitlements";
 import {
@@ -49,10 +50,18 @@ const ALWAYS_FREE = [
  * ============================================================================
  * PRICING
  * ----------------------------------------------------------------------------
- * Four cards and one table. The table is generated from `featureTier` — the
- * same map the server enforces entitlements with — so it is structurally
- * impossible for the marketing page to promise a feature at a tier the product
- * does not grant it at. Quota rows come from `quotas` for the same reason.
+ * Four cards and one table. The table is generated from the same map the server
+ * enforces entitlements with, so the marketing page cannot promise a feature at
+ * a tier the product does not grant it at. Quota rows come from `quotas` for
+ * the same reason.
+ *
+ * THAT GUARANTEE HAD A HOLE, and it is worth naming because the header claimed
+ * otherwise for months. Deriving the table from `featureTier` made the TIER
+ * always correct and said nothing about whether the feature EXISTED. Nineteen
+ * of the forty-three keys were declarations with no enforcement and no
+ * interface, and every one was printed here in the present tense as something
+ * a paid plan buys you. The table now iterates `sellableFeatures`, which is the
+ * subset that is actually built.
  *
  * Prices, the annual discount and every label come from `config/pricing.ts`.
  * Nothing on this page knows what a tier costs.
@@ -278,13 +287,17 @@ export function PricingTable({
 function ComparisonTable() {
   /* Grouped by the tier that introduces the capability, so the table reads as
      "what does each step up actually buy" rather than as a wall of ticks. */
+  /* `sellableFeatures`, not every key in `featureTier`. Nineteen of the
+     forty-three keys are declarations with nothing behind them, and this table
+     printed all of them in the present tense as things a paid plan gives you —
+     receipt scanning, offline city packs, scenario planning. Iterating the
+     shipped list is what stops a page that takes money describing software
+     that does not exist. */
   const groups = tierOrder
     .filter((tier) => tier !== "free")
     .map((tier) => ({
       tier,
-      features: (Object.keys(featureTier) as Feature[]).filter(
-        (feature) => featureTier[feature] === tier,
-      ),
+      features: sellableFeatures.filter((feature) => featureTier[feature] === tier),
     }))
     .filter((group) => group.features.length > 0);
 

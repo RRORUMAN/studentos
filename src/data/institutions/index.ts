@@ -1,23 +1,52 @@
 import { fold, type Institution } from "@/domain/institutions";
 import { curated } from "@/data/institutions/curated";
+import { institutions as emirates } from "@/data/institutions/ae.generated";
+import { institutions as argentina } from "@/data/institutions/ar.generated";
 import { institutions as austria } from "@/data/institutions/at.generated";
+import { institutions as australia } from "@/data/institutions/au.generated";
 import { institutions as belgium } from "@/data/institutions/be.generated";
+import { institutions as brazil } from "@/data/institutions/br.generated";
+import { institutions as canada } from "@/data/institutions/ca.generated";
+import { institutions as switzerland } from "@/data/institutions/ch.generated";
+import { institutions as chile } from "@/data/institutions/cl.generated";
+import { institutions as colombia } from "@/data/institutions/co.generated";
 import { institutions as czechia } from "@/data/institutions/cz.generated";
 import { institutions as germany } from "@/data/institutions/de.generated";
 import { institutions as denmark } from "@/data/institutions/dk.generated";
 import { institutions as estonia } from "@/data/institutions/ee.generated";
+import { institutions as egypt } from "@/data/institutions/eg.generated";
 import { institutions as spain } from "@/data/institutions/es.generated";
 import { institutions as finland } from "@/data/institutions/fi.generated";
 import { institutions as france } from "@/data/institutions/fr.generated";
 import { institutions as britain } from "@/data/institutions/gb.generated";
+import { institutions as ghana } from "@/data/institutions/gh.generated";
 import { institutions as greece } from "@/data/institutions/gr.generated";
+import { institutions as hongKong } from "@/data/institutions/hk.generated";
 import { institutions as hungary } from "@/data/institutions/hu.generated";
 import { institutions as ireland } from "@/data/institutions/ie.generated";
+import { institutions as israel } from "@/data/institutions/il.generated";
+import { institutions as india } from "@/data/institutions/in.generated";
 import { institutions as italy } from "@/data/institutions/it.generated";
+import { institutions as japan } from "@/data/institutions/jp.generated";
+import { institutions as kenya } from "@/data/institutions/ke.generated";
+import { institutions as southKorea } from "@/data/institutions/kr.generated";
+import { institutions as morocco } from "@/data/institutions/ma.generated";
+import { institutions as mexico } from "@/data/institutions/mx.generated";
+import { institutions as malaysia } from "@/data/institutions/my.generated";
+import { institutions as nigeria } from "@/data/institutions/ng.generated";
 import { institutions as netherlands } from "@/data/institutions/nl.generated";
+import { institutions as norway } from "@/data/institutions/no.generated";
+import { institutions as newZealand } from "@/data/institutions/nz.generated";
 import { institutions as poland } from "@/data/institutions/pl.generated";
 import { institutions as portugal } from "@/data/institutions/pt.generated";
+import { institutions as qatar } from "@/data/institutions/qa.generated";
 import { institutions as sweden } from "@/data/institutions/se.generated";
+import { institutions as singapore } from "@/data/institutions/sg.generated";
+import { institutions as thailand } from "@/data/institutions/th.generated";
+import { institutions as turkey } from "@/data/institutions/tr.generated";
+import { institutions as taiwan } from "@/data/institutions/tw.generated";
+import { institutions as unitedStates } from "@/data/institutions/us.generated";
+import { institutions as southAfrica } from "@/data/institutions/za.generated";
 
 /**
  * ============================================================================
@@ -190,6 +219,62 @@ const METROS: readonly Metro[] = [
    * the symptom.
    */
   { citySlug: "athens", countryCode: "GR", towns: ["Athens"] },
+
+  /* ---- the rest of the world --------------------------------------------
+     English town names here, because the importer asks for English labels
+     wherever the local script is not Latin — see the note on `COUNTRIES` in
+     scripts/import-institutions.mjs. So it is "Tokyo", not the kanji, and the
+     kanji survives as a searchable alias on the institution itself.
+     ---------------------------------------------------------------------- */
+
+  /* North America */
+  { citySlug: "new-york", countryCode: "US", towns: ["New York City", "New York", "Manhattan", "Brooklyn", "Bronx", "Queens"] },
+  { citySlug: "boston", countryCode: "US", towns: ["Boston", "Cambridge", "Somerville"] },
+  { citySlug: "chicago", countryCode: "US", towns: ["Chicago", "Evanston"] },
+  { citySlug: "los-angeles", countryCode: "US", towns: ["Los Angeles", "Pasadena", "Westwood"] },
+  { citySlug: "austin", countryCode: "US", towns: ["Austin"] },
+  { citySlug: "toronto", countryCode: "CA", towns: ["Toronto", "North York", "Scarborough", "Mississauga"] },
+  { citySlug: "montreal", countryCode: "CA", towns: ["Montreal", "Montréal"] },
+  { citySlug: "vancouver", countryCode: "CA", towns: ["Vancouver", "Burnaby", "Richmond"] },
+  { citySlug: "mexico-city", countryCode: "MX", towns: ["Mexico City", "Ciudad de México"] },
+
+  /* South America */
+  { citySlug: "sao-paulo", countryCode: "BR", towns: ["São Paulo", "Sao Paulo"] },
+  { citySlug: "buenos-aires", countryCode: "AR", towns: ["Buenos Aires"] },
+  { citySlug: "santiago", countryCode: "CL", towns: ["Santiago"] },
+  { citySlug: "bogota", countryCode: "CO", towns: ["Bogotá", "Bogota"] },
+
+  /* Asia-Pacific */
+  { citySlug: "tokyo", countryCode: "JP", towns: ["Tokyo", "Bunkyo", "Chiyoda", "Meguro"] },
+  { citySlug: "seoul", countryCode: "KR", towns: ["Seoul"] },
+  { citySlug: "taipei", countryCode: "TW", towns: ["Taipei", "New Taipei"] },
+  { citySlug: "hong-kong", countryCode: "HK", towns: ["Hong Kong", "Kowloon"] },
+  { citySlug: "singapore", countryCode: "SG", towns: ["Singapore"] },
+  { citySlug: "kuala-lumpur", countryCode: "MY", towns: ["Kuala Lumpur", "Petaling Jaya"] },
+  { citySlug: "bangkok", countryCode: "TH", towns: ["Bangkok"] },
+  { citySlug: "delhi", countryCode: "IN", towns: ["New Delhi", "Delhi"] },
+  { citySlug: "bengaluru", countryCode: "IN", towns: ["Bengaluru", "Bangalore"] },
+  { citySlug: "sydney", countryCode: "AU", towns: ["Sydney"] },
+  { citySlug: "melbourne", countryCode: "AU", towns: ["Melbourne", "Parkville", "Clayton"] },
+  { citySlug: "auckland", countryCode: "NZ", towns: ["Auckland"] },
+
+  /* Middle East and Africa */
+  { citySlug: "dubai", countryCode: "AE", towns: ["Dubai"] },
+  { citySlug: "abu-dhabi", countryCode: "AE", towns: ["Abu Dhabi"] },
+  { citySlug: "doha", countryCode: "QA", towns: ["Doha"] },
+  { citySlug: "tel-aviv", countryCode: "IL", towns: ["Tel Aviv", "Tel Aviv-Yafo", "Ramat Gan"] },
+  { citySlug: "cairo", countryCode: "EG", towns: ["Cairo", "Giza", "New Cairo"] },
+  { citySlug: "casablanca", countryCode: "MA", towns: ["Casablanca"] },
+  { citySlug: "cape-town", countryCode: "ZA", towns: ["Cape Town"] },
+  { citySlug: "johannesburg", countryCode: "ZA", towns: ["Johannesburg"] },
+  { citySlug: "nairobi", countryCode: "KE", towns: ["Nairobi"] },
+  { citySlug: "lagos", countryCode: "NG", towns: ["Lagos"] },
+  { citySlug: "accra", countryCode: "GH", towns: ["Accra"] },
+
+  /* Europe, remaining */
+  { citySlug: "istanbul", countryCode: "TR", towns: ["Istanbul", "İstanbul"] },
+  { citySlug: "zurich", countryCode: "CH", towns: ["Zürich", "Zurich"] },
+  { citySlug: "oslo", countryCode: "NO", towns: ["Oslo"] },
 ];
 
 function citySlugFor(countryCode: string, city: string, region: string | null): string | null {
@@ -247,24 +332,53 @@ const CURATED_REVIEWED_ON = "2026-09-08";
  * list, and a student searches across all of them at once.
  */
 const GENERATED: readonly (readonly Institution[])[] = [
+  emirates,
+  argentina,
   austria,
+  australia,
   belgium,
+  brazil,
+  canada,
+  switzerland,
+  chile,
+  colombia,
   czechia,
   germany,
   denmark,
   estonia,
+  egypt,
   spain,
   finland,
   france,
   britain,
+  ghana,
   greece,
+  hongKong,
   hungary,
   ireland,
+  israel,
+  india,
   italy,
+  japan,
+  kenya,
+  southKorea,
+  morocco,
+  mexico,
+  malaysia,
+  nigeria,
   netherlands,
+  norway,
+  newZealand,
   poland,
   portugal,
+  qatar,
   sweden,
+  singapore,
+  thailand,
+  turkey,
+  taiwan,
+  unitedStates,
+  southAfrica,
 ];
 
 function build(): Institution[] {

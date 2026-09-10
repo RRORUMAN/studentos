@@ -225,9 +225,78 @@ export function planHasFeature(plan: PlanKey, feature: Feature): boolean {
   return tierAtLeast(plan, featureTier[feature]);
 }
 
-/** Every feature a tier adds over the tier below it. */
+/* -------------------------------------------------------------------------- */
+/* Shipped, versus written down                                                */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Features that are DECLARED here and built nowhere.
+ *
+ * Nineteen of the forty-three keys below had no `assertFeature` call, no
+ * `can.*` read and no interface — and `featureTier` is rendered verbatim as the
+ * public comparison table and the in-app upgrade screen, in the present tense,
+ * as things a paid plan gives you today. So the product was asking students for
+ * money for receipt scanning, offline city packs and scenario planning, none of
+ * which exist. That is not an over-promise in the marketing sense; it is a
+ * false statement on a checkout page.
+ *
+ * They are listed rather than deleted because most are real intentions and the
+ * list is the roadmap. What changes is that nothing here may be RENDERED AS A
+ * BENEFIT: `sellableFeatures` is what the pricing table and the upgrade screen
+ * iterate, and it excludes these.
+ *
+ * TO SHIP ONE: build it, gate it with `assertFeature`, delete its line here.
+ * The test in `tests/unit/entitlements.test.ts` fails if a key in this list
+ * gains an enforcement site, so the list cannot quietly go stale in the
+ * other direction either.
+ *
+ * `dataExport` is in a different category and is worth naming: the export
+ * itself is real and works — `exportData()` in `src/server/actions/profile.ts`,
+ * reachable from You → Your data — but nothing checks the entitlement, so it is
+ * free for everyone. Selling it as a paid feature was wrong twice over.
+ */
+export const UNBUILT_FEATURES: readonly Feature[] = [
+  "learningRecommendations",
+  "priceIntelligence",
+  "receiptScanner",
+  "smartBudgetAlerts",
+  "advancedCityBrain",
+  "advancedRecommendationFilters",
+  "eventIntelligence",
+  "scenarioPlanning",
+  "csvImport",
+  "collaborativePlans",
+  "savedSearchAlerts",
+  "offlineCityPack",
+  "privateGroups",
+  "advancedArrivalPlanner",
+  "multiCity",
+  "multiCurrency",
+  "yearAheadPlanning",
+  "dataExport",
+  "earlyAccess",
+];
+
+const UNBUILT = new Set<Feature>(UNBUILT_FEATURES);
+
+/** Whether a feature is actually enforced anywhere, and so may be sold. */
+export function isShipped(feature: Feature): boolean {
+  return !UNBUILT.has(feature);
+}
+
+/**
+ * Every feature that may appear on a pricing table or an upgrade screen.
+ *
+ * The one list any selling surface is allowed to iterate. A feature reaches it
+ * by being built, not by being typed.
+ */
+export const sellableFeatures: readonly Feature[] = (Object.keys(featureTier) as Feature[]).filter(
+  isShipped,
+);
+
+/** Every feature a tier adds over the tier below it. Shipped ones only. */
 export function featuresAddedBy(plan: PlanKey): Feature[] {
-  return (Object.keys(featureTier) as Feature[]).filter((f) => featureTier[f] === plan);
+  return sellableFeatures.filter((f) => featureTier[f] === plan);
 }
 
 /* -------------------------------------------------------------------------- */

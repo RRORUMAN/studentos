@@ -1,9 +1,15 @@
 import assert from "node:assert/strict";
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
 import { describe, it } from "node:test";
 
 import {
   featureCopy,
   featureTier,
+  featuresAddedBy,
+  isShipped,
+  sellableFeatures,
+  UNBUILT_FEATURES,
   planHasFeature,
   quotaFor,
   quotaState,
@@ -230,5 +236,93 @@ describe("settleBucket", () => {
   it("returns nothing for an empty group rather than dividing by zero", () => {
     const { settlements } = settleBucket([entry("x", "a", 500)], []);
     assert.equal(settlements.length, 0);
+  });
+});
+
+/**
+ * ============================================================================
+ * NOTHING UNBUILT MAY BE SOLD
+ * ----------------------------------------------------------------------------
+ * `featureTier` was rendered verbatim as the public comparison table and the
+ * in-app upgrade screen, in the present tense, as capabilities a paid plan
+ * gives you today. Nineteen of its forty-three keys had no `assertFeature`
+ * call, no `can.*` read and no interface anywhere in the codebase.
+ *
+ * So a checkout page was describing receipt scanning, offline city packs and
+ * scenario planning — none of which exist. This is the guard that keeps the
+ * list honest in both directions.
+ * ============================================================================
+ */
+describe("what a plan is allowed to claim", () => {
+  /** Every .ts/.tsx under src/, except the declaration file itself. */
+  function sourceOutsideEntitlements(): string {
+    const files: string[] = [];
+    (function walk(dir: string) {
+      for (const name of readdirSync(dir)) {
+        const p = join(dir, name);
+        if (statSync(p).isDirectory()) walk(p);
+        else if (/\.(ts|tsx)$/.test(name) && !p.includes("entitlements.ts")) files.push(p);
+      }
+    })("src");
+    return files.map((f) => readFileSync(f, "utf8")).join("\n");
+  }
+
+  /**
+   * Whether a feature key appears as a whole word anywhere in the source.
+   *
+   * `String.raw` rather than a plain `"\\b"`, and that is not style. A `\b`
+   * written with one backslash is the BACKSPACE character, not a word
+   * boundary, and the resulting regex silently matches nothing — so every
+   * feature reads as unenforced and the assertion below inverts itself. The
+   * same corruption has already been found once in
+   * `scripts/import-institutions.mjs`, where it had disabled a filter for
+   * months. `String.raw` gives a real backslash whichever way the file is
+   * written.
+   */
+  const mentions = (blob: string, feature: string) =>
+    new RegExp(String.raw`\b` + feature + String.raw`\b`).test(blob);
+
+  it("sells only features something actually enforces", () => {
+    const blob = sourceOutsideEntitlements();
+
+    const sold = sellableFeatures.filter((feature) => !mentions(blob, feature));
+
+    assert.deepEqual(
+      sold,
+      [],
+      `these appear on a pricing surface and are enforced nowhere: ${sold.join(", ")}`,
+    );
+  });
+
+  it("keeps the unbuilt list from going stale once something ships", () => {
+    /* The other direction, and the one that rots quietly: a feature gets built
+       and nobody removes it from UNBUILT_FEATURES, so a real capability stays
+       invisible on the pricing page forever. */
+    const blob = sourceOutsideEntitlements();
+
+    const shipped = UNBUILT_FEATURES.filter((feature) => mentions(blob, feature));
+
+    assert.deepEqual(
+      shipped,
+      [],
+      `these are built now and should be removed from UNBUILT_FEATURES: ${shipped.join(", ")}`,
+    );
+  });
+
+  it("never offers an unbuilt feature as a reason to upgrade", () => {
+    for (const tier of tierOrder) {
+      for (const feature of featuresAddedBy(tier)) {
+        assert.ok(isShipped(feature), `${tier} is sold on ${feature}, which does not exist`);
+      }
+    }
+  });
+
+  it("still describes every feature it declares, built or not", () => {
+    /* The roadmap entries keep their copy — they are simply never rendered as
+       a benefit. Losing the copy would lose the intent. */
+    for (const feature of UNBUILT_FEATURES) {
+      assert.ok(featureCopy[feature]?.label, `${feature} has no copy`);
+      assert.ok(featureTier[feature], `${feature} has no tier`);
+    }
   });
 });
