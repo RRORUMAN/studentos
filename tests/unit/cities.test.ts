@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { allCoverageCities, coverageStats } from "../../src/config/regions.ts";
+import { cityDirectory } from "../../src/data/cities.ts";
 import { searchCities } from "../../src/domain/cities.ts";
 
 /**
@@ -30,6 +31,10 @@ const searchable = allCoverageCities.map((city) => ({
   deep: city.depth === "deep",
   population: city.population,
 }));
+
+/* The picker's own list, so a search test cannot pass against a list the
+   product does not use. */
+const directory = cityDirectory;
 
 const first = (query: string) => searchCities(searchable, query)[0]?.city.name ?? null;
 const names = (query: string) => searchCities(searchable, query).map((hit) => hit.city.name);
@@ -151,6 +156,26 @@ describe("searchCities", () => {
     assert.equal(first("munchen"), "Munich");
     assert.equal(first("wien"), "Vienna");
     assert.equal(first("firenze"), "Florence");
+  });
+
+  it("finds the five cities with the most behind them", () => {
+    /* THE TEST ABOVE SEARCHED A DIFFERENT LIST THAN THE PICKER DID, which is
+       why this was live and invisible. `searchable` here is built from every
+       coverage city; the picker built its list as `cityDirectory.filter(city
+       => !city.deep)`, excluding the five deep cities because they are drawn
+       as buttons above the box. So typing "madrid" matched nothing and the UI
+       printed "Not on the list yet" about the flagship city visible a few
+       centimetres higher.
+
+       This asserts on `cityDirectory`, the picker's own list. It is worth
+       having and it is NOT the guard: it would have passed before the fix
+       too, because the defect was never in `searchCities` — it was in what
+       the picker handed it. Only a test that drives the real box can catch
+       that, and it is `tests/e2e/onboarding-city.spec.ts`. */
+    for (const name of ["Madrid", "Barcelona", "London", "Amsterdam", "Berlin"]) {
+      const hits = searchCities(directory, name.toLowerCase(), 30).map((hit) => hit.city.name);
+      assert.ok(hits.includes(name), `typing "${name}" must find ${name}, got: ${hits.join(", ")}`);
+    }
   });
 
   it("finds cities by country", () => {

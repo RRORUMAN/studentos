@@ -414,12 +414,20 @@ type StepProps = { answers: Answers; update: (patch: Partial<Answers>) => void }
 function CityStep({ answers, update }: StepProps) {
   const [query, setQuery] = useState("");
   const deep = cityDirectory.filter((city) => city.deep);
-  const rest = cityDirectory.filter((city) => !city.deep);
   /* Accent-insensitive and ranked. A plain `includes` on a lowercased name
      found none of Málaga, Kraków, São Paulo, Bogotá or Zürich, which meant a
      student in Málaga typing "malaga" was told their city was not on the list
-     — the product lying about its own coverage. */
-  const matches = useMemo(() => searchCities(rest, query, 30), [rest, query]);
+     — the product lying about its own coverage.
+
+     SEARCHES THE WHOLE DIRECTORY, NOT `rest`. The five deep cities are drawn
+     as buttons above, so the search used to exclude them, and typing "madrid"
+     produced no results and the message "Not on the list yet" — about the
+     product's flagship city, sitting visible a few centimetres higher. That
+     was survivable while the directory was eighty rows and the buttons were
+     most of what a student saw. At 261 it is not: searching is now the normal
+     way to find a city, and the five it answers worst about are the five with
+     the most behind them. */
+  const matches = useMemo(() => searchCities(cityDirectory, query, 30), [query]);
   const needle = query.trim();
   const chosen = answers.citySlug ? resolveCity(answers.citySlug) : null;
 
@@ -441,7 +449,7 @@ function CityStep({ answers, update }: StepProps) {
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder={`Search ${rest.length} more cities`}
+            placeholder={`Search ${cityDirectory.length} cities`}
             className="h-11 w-full rounded-lg border border-ink-200 bg-white px-3.5 text-[0.9375rem] text-ink-900 placeholder:text-ink-400"
           />
         </label>
