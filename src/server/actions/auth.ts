@@ -26,12 +26,17 @@ import type { FormState } from "@/server/actions/form-state";
  *
  * On the verification link: with no Resend key configured, `signUp` returns the
  * token and this layer redirects straight to it. That is a *development*
- * affordance and it is gated on the mailer being unconfigured — in a deployment
- * with Resend wired up the token is emailed and never appears in a URL the
- * browser can see. It is called out here because a token in a redirect is
- * exactly the sort of thing that quietly survives to production otherwise.
+ * affordance. It is gated on BOTH the mailer being unconfigured AND this not
+ * being a production deployment (`VERCEL_ENV === "production"`) — a missing
+ * Resend key in production must dead-end with the generic message, never hand
+ * the browser a live token in a URL. The env gate exists because a token in a
+ * redirect is exactly the sort of thing that quietly survives to production.
  * ============================================================================
  */
+
+/* Production must never surface auth tokens in a redirect, whatever the mailer
+   state. Vercel sets VERCEL_ENV to "production" only on production deploys. */
+const isLiveDeploy = process.env.VERCEL_ENV === "production";
 
 /* -------------------------------------------------------------------------- */
 /* Schemas                                                                     */
@@ -154,7 +159,7 @@ export async function requestResetAction(
 
   /* Development affordance, gated on the mailer being unconfigured — see the
      module header. */
-  if (token && !process.env.RESEND_API_KEY) {
+  if (token && !process.env.RESEND_API_KEY && !isLiveDeploy) {
     redirect(`/reset-password?token=${encodeURIComponent(token)}`);
   }
 
@@ -229,7 +234,7 @@ export async function resendVerificationAction(): Promise<FormState> {
     return { ok: true, done: true, message: "Already confirmed, or try again in a few minutes." };
   }
 
-  if (!process.env.RESEND_API_KEY) {
+  if (!process.env.RESEND_API_KEY && !isLiveDeploy) {
     redirect(`/verify-email?token=${encodeURIComponent(token)}`);
   }
 
