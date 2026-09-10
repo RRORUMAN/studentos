@@ -54,7 +54,7 @@ export default async function AskPage(props: PageProps<"/ask">) {
   const query = raw?.trim() ?? "";
 
   const [money$, history, answerable] = await Promise.all([
-    loadMoney(viewer.user.id, now),
+    loadMoney(viewer.user.id, viewer.city.timezone, now),
     recentAsks(6),
     countAnswerable(viewer.user.id, audienceOf(viewer.profile, [])),
   ]);

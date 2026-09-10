@@ -37,7 +37,7 @@ export default async function TravelBudgetPage() {
   const unlocked = viewer.entitlements.can.travelBudgets;
   const fmt = (cents: number) => money(cents / 100, where);
 
-  const money$ = await loadMoney(viewer.user.id, now);
+  const money$ = await loadMoney(viewer.user.id, viewer.city.timezone, now);
 
   const trips: TripView[] = money$.reading.trips.map((trip) => ({
     category: trip.category,

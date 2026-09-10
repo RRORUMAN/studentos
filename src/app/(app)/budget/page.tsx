@@ -84,19 +84,19 @@ export default async function BudgetPage() {
   const can = viewer.entitlements.can;
   const fmt = (cents: number) => money(cents / 100, where);
 
-  const money$ = await loadMoney(viewer.user.id, now);
+  const money$ = await loadMoney(viewer.user.id, viewer.city.timezone, now);
   const reading = money$.reading;
   const unset = money$.unset;
 
   const insight = insightFor(reading, fmt);
-  const charts = chartsFor(money$, now);
-  const detected = detectedSubscriptions(money$, now);
+  const charts = chartsFor(money$, now, zone);
+  const detected = detectedSubscriptions(money$, now, zone);
 
   /* Trends are Plus, and the history quota decides how far back the rows are
      even loaded — a free student's twelfth month is never sent to a browser
      that is not entitled to render it. */
   const history = can.spendingTrends
-    ? await loadSpendHistory(viewer.user.id, quotaFor(viewer.entitlements.plan).historyMonths, now)
+    ? await loadSpendHistory(viewer.user.id, quotaFor(viewer.entitlements.plan).historyMonths, zone, now)
     : [];
 
   const spendLess = unset

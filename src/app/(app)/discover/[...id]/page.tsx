@@ -81,7 +81,7 @@ export default async function PlacePage(props: PageProps<"/discover/[...id]">) {
   const where = viewer.currency;
   const social = !viewer.profile.socialGoals.includes("private");
   const now = requestDate();
-  const money$ = await loadMoney(viewer.user.id);
+  const money$ = await loadMoney(viewer.user.id, viewer.city.timezone);
 
   const context = await loadRecommendContext({
     userId: viewer.user.id,

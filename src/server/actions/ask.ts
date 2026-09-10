@@ -251,7 +251,7 @@ export async function askStudentOS(query: string): Promise<AskResult> {
   }
 
   /* ---- retrieval, through the typed tools (Tier 0) ----------------------- */
-  const money$ = await loadMoney(viewer.user.id, now);
+  const money$ = await loadMoney(viewer.user.id, viewer.city.timezone, now);
   const safeTodayCents = money$.unset ? null : money$.reading.safeTodayCents;
   const budgetCents = parsed.budgetCents ?? safeTodayCents;
 

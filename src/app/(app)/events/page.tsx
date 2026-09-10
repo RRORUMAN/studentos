@@ -68,7 +68,7 @@ export default async function EventsPage(props: PageProps<"/events">) {
   const tab: EventTab = eventTabs.some((entry) => entry.value === raw) ? (raw as EventTab) : "for-you";
   const kind = eventKindFilters.some((entry) => entry.value === one("kind")) ? one("kind")! : null;
 
-  const money$ = await loadMoney(viewer.user.id, now);
+  const money$ = await loadMoney(viewer.user.id, viewer.city.timezone, now);
   const context = await loadRecommendContext({
     userId: viewer.user.id,
     profile: viewer.profile,

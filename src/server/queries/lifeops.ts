@@ -25,7 +25,8 @@ import { money } from "@/lib/utils";
 export const loadLifeOps = cache(async (viewer: Viewer, now: Date): Promise<LifeOpsTimeline> => {
   const userId = viewer.user.id;
   const social = !viewer.profile.socialGoals.includes("private");
-  const month = monthKey(now);
+  const timeZone = viewer.city.timezone;
+  const month = monthKey(now, timeZone);
 
   const [tasks, arrivalDone, responses, inviteResponses, hosted, ownPlans, memberships, recurring, transactions, missions, friendIds, money$] =
     await Promise.all([
@@ -37,10 +38,10 @@ export const loadLifeOps = cache(async (viewer: Viewer, now: Date): Promise<Life
       findMany("plans", (row) => row.userId === userId && row.forDate !== null),
       findMany("planMembers", (row) => row.userId === userId && row.status === "in"),
       findMany("recurring", (row) => row.userId === userId && row.active),
-      findMany("transactions", (row) => row.userId === userId && monthKey(new Date(row.spentAt)) === month),
+      findMany("transactions", (row) => row.userId === userId && monthKey(new Date(row.spentAt), timeZone) === month),
       findMany("missions", (row) => row.userId === userId && row.status === "active"),
       loadFriendIds(userId),
-      loadMoney(userId, now),
+      loadMoney(userId, timeZone, now),
     ]);
 
   /* ---- events the student responded to, with friends going --------------- */

@@ -62,7 +62,7 @@ export default async function SurvivalPage(props: PageProps<"/budget/survival">)
   const daysRaw = one("days");
   const days = Number.isFinite(Number(daysRaw)) && Number(daysRaw) > 0 ? Math.min(60, Number(daysRaw)) : 4;
 
-  const money$ = await loadMoney(viewer.user.id, now);
+  const money$ = await loadMoney(viewer.user.id, viewer.city.timezone, now);
   const unlocked = viewer.entitlements.can.survivalMode;
 
   /* Comma-safe, and the same parser the field and the action use. */

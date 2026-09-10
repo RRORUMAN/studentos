@@ -27,6 +27,37 @@ export function dayKey(iso: string | Date, timeZone: string): string {
   return `${get("year")}-${get("month")}-${get("day")}`;
 }
 
+/**
+ * "2026-09" in the city's calendar.
+ *
+ * The month a spend belongs to, which is the month whose envelope it comes out
+ * of. `src/server/engines/budget.ts` had its own `monthKey` built on
+ * `getUTCMonth`, so a student in Kyiv buying something at 01:00 on the first
+ * had it filed at 22:00 UTC on the last day of the month before — the wrong
+ * envelope, in a month they had already closed. Every zone east of UTC has a
+ * window like that at each month boundary, and the further east the wider:
+ * three hours in Kyiv, thirteen in Auckland.
+ *
+ * Sorting still works on the string, because the format is fixed-width and
+ * big-endian. `src/server/queries/money.ts` compares months with `>=`.
+ */
+export function monthKey(iso: string | Date, timeZone: string): string {
+  return dayKey(iso, timeZone).slice(0, 7);
+}
+
+/**
+ * Which day of the month it is in the city. 1-31.
+ *
+ * The companion to `monthKey`, and needed for the same reason: the budget
+ * engine paced a month with `now.getUTCDate()`, which is the wrong number for
+ * part of every day in every zone that is not UTC. Unlike a wrong month key
+ * this one is silent — it is a plausible integer either way — so it does not
+ * announce itself, it just makes "day 12 of 30" occasionally mean day 11.
+ */
+export function dayOfMonth(iso: string | Date, timeZone: string): number {
+  return Number(dayKey(iso, timeZone).slice(8, 10));
+}
+
 /** "Today", "Tomorrow", "Sat 12 Sep". */
 export function fmtDay(iso: string, timeZone: string, now: Date): string {
   const key = dayKey(iso, timeZone);

@@ -56,7 +56,7 @@ export default async function ArrivalPage() {
   const social = !viewer.profile.socialGoals.includes("private");
   const housing = viewer.move?.housing ?? "unknown";
 
-  const money$ = await loadMoney(viewer.user.id, now);
+  const money$ = await loadMoney(viewer.user.id, viewer.city.timezone, now);
   const context = await loadRecommendContext({
     userId: viewer.user.id,
     profile: viewer.profile,

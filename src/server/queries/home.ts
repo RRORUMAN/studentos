@@ -84,7 +84,7 @@ export async function loadHome(viewer: Viewer, now: Date): Promise<HomeData> {
     now,
   });
 
-  const money$ = await loadMoney(userId, now);
+  const money$ = await loadMoney(userId, tz, now);
   const budgetCents = money$.unset ? null : money$.reading.safeTodayCents;
 
   const context = await loadRecommendContext({ userId, profile: viewer.profile, budgetCents, now });

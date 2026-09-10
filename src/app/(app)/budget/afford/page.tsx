@@ -50,7 +50,7 @@ export default async function AffordPage(props: PageProps<"/budget/afford">) {
   const amount = one("amount") ?? "";
   const category = one("category") ?? "eating-out";
 
-  const money$ = await loadMoney(viewer.user.id, now);
+  const money$ = await loadMoney(viewer.user.id, viewer.city.timezone, now);
   const reading = money$.reading;
 
   const categories =

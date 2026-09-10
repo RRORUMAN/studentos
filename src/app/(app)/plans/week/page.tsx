@@ -47,7 +47,7 @@ export default async function WeekPage(props: PageProps<"/plans/week">) {
   /* Free keeps the money dials; the taste dials are what Plus adds. */
   const dials = unlocked ? asked : asked.filter((dial) => freeWeekDials.includes(dial));
 
-  const money$ = await loadMoney(viewer.user.id, now);
+  const money$ = await loadMoney(viewer.user.id, viewer.city.timezone, now);
   const context = await loadRecommendContext({
     userId: viewer.user.id,
     profile: viewer.profile,

@@ -234,7 +234,7 @@ export type ToolContext = {
 };
 
 async function contextFor(ctx: ToolContext) {
-  const money$ = await loadMoney(ctx.viewer.user.id, ctx.now);
+  const money$ = await loadMoney(ctx.viewer.user.id, ctx.viewer.city.timezone, ctx.now);
   const budgetCents = ctx.budgetCents ?? (money$.unset ? null : money$.reading.safeTodayCents);
   const recommend = await loadRecommendContext({
     userId: ctx.viewer.user.id,

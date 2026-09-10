@@ -231,7 +231,9 @@ export async function restoreTransaction(row: unknown): Promise<ActionResult> {
 /* -------------------------------------------------------------------------- */
 
 export async function setMonthlyBudget(formData: FormData): Promise<ActionResult> {
-  const userId = await requireUserId();
+  const viewer = await requireViewer();
+  const userId = viewer.user.id;
+  const timeZone = viewer.city.timezone;
   const blocked = limited(userId, "setup");
   if (blocked) return blocked;
 
@@ -247,7 +249,7 @@ export async function setMonthlyBudget(formData: FormData): Promise<ActionResult
   }
 
   const excludeHousing = parsed.data.excludeHousing === "on";
-  const month = monthKey(new Date());
+  const month = monthKey(new Date(), timeZone);
   const rows = suggestEnvelopes(parsed.data.amount, { excludeHousing });
 
   await transaction((db) => {
@@ -300,7 +302,9 @@ export async function setMonthlyBudget(formData: FormData): Promise<ActionResult
  * it will not do.
  */
 export async function setCategoryBudget(formData: FormData): Promise<ActionResult> {
-  const userId = await requireUserId();
+  const viewer = await requireViewer();
+  const userId = viewer.user.id;
+  const timeZone = viewer.city.timezone;
   const blocked = limited(userId, "setup");
   if (blocked) return blocked;
 
@@ -312,7 +316,7 @@ export async function setCategoryBudget(formData: FormData): Promise<ActionResul
     return { ok: false, message: parsed.error.issues[0]?.message ?? "Enter an amount like 120." };
   }
 
-  const month = monthKey(new Date());
+  const month = monthKey(new Date(), timeZone);
   const existing = await findMany(
     "envelopes",
     (row) => row.userId === userId && row.month === month && row.category === parsed.data.category,
@@ -345,7 +349,9 @@ export async function setCategoryBudget(formData: FormData): Promise<ActionResul
  * client is a convenience and this is the actual gate.
  */
 export async function addCustomCategory(formData: FormData): Promise<ActionResult> {
-  const userId = await requireUserId();
+  const viewer = await requireViewer();
+  const userId = viewer.user.id;
+  const timeZone = viewer.city.timezone;
   const blocked = limited(userId, "setup");
   if (blocked) return blocked;
 
@@ -369,7 +375,7 @@ export async function addCustomCategory(formData: FormData): Promise<ActionResul
   await insert("envelopes", {
     id: newId(),
     userId,
-    month: monthKey(new Date()),
+    month: monthKey(new Date(), timeZone),
     category,
     plannedCents: parsed.data.amount,
     custom: true,
@@ -389,7 +395,9 @@ export async function addCustomCategory(formData: FormData): Promise<ActionResul
  * `readBudget` — which is the whole reason the feature exists.
  */
 export async function saveTripBudget(formData: FormData): Promise<ActionResult> {
-  const userId = await requireUserId();
+  const viewer = await requireViewer();
+  const userId = viewer.user.id;
+  const timeZone = viewer.city.timezone;
   const blocked = limited(userId, "trip");
   if (blocked) return blocked;
 
@@ -416,7 +424,7 @@ export async function saveTripBudget(formData: FormData): Promise<ActionResult> 
   }
 
   const category = tripCategory(parsed.data);
-  const month = monthKey(new Date(`${parsed.data.start}T12:00:00Z`));
+  const month = monthKey(new Date(`${parsed.data.start}T12:00:00Z`), timeZone);
 
   const existing = await findOne(
     "envelopes",

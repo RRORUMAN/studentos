@@ -238,7 +238,7 @@ export default async function DiscoverPage(props: PageProps<"/discover">) {
   const query = (one("q") ?? "").trim();
   const needle = query.toLowerCase();
 
-  const money$ = await loadMoney(viewer.user.id, now);
+  const money$ = await loadMoney(viewer.user.id, viewer.city.timezone, now);
   const context = await loadRecommendContext({
     userId: viewer.user.id,
     profile: scopedProfile,

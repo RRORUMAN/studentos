@@ -24,7 +24,7 @@ export const metadata: Metadata = {
 export default async function BudgetSetupPage() {
   const viewer = await requireViewer();
   const now = requestDate();
-  const money$ = await loadMoney(viewer.user.id, now);
+  const money$ = await loadMoney(viewer.user.id, viewer.city.timezone, now);
   const symbol = currencySymbol(viewer.currency.currency, viewer.currency.locale);
 
   return (

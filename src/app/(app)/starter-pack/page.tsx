@@ -34,7 +34,7 @@ export const metadata: Metadata = {
 export default async function StarterPackPage() {
   const viewer = await requireViewer();
   const where = viewer.currency;
-  const money$ = await loadMoney(viewer.user.id);
+  const money$ = await loadMoney(viewer.user.id, viewer.city.timezone);
 
   const context = await loadRecommendContext({
     userId: viewer.user.id,

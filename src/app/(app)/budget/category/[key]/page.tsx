@@ -42,7 +42,7 @@ export default async function BudgetCategoryPage(props: PageProps<"/budget/categ
   const symbol = currencySymbol(where.currency, where.locale);
   const fmt = (cents: number) => money(cents / 100, where);
 
-  const money$ = await loadMoney(viewer.user.id, now);
+  const money$ = await loadMoney(viewer.user.id, viewer.city.timezone, now);
   const reading = money$.reading.categories.find((entry) => entry.category === category);
   if (!reading) notFound();
 

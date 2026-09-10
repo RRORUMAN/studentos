@@ -49,7 +49,7 @@ export default async function EventPage(props: PageProps<"/events/[id]">) {
   const timeZone = viewer.city.timezone;
   const social = !viewer.profile.socialGoals.includes("private");
 
-  const money$ = await loadMoney(viewer.user.id, now);
+  const money$ = await loadMoney(viewer.user.id, viewer.city.timezone, now);
   const context = await loadRecommendContext({
     userId: viewer.user.id,
     profile: viewer.profile,

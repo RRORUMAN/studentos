@@ -85,7 +85,7 @@ export async function loadMissionCatalogue(viewer: Viewer): Promise<{ template: 
 
 /** The rows a template is filled from: scored places, this fortnight's events, open plans. */
 export async function loadMissionCandidates(viewer: Viewer, now: Date): Promise<MissionCandidates> {
-  const money$ = await loadMoney(viewer.user.id, now);
+  const money$ = await loadMoney(viewer.user.id, viewer.city.timezone, now);
   const context = await loadRecommendContext({
     userId: viewer.user.id,
     profile: viewer.profile,

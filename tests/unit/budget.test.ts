@@ -76,14 +76,14 @@ function recurring(
 
 describe("month helpers", () => {
   it("formats the month key", () => {
-    assert.equal(monthKey(NOW), "2026-09");
-    assert.equal(monthKey(new Date("2026-01-01T00:00:00Z")), "2026-01");
+    assert.equal(monthKey(NOW, "UTC"), "2026-09");
+    assert.equal(monthKey(new Date("2026-01-01T00:00:00Z"), "UTC"), "2026-01");
   });
 
   it("counts today as a day that still has spending left in it", () => {
     /* September has 30 days; on the 10th, 21 days remain including today.
        Excluding today would understate safe-to-spend for the whole day. */
-    assert.equal(daysLeftInMonth(NOW), 21);
+    assert.equal(daysLeftInMonth(NOW, "UTC"), 21);
   });
 });
 
@@ -112,6 +112,7 @@ describe("readBudget", () => {
   it("subtracts committed recurring charges from available money", () => {
     const reading = readBudget({
       now: NOW,
+      timeZone: "UTC",
       envelopes: [envelope("housing", 40_000), envelope("groceries", 20_000)],
       transactions: [tx("groceries", 5_000)],
       recurring: [recurring("housing", 34_000, 28)], // rent, not yet paid
@@ -128,6 +129,7 @@ describe("readBudget", () => {
   it("never promises money a pending charge will take", () => {
     const reading = readBudget({
       now: NOW,
+      timeZone: "UTC",
       envelopes: [envelope("housing", 40_000)],
       transactions: [],
       recurring: [recurring("housing", 38_000, 28)],
@@ -143,6 +145,7 @@ describe("readBudget", () => {
   it("floors safe-to-spend at zero rather than going negative", () => {
     const reading = readBudget({
       now: NOW,
+      timeZone: "UTC",
       envelopes: [envelope("groceries", 10_000)],
       transactions: [tx("groceries", 30_000)],
       recurring: [],
@@ -155,6 +158,7 @@ describe("readBudget", () => {
   it("reports pace per category", () => {
     const reading = readBudget({
       now: NOW,
+      timeZone: "UTC",
       envelopes: [envelope("nightlife", 30_000)],
       transactions: [tx("nightlife", 20_000)], // 10 days in, even pace = 10,000
       recurring: [],
@@ -170,7 +174,7 @@ describe("readBudget", () => {
 describe("committedRemaining", () => {
   it("ignores a charge whose due day has already passed", () => {
     assert.equal(
-      committedRemaining({ now: NOW, recurring: [recurring("gym", 4_000, 3)], transactions: [] }),
+      committedRemaining({ timeZone: "UTC", now: NOW, recurring: [recurring("gym", 4_000, 3)], transactions: [] }),
       0,
     );
   });
@@ -180,6 +184,7 @@ describe("committedRemaining", () => {
     assert.equal(
       committedRemaining({
         now: NOW,
+        timeZone: "UTC",
         recurring: [recurring("gym", 4_000, 28)],
         transactions: [tx("gym", 4_099, 2)],
       }),
@@ -192,6 +197,7 @@ describe("committedRemaining", () => {
     assert.equal(
       committedRemaining({
         now: NOW,
+        timeZone: "UTC",
         recurring: [recurring("transport", 1_000, 4, "weekly")],
         transactions: [],
       }),
@@ -204,6 +210,7 @@ describe("safeUntil", () => {
   it("never promises beyond the end of the month", () => {
     const reading = readBudget({
       now: NOW,
+      timeZone: "UTC",
       envelopes: [envelope("groceries", 21_000)],
       transactions: [],
       recurring: [],
@@ -220,23 +227,25 @@ describe("forecast", () => {
     const early = new Date("2026-09-03T12:00:00Z");
     const reading = readBudget({
       now: early,
+      timeZone: "UTC",
       envelopes: [envelope("groceries", 20_000)],
       transactions: [tx("groceries", 9_000, 1)],
       recurring: [],
     });
 
-    assert.equal(forecast(reading, early).confident, false);
+    assert.equal(forecast(reading, early, "UTC").confident, false);
   });
 
   it("projects from the current daily rate plus commitments", () => {
     const reading = readBudget({
       now: NOW,
+      timeZone: "UTC",
       envelopes: [envelope("groceries", 30_000)],
       transactions: [tx("groceries", 10_000, 5)],
       recurring: [recurring("gym", 4_000, 28)],
     });
 
-    const result = forecast(reading, NOW);
+    const result = forecast(reading, NOW, "UTC");
     assert.equal(result.confident, true);
     /* €100 over 10 days = €10/day × 30 days = €300, plus the €40 gym. */
     assert.equal(result.projectedCents, 34_000);
@@ -247,6 +256,7 @@ describe("weeklyTarget", () => {
   it("derives the week from available money, not the raw budget", () => {
     const reading = readBudget({
       now: NOW,
+      timeZone: "UTC",
       envelopes: [envelope("groceries", 42_000)],
       transactions: [],
       recurring: [recurring("groceries", 21_000, 28)],
@@ -261,13 +271,14 @@ describe("budgetInsight", () => {
   const format = (cents: number) => `€${(cents / 100).toFixed(2)}`;
 
   it("asks for a budget when none is set", () => {
-    const reading = readBudget({ now: NOW, envelopes: [], transactions: [], recurring: [] });
+    const reading = readBudget({ timeZone: "UTC", now: NOW, envelopes: [], transactions: [], recurring: [] });
     assert.equal(budgetInsight(reading, format).action?.href, "/budget/setup");
   });
 
   it("never scolds — it offers the cheaper option", () => {
     const reading = readBudget({
       now: NOW,
+      timeZone: "UTC",
       envelopes: [envelope("nightlife", 30_000)],
       transactions: [tx("nightlife", 25_000)],
       recurring: [],
@@ -283,6 +294,7 @@ describe("budgetInsight", () => {
   it("reports being under pace as good news, with a number", () => {
     const reading = readBudget({
       now: NOW,
+      timeZone: "UTC",
       envelopes: [envelope("groceries", 30_000)],
       transactions: [tx("groceries", 2_000)],
       recurring: [],
@@ -298,15 +310,16 @@ describe("budgetInsight", () => {
        action was a link to the current page — an action that does nothing is
        worse than no action, because it teaches people the line is decoration. */
     const readings = [
-      readBudget({ now: NOW, envelopes: [envelope("groceries", 30_000)], transactions: [tx("groceries", 2_000)], recurring: [] }),
-      readBudget({ now: NOW, envelopes: [envelope("nightlife", 30_000)], transactions: [tx("nightlife", 25_000)], recurring: [] }),
+      readBudget({ timeZone: "UTC", now: NOW, envelopes: [envelope("groceries", 30_000)], transactions: [tx("groceries", 2_000)], recurring: [] }),
+      readBudget({ timeZone: "UTC", now: NOW, envelopes: [envelope("nightlife", 30_000)], transactions: [tx("nightlife", 25_000)], recurring: [] }),
       readBudget({
         now: NOW,
+        timeZone: "UTC",
         envelopes: [envelope("groceries", 30_000)],
         transactions: [tx("groceries", 20_000)],
         recurring: [recurring("housing", 20_000, 28)],
       }),
-      readBudget({ now: NOW, envelopes: [envelope("housing", 30_000)], transactions: [tx("housing", 12_000)], recurring: [] }),
+      readBudget({ timeZone: "UTC", now: NOW, envelopes: [envelope("housing", 30_000)], transactions: [tx("housing", 12_000)], recurring: [] }),
     ];
 
     for (const reading of readings) {

@@ -42,7 +42,7 @@ export async function syncNotifications(viewer: Viewer, now: Date): Promise<numb
   let written = 0;
 
   const [money$, timeline, language] = await Promise.all([
-    loadMoney(userId, now),
+    loadMoney(userId, tz, now),
     loadLifeOps(viewer, now),
     loadLanguage({ userId, countryCode: viewer.city.countryCode, timezone: tz, now }),
   ]);

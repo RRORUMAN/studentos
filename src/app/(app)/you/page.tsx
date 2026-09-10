@@ -50,7 +50,7 @@ export default async function YouPage() {
   const plan = planByKey(viewer.entitlements.plan);
 
   const [recap, friendIds, pendingRequests, groups] = await Promise.all([
-    loadWeeklyRecap(viewer.user.id),
+    loadWeeklyRecap(viewer.user.id, viewer.city.timezone),
     loadFriendIds(viewer.user.id),
     findMany("friendships", (row) => row.addresseeId === viewer.user.id && row.status === "pending"),
     findMany("inviteResponses", (row) => row.userId === viewer.user.id && row.status === "in"),

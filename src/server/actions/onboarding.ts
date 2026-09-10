@@ -148,7 +148,7 @@ export async function completeOnboarding(input: OnboardingInput): Promise<Onboar
       ? envelopeRows.reduce((sum, row) => sum + row.plannedCents, 0)
       : monthlyTotalCents;
 
-  const month = monthKey(new Date());
+  const month = monthKey(new Date(), city.timezone);
 
   /* ---- one transaction --------------------------------------------------
      Everything below is written together. A half-onboarded account — profile

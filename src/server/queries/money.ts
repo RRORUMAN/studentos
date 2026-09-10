@@ -79,7 +79,16 @@ export type MoneySnapshot = {
   unset: boolean;
 };
 
-export const loadMoney = cache(async (userId: string, now = new Date()): Promise<MoneySnapshot> => {
+/**
+ * The student’s money, read in THEIR city’s calendar.
+ *
+ * `timeZone` is required and second, before the optional clock, because every
+ * figure below depends on it: which month a spend lands in, how many days are
+ * left to pace against, when a subscription is next due. It used to be absent,
+ * and the engine keyed all of that on UTC.
+ */
+export const loadMoney = cache(
+  async (userId: string, timeZone: string, now = new Date()): Promise<MoneySnapshot> => {
   const [envelopes, transactions, recurring, setup] = await Promise.all([
     findMany("envelopes", (row) => row.userId === userId),
     findMany("transactions", (row) => row.userId === userId),
@@ -87,16 +96,16 @@ export const loadMoney = cache(async (userId: string, now = new Date()): Promise
     findOne("budgetSetups", (row) => row.userId === userId),
   ]);
 
-  const reading = readBudget({ now, envelopes, transactions, recurring });
+  const reading = readBudget({ now, timeZone, envelopes, transactions, recurring });
 
   return {
     reading,
     week: weeklyTarget({ now, reading, transactions }),
-    forecast: computeForecast(reading, now),
+    forecast: computeForecast(reading, now, timeZone),
     setup,
     transactions: transactions.sort((a, b) => b.spentAt.localeCompare(a.spentAt)),
     recurring: recurring.filter((row) => row.active),
-    subscriptions: subscriptionsReading({ now, recurring, transactions }),
+    subscriptions: subscriptionsReading({ now, timeZone, recurring, transactions }),
     unset: reading.plannedCents === 0,
   };
 });
@@ -122,15 +131,17 @@ export type BudgetCharts = {
 };
 
 /** The series behind the weekly bars and the forecast sparkline. */
-export function chartsFor(snapshot: MoneySnapshot, now: Date): BudgetCharts {
+export function chartsFor(snapshot: MoneySnapshot, now: Date, timeZone: string): BudgetCharts {
   return {
     weeks: weeklyBars({
       now,
+      timeZone,
       transactions: snapshot.transactions,
       targetCents: snapshot.week.targetCents,
     }),
     trajectory: spendTrajectory({
       now,
+      timeZone,
       transactions: snapshot.transactions,
       reading: snapshot.reading,
       forecast: snapshot.forecast,
@@ -277,11 +288,16 @@ export async function placesFor(citySlug: string): Promise<Place[]> {
  * the *count* is what a free student is told, so the upsell can be honest
  * about how much there is to find without giving it away.
  */
-export function detectedSubscriptions(snapshot: MoneySnapshot, now: Date): DetectedSubscription[] {
+export function detectedSubscriptions(
+  snapshot: MoneySnapshot,
+  now: Date,
+  timeZone: string,
+): DetectedSubscription[] {
   return detectSubscriptions({
     transactions: snapshot.transactions,
     recurring: snapshot.recurring,
     now,
+    timeZone,
   });
 }
 
@@ -299,13 +315,14 @@ export function detectedSubscriptions(snapshot: MoneySnapshot, now: Date): Detec
 export async function loadSpendHistory(
   userId: string,
   historyMonths: number | null,
+  timeZone: string,
   now = new Date(),
 ): Promise<{ month: string; spentCents: Cents }[]> {
   const transactions = await findMany("transactions", (row) => row.userId === userId);
 
   const byMonth = new Map<string, number>();
   for (const tx of transactions) {
-    const key = monthKey(new Date(tx.spentAt));
+    const key = monthKey(new Date(tx.spentAt), timeZone);
     byMonth.set(key, (byMonth.get(key) ?? 0) + tx.amountCents);
   }
 
@@ -318,7 +335,7 @@ export async function loadSpendHistory(
   const cutoff = new Date(
     Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - (historyMonths - 1), 1),
   );
-  return months.filter((entry) => entry.month >= monthKey(cutoff));
+  return months.filter((entry) => entry.month >= monthKey(cutoff, timeZone));
 }
 
 /* -------------------------------------------------------------------------- */
@@ -437,7 +454,7 @@ export async function loadBucketGroups(userId: string): Promise<{ id: Id; name: 
  * because a recap that inflates its numbers is worse than no recap — it is the
  * one screen where a student can check the product against their own memory.
  */
-export async function loadWeeklyRecap(userId: string, now = new Date()) {
+export async function loadWeeklyRecap(userId: string, timeZone: string, now = new Date()) {
   const since = new Date(now.getTime() - 7 * 86_400_000).toISOString();
 
   const [transactions, saved, outcomes, posts] = await Promise.all([
@@ -447,7 +464,7 @@ export async function loadWeeklyRecap(userId: string, now = new Date()) {
     findMany("posts", (row) => row.authorId === userId && row.createdAt >= since),
   ]);
 
-  const money = await loadMoney(userId, now);
+  const money = await loadMoney(userId, timeZone, now);
   const spentCents = transactions.reduce((sum, tx) => sum + tx.amountCents, 0);
 
   return {

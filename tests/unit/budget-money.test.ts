@@ -105,12 +105,14 @@ describe("trip envelopes", () => {
   it("holds an upcoming trip out of safe-to-spend", () => {
     const withTrip = readBudget({
       now: NOW,
+      timeZone: "UTC",
       envelopes: [envelope("groceries", 20_000), envelope(category, 18_000, true)],
       transactions: [],
       recurring: [],
     });
     const without = readBudget({
       now: NOW,
+      timeZone: "UTC",
       envelopes: [envelope("groceries", 20_000)],
       transactions: [],
       recurring: [],
@@ -126,6 +128,7 @@ describe("trip envelopes", () => {
   it("releases the money once the trip has started", () => {
     const during = readBudget({
       now: new Date("2026-09-26T12:00:00Z"),
+      timeZone: "UTC",
       envelopes: [envelope("groceries", 20_000), envelope(category, 18_000, true)],
       transactions: [],
       recurring: [],
@@ -138,6 +141,7 @@ describe("trip envelopes", () => {
   it("keeps trips out of the category list and out of pace", () => {
     const reading = readBudget({
       now: NOW,
+      timeZone: "UTC",
       envelopes: [envelope("groceries", 20_000), envelope(category, 18_000, true)],
       transactions: [tx("groceries", 5_000)],
       recurring: [],
@@ -157,6 +161,7 @@ describe("pace sign", () => {
   it("is positive when spending is ahead of an even pace", () => {
     const reading = readBudget({
       now: NOW,
+      timeZone: "UTC",
       envelopes: [envelope("nightlife", 30_000)],
       transactions: [tx("nightlife", 20_000)],
       recurring: [],
@@ -173,6 +178,7 @@ describe("pace sign", () => {
   it("is negative when spending is under it", () => {
     const reading = readBudget({
       now: NOW,
+      timeZone: "UTC",
       envelopes: [envelope("groceries", 30_000)],
       transactions: [tx("groceries", 2_000)],
       recurring: [],
@@ -187,17 +193,18 @@ describe("pace sign", () => {
 
 describe("subscriptions", () => {
   it("finds the next due date without stepping into a month that is too short", () => {
-    const due = nextDueDate({ cadence: "monthly", dayOfPeriod: 31 }, new Date("2026-01-31T12:00:00Z"));
+    const due = nextDueDate({ cadence: "monthly", dayOfPeriod: 31 }, new Date("2026-01-31T12:00:00Z"), "UTC");
     assert.equal(due?.toISOString().slice(0, 10), "2026-01-31");
 
     /* A charge on the 31st, asked about on the 1st of February. */
-    const february = nextDueDate({ cadence: "monthly", dayOfPeriod: 31 }, new Date("2026-02-01T12:00:00Z"));
+    const february = nextDueDate({ cadence: "monthly", dayOfPeriod: 31 }, new Date("2026-02-01T12:00:00Z"), "UTC");
     assert.equal(february?.toISOString().slice(0, 10), "2026-02-28");
   });
 
   it("compares a weekly and a monthly charge on the same monthly footing", () => {
     const reading = subscriptionsReading({
       now: NOW,
+      timeZone: "UTC",
       recurring: [recurring("subscriptions", 1_000, 4, "weekly"), recurring("housing", 40_000, 28)],
       transactions: [],
     });
@@ -210,6 +217,7 @@ describe("subscriptions", () => {
   it("marks a charge that has already landed this month", () => {
     const reading = subscriptionsReading({
       now: NOW,
+      timeZone: "UTC",
       recurring: [recurring("fitness", 4_000, 28)],
       transactions: [tx("fitness", 4_050, 2)],
     });
@@ -223,6 +231,7 @@ describe("detectSubscriptions", () => {
   it("needs two consecutive months before it will call something recurring", () => {
     const once = detectSubscriptions({
       now: NOW,
+      timeZone: "UTC",
       recurring: [],
       transactions: [tx("subscriptions", 999, 4, "09", "Streamy")],
     });
@@ -230,6 +239,7 @@ describe("detectSubscriptions", () => {
 
     const twice = detectSubscriptions({
       now: NOW,
+      timeZone: "UTC",
       recurring: [],
       transactions: [tx("subscriptions", 999, 4, "08", "Streamy"), tx("subscriptions", 999, 4, "09", "Streamy")],
     });
@@ -242,6 +252,7 @@ describe("detectSubscriptions", () => {
   it("tolerates a small price change but not a different charge", () => {
     const nudged = detectSubscriptions({
       now: NOW,
+      timeZone: "UTC",
       recurring: [],
       transactions: [tx("subscriptions", 1_000, 4, "08"), tx("subscriptions", 1_100, 4, "09")],
     });
@@ -249,6 +260,7 @@ describe("detectSubscriptions", () => {
 
     const unrelated = detectSubscriptions({
       now: NOW,
+      timeZone: "UTC",
       recurring: [],
       transactions: [tx("shopping", 1_000, 4, "08"), tx("shopping", 8_000, 4, "09")],
     });
@@ -258,6 +270,7 @@ describe("detectSubscriptions", () => {
   it("says nothing about a charge the student has already told it about", () => {
     const found = detectSubscriptions({
       now: NOW,
+      timeZone: "UTC",
       recurring: [recurring("subscriptions", 1_000, 4)],
       transactions: [tx("subscriptions", 999, 4, "08"), tx("subscriptions", 999, 4, "09")],
     });
@@ -267,6 +280,7 @@ describe("detectSubscriptions", () => {
   it("ignores a run that stopped months ago", () => {
     const found = detectSubscriptions({
       now: NOW,
+      timeZone: "UTC",
       recurring: [],
       transactions: [tx("subscriptions", 999, 4, "05"), tx("subscriptions", 999, 4, "06")],
     });
@@ -290,7 +304,7 @@ describe("charts", () => {
   });
 
   it("draws a week bar for every week asked for, this week last", () => {
-    const bars = weeklyBars({ now: NOW, transactions: [tx("groceries", 3_000, 8)], targetCents: 7_000, weeks: 4 });
+    const bars = weeklyBars({ timeZone: "UTC", now: NOW, transactions: [tx("groceries", 3_000, 8)], targetCents: 7_000, weeks: 4 });
 
     assert.equal(bars.length, 4);
     assert.equal(bars[3].current, true);
@@ -301,12 +315,13 @@ describe("charts", () => {
   it("projects the same total the forecast card prints", () => {
     const reading = readBudget({
       now: NOW,
+      timeZone: "UTC",
       envelopes: [envelope("groceries", 30_000)],
       transactions: [tx("groceries", 10_000, 5)],
       recurring: [recurring("fitness", 4_000, 28)],
     });
-    const projection = forecast(reading, NOW);
-    const trajectory = spendTrajectory({ now: NOW, transactions: [tx("groceries", 10_000, 5)], reading, forecast: projection });
+    const projection = forecast(reading, NOW, "UTC");
+    const trajectory = spendTrajectory({ timeZone: "UTC", now: NOW, transactions: [tx("groceries", 10_000, 5)], reading, forecast: projection });
 
     assert.equal(trajectory.actual.length, 10, "one point per elapsed day");
     assert.equal(trajectory.projected.length, 30, "the line runs to month end");

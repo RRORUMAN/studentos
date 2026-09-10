@@ -1,3 +1,4 @@
+import { dayKey, dayOfMonth, monthKey } from "@/lib/dates";
 import type { Settlement } from "@/domain/social";
 import type {
   BudgetEnvelope,
@@ -173,23 +174,40 @@ export function parseAmountCents(raw: string | null | undefined): Cents | null {
 /* Month helpers                                                               */
 /* -------------------------------------------------------------------------- */
 
-/** "2026-09" for a date. The month key used by every envelope row. */
-export function monthKey(date: Date): string {
-  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
-}
+/**
+ * THE MONTH AND DAY KEYS COME FROM `src/lib/dates.ts`.
+ *
+ * This module used to define its own, on `getUTCMonth` and `toISOString`, with
+ * the same names as the timezone-aware pair in `lib/dates` — two functions
+ * called `dayKey` in one codebase, one right and one not, and which one a file
+ * got depended on its import line.
+ *
+ * The UTC pair put a spend in the wrong month. A student in Kyiv buying
+ * something at 01:00 on the first had it filed at 22:00 UTC on the last day of
+ * the month before: the wrong envelope, in a month they had already closed.
+ * Every zone east of UTC has that window at each month boundary, three hours
+ * wide in Kyiv and thirteen in Auckland, and every zone west of it has the
+ * mirror image at the other end of the day. StudentOS now covers 69 countries,
+ * so "most students are near UTC" was never true and is now not close.
+ *
+ * `monthKey` and `dayKey` therefore take a timezone, and every caller passes
+ * the CITY's zone — not the server's and not the browser's, per CLAUDE.md.
+ */
+export { dayKey, dayOfMonth, monthKey };
 
-/** "2026-09-10" for a date, in UTC. The day key used for grouping. */
-export function dayKey(date: Date): string {
-  return date.toISOString().slice(0, 10);
-}
-
-export function daysInMonth(date: Date): number {
-  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)).getUTCDate();
+/** How many days the calendar month containing `now` has, in the city. */
+export function daysInMonth(now: Date, timeZone: string): number {
+  const [year, month] = monthKey(now, timeZone).split("-").map(Number);
+  /* Day 0 of the next month is the last day of this one. Computed in UTC
+     deliberately: by this point year and month are already the city's, and
+     the length of a calendar month is not itself a timezone question. */
+  return new Date(Date.UTC(year!, month!, 0)).getUTCDate();
 }
 
 /** Days remaining including today — today still has spending left in it. */
-export function daysLeftInMonth(now: Date): number {
-  return daysInMonth(now) - now.getUTCDate() + 1;
+export function daysLeftInMonth(now: Date, timeZone: string): number {
+  const today = Number(dayKey(now, timeZone).slice(8, 10));
+  return daysInMonth(now, timeZone) - today + 1;
 }
 
 /** Whole days from `from` to `to`, by calendar day in UTC. Negative when past. */
@@ -263,8 +281,8 @@ export function tripLabel(trip: Pick<TripKey, "name">): string {
 
 export type TripStatus = "upcoming" | "active" | "past";
 
-export function tripStatus(trip: Pick<TripKey, "start" | "end">, now: Date): TripStatus {
-  const today = dayKey(now);
+export function tripStatus(trip: Pick<TripKey, "start" | "end">, now: Date, timeZone: string): TripStatus {
+  const today = dayKey(now, timeZone);
   if (today < trip.start) return "upcoming";
   if (today > trip.end) return "past";
   return "active";
@@ -340,25 +358,27 @@ export type BudgetReading = {
  */
 export function readBudget(input: {
   now: Date;
+  /** The city’s zone. Decides which month a spend belongs to. */
+  timeZone: string;
   envelopes: readonly BudgetEnvelope[];
   transactions: readonly Transaction[];
   recurring: readonly RecurringExpense[];
 }): BudgetReading {
-  const { now, envelopes, transactions, recurring } = input;
-  const month = monthKey(now);
+  const { now, timeZone, envelopes, transactions, recurring } = input;
+  const month = monthKey(now, timeZone);
 
   const monthEnvelopes = envelopes.filter((envelope) => envelope.month === month);
-  const monthTransactions = transactions.filter((tx) => monthKey(new Date(tx.spentAt)) === month);
+  const monthTransactions = transactions.filter((tx) => monthKey(new Date(tx.spentAt), timeZone) === month);
 
   const plannedCents = monthEnvelopes.reduce((sum, envelope) => sum + envelope.plannedCents, 0);
   const spentCents = monthTransactions.reduce((sum, tx) => sum + tx.amountCents, 0);
   const remainingCents = plannedCents - spentCents;
 
-  const committedCents = committedRemaining({ now, recurring, transactions: monthTransactions });
+  const committedCents = committedRemaining({ now, timeZone, recurring, transactions: monthTransactions });
 
-  const daysLeft = daysLeftInMonth(now);
-  const elapsed = now.getUTCDate();
-  const total = daysInMonth(now);
+  const daysLeft = daysLeftInMonth(now, timeZone);
+  const elapsed = dayOfMonth(now, timeZone);
+  const total = daysInMonth(now, timeZone);
 
   /* Trips: reserved until they start. */
   const trips: TripReading[] = monthEnvelopes
@@ -368,7 +388,7 @@ export function readBudget(input: {
       const tripSpent = monthTransactions
         .filter((tx) => tx.category === envelope.category)
         .reduce((sum, tx) => sum + tx.amountCents, 0);
-      const status = tripStatus(key, now);
+      const status = tripStatus(key, now, timeZone);
       const remaining = envelope.plannedCents - tripSpent;
       return {
         ...key,
@@ -458,12 +478,13 @@ export function daysToSunday(now: Date): number {
  */
 export function committedRemaining(input: {
   now: Date;
+  timeZone: string;
   recurring: readonly RecurringExpense[];
   transactions: readonly Transaction[];
 }): Cents {
-  const { now, recurring, transactions } = input;
-  const today = now.getUTCDate();
-  const total = daysInMonth(now);
+  const { now, timeZone, recurring, transactions } = input;
+  const today = dayOfMonth(now, timeZone);
+  const total = daysInMonth(now, timeZone);
 
   return recurring
     .filter((expense) => expense.active)
@@ -550,9 +571,9 @@ export type Forecast = {
  * projects wildly, and showing a confident-looking wrong number is worse than
  * showing nothing.
  */
-export function forecast(reading: BudgetReading, now: Date): Forecast {
-  const elapsed = now.getUTCDate();
-  const total = daysInMonth(now);
+export function forecast(reading: BudgetReading, now: Date, timeZone: string): Forecast {
+  const elapsed = dayOfMonth(now, timeZone);
+  const total = daysInMonth(now, timeZone);
   const discretionarySpend = reading.spentCents;
 
   const currentDailyCents = elapsed === 0 ? 0 : Math.round(discretionarySpend / elapsed);
@@ -591,20 +612,21 @@ export type Trajectory = {
 
 export function spendTrajectory(input: {
   now: Date;
+  timeZone: string;
   transactions: readonly Transaction[];
   reading: BudgetReading;
   forecast: Forecast;
 }): Trajectory {
-  const { now, transactions, reading } = input;
-  const total = daysInMonth(now);
-  const today = now.getUTCDate();
-  const month = monthKey(now);
+  const { now, timeZone, transactions, reading } = input;
+  const total = daysInMonth(now, timeZone);
+  const today = dayOfMonth(now, timeZone);
+  const month = monthKey(now, timeZone);
 
   const perDay = new Array<number>(total).fill(0);
   for (const tx of transactions) {
     const at = new Date(tx.spentAt);
-    if (monthKey(at) !== month) continue;
-    perDay[at.getUTCDate() - 1] += tx.amountCents;
+    if (monthKey(at, timeZone) !== month) continue;
+    perDay[dayOfMonth(at, timeZone) - 1] += tx.amountCents;
   }
 
   const actual: Cents[] = [];
@@ -767,6 +789,7 @@ export type WeekBar = {
 
 export function weeklyBars(input: {
   now: Date;
+  timeZone: string;
   transactions: readonly Transaction[];
   targetCents: Cents;
   weeks?: number;
@@ -784,7 +807,7 @@ export function weeklyBars(input: {
         return at >= start.getTime() && at < end.getTime();
       })
       .reduce((sum, tx) => sum + tx.amountCents, 0);
-    out.push({ weekStart: dayKey(start), spentCents, targetCents: input.targetCents, current: back === 0 });
+    out.push({ weekStart: dayKey(start, input.timeZone), spentCents, targetCents: input.targetCents, current: back === 0 });
   }
 
   return out;
@@ -821,21 +844,28 @@ export type SubscriptionsReading = {
 };
 
 /** The next date a repeating charge lands, counting today. Null for termly. */
-export function nextDueDate(expense: Pick<RecurringExpense, "cadence" | "dayOfPeriod">, now: Date): Date | null {
-  const year = now.getUTCFullYear();
-  const month = now.getUTCMonth();
-  const today = now.getUTCDate();
+export function nextDueDate(
+  expense: Pick<RecurringExpense, "cadence" | "dayOfPeriod">,
+  now: Date,
+  timeZone: string,
+): Date | null {
+  /* Year, month and day come from the city’s calendar. A charge due on the
+     first is due on the first where the student lives, and reading them off
+     UTC put the whole walk a day out for part of every day east of it. */
+  const [year, monthNumber] = monthKey(now, timeZone).split("-").map(Number);
+  const month = monthNumber! - 1;
+  const today = dayOfMonth(now, timeZone);
 
   if (expense.cadence === "monthly") {
-    const thisMonthDue = Math.min(expense.dayOfPeriod, daysInMonth(now));
-    if (thisMonthDue >= today) return new Date(Date.UTC(year, month, thisMonthDue));
-    const next = new Date(Date.UTC(year, month + 1, 1));
-    return new Date(Date.UTC(year, month + 1, Math.min(expense.dayOfPeriod, daysInMonth(next))));
+    const thisMonthDue = Math.min(expense.dayOfPeriod, daysInMonth(now, timeZone));
+    if (thisMonthDue >= today) return new Date(Date.UTC(year!, month, thisMonthDue));
+    const next = new Date(Date.UTC(year!, month + 1, 1));
+    return new Date(Date.UTC(year!, month + 1, Math.min(expense.dayOfPeriod, daysInMonth(next, timeZone))));
   }
 
   if (expense.cadence === "weekly") {
     const delta = (expense.dayOfPeriod - now.getUTCDay() + 7) % 7;
-    return new Date(Date.UTC(year, month, today + delta));
+    return new Date(Date.UTC(year!, month, today + delta));
   }
 
   return null;
@@ -850,17 +880,20 @@ export function monthlyEquivalent(expense: Pick<RecurringExpense, "cadence" | "a
 
 export function subscriptionsReading(input: {
   now: Date;
+  timeZone: string;
   recurring: readonly RecurringExpense[];
   transactions: readonly Transaction[];
 }): SubscriptionsReading {
-  const { now, recurring, transactions } = input;
-  const month = monthKey(now);
-  const monthTransactions = transactions.filter((tx) => monthKey(new Date(tx.spentAt)) === month);
+  const { now, timeZone, recurring, transactions } = input;
+  const month = monthKey(now, timeZone);
+  const monthTransactions = transactions.filter(
+    (tx) => monthKey(new Date(tx.spentAt), timeZone) === month,
+  );
 
   const rows: SubscriptionRow[] = recurring
     .filter((expense) => expense.active)
     .map((expense) => {
-      const due = nextDueDate(expense, now);
+      const due = nextDueDate(expense, now, timeZone);
       return {
         id: expense.id,
         label: expense.label,
@@ -868,7 +901,7 @@ export function subscriptionsReading(input: {
         amountCents: expense.amountCents,
         cadence: expense.cadence,
         dayOfPeriod: expense.dayOfPeriod,
-        nextDue: due ? dayKey(due) : null,
+        nextDue: due ? dayKey(due, timeZone) : null,
         daysUntil: due ? daysBetween(now, due) : null,
         monthlyCents: monthlyEquivalent(expense),
         paidThisMonth: expense.cadence === "monthly" && paidThisMonth(expense, monthTransactions),
@@ -883,7 +916,7 @@ export function subscriptionsReading(input: {
     monthlyTotalCents: rows.reduce((sum, row) => sum + row.monthlyCents, 0),
     dueSoonCents: dueSoon.reduce((sum, row) => sum + row.amountCents, 0),
     dueSoonCount: dueSoon.length,
-    stillToComeCents: committedRemaining({ now, recurring, transactions: monthTransactions }),
+    stillToComeCents: committedRemaining({ now, timeZone, recurring, transactions: monthTransactions }),
   };
 }
 
@@ -925,15 +958,16 @@ export function detectSubscriptions(input: {
   transactions: readonly Transaction[];
   recurring: readonly RecurringExpense[];
   now: Date;
+  timeZone: string;
   lookbackMonths?: number;
 }): DetectedSubscription[] {
-  const { transactions, recurring, now } = input;
+  const { transactions, recurring, now, timeZone } = input;
   const lookback = input.lookbackMonths ?? DETECT.lookbackMonths;
-  const currentIndex = monthIndex(monthKey(now));
+  const currentIndex = monthIndex(monthKey(now, timeZone));
   const floor = currentIndex - (lookback - 1);
 
   const window = transactions
-    .map((tx) => ({ tx, month: monthKey(new Date(tx.spentAt)) }))
+    .map((tx) => ({ tx, month: monthKey(new Date(tx.spentAt), timeZone) }))
     .filter((entry) => {
       const index = monthIndex(entry.month);
       return index >= floor && index <= currentIndex;
