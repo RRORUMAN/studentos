@@ -122,6 +122,17 @@ export default defineConfig({
         STUDENTOS_STORE: "file",
         NEXT_PUBLIC_SUPABASE_URL: "",
         SUPABASE_SERVICE_ROLE_KEY: "",
+
+        /**
+         * An admin allowlist the suite can actually try to walk into.
+         *
+         * `requireAdmin` grants on this list plus a confirmed address, and the
+         * test that matters is that an unconfirmed one does NOT get in — an
+         * address on this list that nobody has registered was otherwise a
+         * console waiting for whoever typed it into the sign-up form first.
+         * Without a known value here that test cannot be written.
+         */
+        ADMIN_EMAILS: "e2e-admin@studentos.local",
       },
     },
   ],

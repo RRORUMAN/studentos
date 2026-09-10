@@ -11,6 +11,7 @@ import { readSession } from "@/server/auth/session";
 import { type Entitlements, loadEntitlements } from "@/server/entitlements";
 import { cityStatusOverride } from "@/server/queries/settings";
 import { findOne } from "@/server/db";
+import { adminAccess } from "@/server/admin-access";
 import { env } from "@/services/env";
 
 /**
@@ -135,13 +136,45 @@ export async function requireViewer(): Promise<Viewer> {
  * Admin comes from the `isAdmin` column or the `ADMIN_EMAILS` allowlist. The
  * allowlist is the bootstrap path — without it the first admin could only be
  * created by editing the database by hand.
+ *
+ * ---------------------------------------------------------------------------
+ * THE ALLOWLIST ALSO REQUIRES A CONFIRMED ADDRESS, and that is the whole of
+ * this function's security.
+ *
+ * `ADMIN_EMAILS` names an address. It does not establish that the person
+ * signed in controls it. Sign-up deliberately opens a session before the
+ * address is confirmed — making a student verify before they can look around
+ * is the largest drop-off in a sign-up funnel, and a new account can do
+ * nothing sensitive — but "nothing sensitive" stopped being true the moment
+ * an address could confer the admin console.
+ *
+ * So an ADMIN_EMAILS address that nobody has registered yet was a console
+ * waiting for whoever typed it into the sign-up form first. Not a
+ * hypothetical: the addresses on that list are a founder's, and a founder's
+ * address is the single most guessable string about a company.
+ *
+ * `isAdmin` on the row is untouched by this. That flag is set deliberately by
+ * an operator against an account that already exists, so it carries the proof
+ * the allowlist cannot.
+ *
+ * The unverified-but-allowlisted case redirects to /verify-email rather than
+ * /home, because that person is almost always the real owner and the honest
+ * answer to them is "confirm the address", not a silent bounce. It does not
+ * leak anything: they already typed the address, so they already know it.
  */
 export async function requireAdmin(): Promise<Viewer> {
   const viewer = await requireViewer();
-  const allowlisted = env.adminEmails.includes(viewer.user.email.toLowerCase());
-  if (!viewer.user.isAdmin && !allowlisted) redirect("/home");
-  return viewer;
+
+  switch (adminAccess(viewer.user, env.adminEmails)) {
+    case "granted":
+      return viewer;
+    case "unverified":
+      redirect("/verify-email");
+    case "denied":
+      redirect("/home");
+  }
 }
+
 
 /**
  * The signed-in user id, for server actions.

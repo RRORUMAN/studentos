@@ -1,6 +1,5 @@
 "use server";
 
-import { headers } from "next/headers";
 import { z } from "zod";
 
 import { institutions } from "@/data/institutions";
@@ -10,6 +9,7 @@ import {
   type InstitutionSubmission,
 } from "@/domain/institutions";
 import { findMany, insert, newId, nowIso } from "@/server/db";
+import { callerKey } from "@/server/caller";
 import { limits, rateLimitShared } from "@/server/rate-limit";
 import { currentUserId } from "@/server/viewer";
 
@@ -169,15 +169,3 @@ export async function submitInstitution(input: {
 /* Caller                                                                      */
 /* -------------------------------------------------------------------------- */
 
-/**
- * A rate-limit key for a caller who may not be signed in. The user id when
- * there is one, the forwarded address when there is not, and a shared bucket
- * when there is neither -- which is a real limit rather than none.
- */
-async function callerKey(): Promise<string> {
-  const userId = await currentUserId();
-  if (userId) return `user:${userId}`;
-  const forwarded = (await headers()).get("x-forwarded-for");
-  const first = forwarded?.split(",")[0]?.trim();
-  return first ? `ip:${first}` : "anonymous";
-}

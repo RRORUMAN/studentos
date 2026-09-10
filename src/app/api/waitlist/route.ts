@@ -4,6 +4,8 @@ import { getCity } from "@/data/cities";
 import { findOne, insert, newId, nowIso, update } from "@/server/db";
 import { sendTemplate } from "@/services/email";
 import { isEphemeralStore } from "@/services/env";
+import { callerKey } from "@/server/caller";
+import { limits, rateLimitShared } from "@/server/rate-limit";
 import { captureError } from "@/services/monitoring";
 
 /**
@@ -72,6 +74,41 @@ export async function POST(request: Request) {
   }
 
   const address = email.trim().toLowerCase();
+
+  /* ---- two limits, because this endpoint has two costs -------------------
+     It is unauthenticated, it writes a row, and it sends a message to an
+     address the request body names. Without a limiter that is an
+     outbound-mail primitive somebody else can point at a third party, and it
+     had none at all.
+
+     PER CALLER bounds the writes. PER ADDRESS bounds the mail, and is the one
+     that matters: the dedupe below is on (email, city) by design, so the same
+     inbox can be enrolled once per city, and there are 261 cities.
+
+     Shared rather than in-process, by this module's own rule — an
+     unauthenticated path with a bill behind it — because a per-isolate
+     counter on serverless is a limit an attacker sets by sending traffic.
+
+     Both are checked before the insert, and the 429 says nothing about
+     whether the address is already on the list. */
+  const caller = await callerKey();
+  const [byCaller, byAddress] = await Promise.all([
+    rateLimitShared(`waitlist:${caller}`, limits.waitlist.limit, limits.waitlist.windowSeconds),
+    rateLimitShared(
+      `waitlist-address:${address}`,
+      limits.waitlistAddress.limit,
+      limits.waitlistAddress.windowSeconds,
+    ),
+  ]);
+
+  const blocked = !byCaller.ok ? byCaller : !byAddress.ok ? byAddress : null;
+  if (blocked) {
+    return NextResponse.json<WaitlistResponse>(
+      { status: "invalid", field: "email", message: "Too many requests. Try again later." },
+      { status: 429, headers: { "retry-after": String(blocked.retryAfterSeconds) } },
+    );
+  }
+
   const citySlugValue = city?.slug ?? null;
 
   try {

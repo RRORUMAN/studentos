@@ -28,9 +28,15 @@ import { sharedRateLimit, sharedRateReset } from "@/server/rate-limit-shared";
  *
  * WHICH CALLS USE WHICH. Shared costs a round trip, so it is spent where an
  * attacker or a bill is on the other side: sign-in, sign-up, password reset,
- * verification resend, the AI ask, and the two unauthenticated institution
- * endpoints. Everything else is keyed by a user id and already requires an
- * account, and its ceiling is a courtesy rather than a defence.
+ * verification resend, the AI ask, the two unauthenticated institution
+ * endpoints, and the waitlist. Everything else is keyed by a user id and
+ * already requires an account, and its ceiling is a courtesy rather than a
+ * defence.
+ *
+ * That sentence used to stop at "institution endpoints", and the waitlist was
+ * the third unauthenticated write path — in neither the list nor the code. It
+ * inserts a row and sends mail to an address the caller names, with no limiter
+ * of any kind.
  * ============================================================================
  */
 
@@ -153,4 +159,19 @@ export const limits = {
   post: { limit: 20, windowSeconds: 60 * 60 },
   chat: { limit: 60, windowSeconds: 5 * 60 },
   report: { limit: 20, windowSeconds: 60 * 60 },
+  /**
+   * The waitlist form. Two limits, because it has two costs.
+   *
+   * `waitlist` is per caller and bounds the row writes. `waitlistAddress` is
+   * per ADDRESS and bounds the outbound mail, which is the one that matters:
+   * the endpoint is unauthenticated and sends a message to whatever address
+   * the body names, so without the second limit it is an outbound-mail
+   * primitive somebody else can point at a third party. The dedupe on
+   * (email, city) is deliberately per-city — "somebody who asked about
+   * Barcelona can still ask about Berlin" — and there are 261 cities, so a
+   * single inbox could be mailed 261 times without it.
+   */
+  waitlist: { limit: 10, windowSeconds: 60 * 60 },
+  waitlistAddress: { limit: 3, windowSeconds: 24 * 60 * 60 },
 } as const;
+
