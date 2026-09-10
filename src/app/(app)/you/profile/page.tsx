@@ -22,7 +22,7 @@ export default async function Page() {
    *
    * This used to read `viewer.city.neighbourhoods` alone — a hand-written list
    * of display names that exists for five cities and is empty for the other
-   * seventy-five, which is why this section shipped with a free-text box and a
+   * the rest, which is why this section shipped with a free-text box and a
    * comment about a student in Tallinn deciding the product was broken. The
    * area registry now covers every city, so the chips come from there first
    * and the hand-written names are folded in behind them.

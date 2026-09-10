@@ -605,8 +605,8 @@ function HomeStep({ answers, update }: StepProps) {
    *
    * `city.neighbourhoods` — a hand-written list that exists for five cities —
    * used to be the only source here, which is why this step had nothing to tap
-   * for the other seventy-five. The area registry covers all eighty now, but it
-   * is around nine hundred rows and this is the screen where download cost is
+   * anywhere else. The area registry covers every city it has been run for, but
+   * it is a thousand-odd rows and this is the screen where download cost is
    * paid by someone with no reason yet to wait, so it comes over the wire for
    * the one city the student picked. See `src/server/actions/areas.ts`.
    *

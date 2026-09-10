@@ -116,7 +116,7 @@ export default async function EventsPage(props: PageProps<"/events">) {
    *
    * `scored` is every event in the city before the tab filters it. When that is
    * empty, no filter is responsible: nothing has been connected here. Five
-   * cities have seeded events and the other seventy-five have none, so for most
+   * cities have seeded events and every other city has none, so for most
    * students every tab was showing a line blaming the filter — "Nothing free
    * listed in this view yet" — under a "Show everything" button that led to
    * another empty screen. It read as a broken product rather than a new one,

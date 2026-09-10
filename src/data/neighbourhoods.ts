@@ -11,7 +11,7 @@ import type { Neighbourhood, NeighbourhoodTrait, TraitBand } from "./types";
  * TWO TIERS, AND THE SEAM BETWEEN THEM IS THE POINT. What is written below is
  * five cities somebody knows: a character line, a rent band, seven trait
  * scores and a commute to each campus. What is joined on at the bottom of this
- * file, from `neighbourhoods/areas.generated.ts`, is the other seventy-five
+ * file, from `neighbourhoods/areas.generated.ts`, is every other city
  * cities as Wikidata knows them — a name, a point, a QID, and nothing else at
  * all. There is no middle tier where a machine guessed what Favoriten is like,
  * and there will not be one.
@@ -19,7 +19,7 @@ import type { Neighbourhood, NeighbourhoodTrait, TraitBand } from "./types";
  * That is the whole reason `character`, `rent` and `traits` are nullable. The
  * type used to require them, which meant the only way to have neighbourhoods
  * in Vienna was to invent Vienna, so the product had neighbourhoods in five
- * cities and a blank screen in seventy-five. Letting the type say "not known"
+ * cities and a blank screen everywhere else. Letting the type say "not known"
  * cost three question marks and bought seventy-five cities.
  *
  * WHAT THESE NUMBERS ARE, stated before anyone reads one

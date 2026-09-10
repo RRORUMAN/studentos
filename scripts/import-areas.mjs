@@ -12,9 +12,9 @@
  *
  * WHAT THIS IS FOR. Five cities have hand-written neighbourhood rows — rent
  * bands, character lines, seven trait scores, commute minutes to each campus.
- * Seventy-five have nothing, and "nothing" is what a student in Vienna saw:
+ * Every other city has nothing, and "nothing" is what a student in Vienna saw:
  * a Where to live screen that knew the city existed and could not name a
- * single part of it. The honest fix is not to invent seventy-five more
+ * single part of it. The honest fix is not to invent hundreds more
  * character lines. It is to import the part that is a fact — the area exists,
  * it is called this, it is at this point — and to leave every judgement null
  * until somebody who lives there fills it in.
@@ -28,8 +28,12 @@
  * Amsterdam and Berlin keep exactly the curated set they have. Pouring twelve
  * raw Wikidata districts into Madrid would not improve the screen that
  * already works; it would bury six good rows under twelve blank ones. Those
- * cities are the shape the other seventy-five are growing towards, not a gap
- * to be filled.
+ * cities are the shape the rest are growing towards, not a gap to be filled.
+ *
+ * RUN IT AFTER ADDING CITIES. The coverage list went from 80 to 261 and this
+ * was not re-run, so 181 cities showed a Where-to-live screen explaining that
+ * Wikidata had no districts it could stand behind — about cities Wikidata had
+ * never been asked about. Adding a city is not finished until this has run.
  *
  * ----------------------------------------------------------------------------
  * HOW A CANDIDATE IS JUDGED, and why each gate is here
@@ -95,7 +99,7 @@
 
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const CITY_GEO = join(ROOT, "src", "data", "cities", "geo.generated.ts");
@@ -593,9 +597,30 @@ if (dryRun) {
   process.exit(0);
 }
 
+/* ---- a scoped run must not delete the cities it did not visit -------------
+   `render()` writes the whole file from `rows`, and `rows` holds only the
+   cities this run covered. With no `--city` that is every city and replacing
+   the file is exactly right. With `--city=vienna` it is one, and writing the
+   file would silently drop the other two hundred and fifty — turning "refresh
+   Vienna" into "delete everywhere else", with no error and a plausible-looking
+   diff.
+
+   So a scoped run merges: it replaces the rows of the cities it visited and
+   keeps the rest as they were. A city that was visited and returned nothing is
+   still cleared, because that is a real result about that city. */
+if (only) {
+  const visited = new Set(cities.map((city) => city.key));
+  const { discoveredAreas: previous } = await import(pathToFileURL(OUT).href).catch(() => ({
+    discoveredAreas: [],
+  }));
+  const kept = previous.filter((row) => !visited.has(row.citySlug));
+  console.log(`\nScoped run: keeping ${kept.length} rows from ${new Set(kept.map((r) => r.citySlug)).size} cities not visited.`);
+  rows.push(...kept);
+}
+
 rows.sort((a, b) => a.citySlug.localeCompare(b.citySlug) || a.slug.localeCompare(b.slug));
 await mkdir(dirname(OUT), { recursive: true });
-await writeFile(OUT, render(rows, covered.size), "utf8");
+await writeFile(OUT, render(rows, new Set(rows.map((row) => row.citySlug)).size), "utf8");
 console.log(`\nWrote ${OUT}`);
 
 /* A city with no areas degrades — it shows what it always showed. An empty

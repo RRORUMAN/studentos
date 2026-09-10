@@ -45,7 +45,7 @@ export default async function NeighbourhoodsPage() {
    *
    * This page used to ask only whether the city had areas at all, because
    * either it was one of the five written-up cities or it was empty. Now every
-   * city has areas, and seventy-five of them have areas that carry a name and
+   * city has areas, and most of them have areas that carry a name and
    * a point and nothing else — so promising a list "ranked against what you
    * can pay" to a student in Vienna would be describing a ranking the page
    * cannot perform.

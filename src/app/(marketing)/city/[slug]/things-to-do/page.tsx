@@ -87,8 +87,8 @@ export default async function ThingsToDoPage(props: PageProps<"/city/[slug]/thin
             {city.hook}
           </p>
           {/* A SENTENCE WITH A HOLE IN IT. This read `city.neighbourhoods`,
-              which is hand-written and empty for seventy-five of the eighty
-              cities, so on most of these public pages it rendered as "Most of
+              which is hand-written and empty for every city but five,
+              so on most of these public pages it rendered as "Most of
               Vienna's good evenings happen in  — and almost none of them on
               the street the guidebook names": a clause with nothing in it,
               an em dash hanging off nothing, on an indexed page. The area

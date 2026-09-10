@@ -101,7 +101,7 @@ export function NeighbourhoodMatcher({
   /**
    * WHETHER THERE IS ANYTHING HERE TO RANK BY.
    *
-   * In seventy-five cities every area is an import: a real name at a real
+   * Outside the five editorial cities every area is an import: a real name at a real
    * point, with no rent band, no trait scores and no commute figure. Moving a
    * budget slider over that set changes nothing, because every area scores the
    * same neutral 0.5 whatever the slider says — so the controls would be four
@@ -290,7 +290,7 @@ function MatchCard({
    * and `fit` comes out at exactly 50 every time. Printing "50 / Fit" in
    * the same weight and position as a fit that was actually earned would be
    * the product asserting a measurement it never took, on every neighbourhood
-   * in seventy-five cities. So: the badge says what it is instead.
+   * in every other city. So: the badge says what it is instead.
    */
   const listed = result.evidence === "listed";
 

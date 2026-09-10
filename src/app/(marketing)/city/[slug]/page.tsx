@@ -272,7 +272,7 @@ export default async function CityPage(props: PageProps<"/city/[slug]">) {
               <Eyebrow index="05">Where students live</Eyebrow>
               <h2 className="mt-3 text-display-sm text-ink-950">Neighbourhoods to know</h2>
               {/* This was `city.neighbourhoods` — hand-written, present for
-                  five cities, empty for seventy-five — under a heading that
+                  five cities, empty for every other — under a heading that
                   promised "Neighbourhoods to know". Most of these public pages
                   therefore carried a section title, a paragraph describing the
                   chips, and no chips. The registry knows the districts of every
