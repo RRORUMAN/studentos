@@ -54,9 +54,22 @@
   --color-ink-900: #15151d;
   --color-ink-950: #0a0a10;
 
-  /* ---- accents ----------------------------------------------------------- */
+  /* ---- accents -----------------------------------------------------------
+     THE `-deep` OF EACH PAIR IS THE TEXT COLOUR. `--color-signal` is a
+     background — lime on ink — and `--color-signal-deep` is what the same
+     accent looks like as a word on paper. That is the whole reason the deep
+     variant exists, and it is the contract `tests/unit/contrast.test.ts` now
+     holds every one of them to.
+
+     `signal-deep` was #7f9c0d, which is 3.02:1 on paper: it reads as an
+     accent, and it fails WCAG AA for body text, in the 38 places using
+     `text-signal-deep`. It was also the only one of the five that failed —
+     pulse 5.23, flow 9.37, mint 5.42, amber 5.06 — so this was one token out
+     of step with its own family rather than a decision the palette had made.
+     Same hue and saturation, taken down in lightness until it clears AA on
+     paper, paper-2 and paper-3 alike. */
   --color-signal: #d8ff3e;
-  --color-signal-deep: #7f9c0d;
+  --color-signal-deep: #556d09;
   --color-signal-soft: #f0ffc2;
 
   --color-pulse: #ff5b38;

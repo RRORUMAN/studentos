@@ -117,3 +117,57 @@ describe("text colours clear WCAG AA", () => {
     }
   });
 });
+
+/* -------------------------------------------------------------------------- */
+/* Accents                                                                     */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The same argument as the ink ramp above, for the other half of the palette.
+ *
+ * Each accent is a pair: `--color-x` is a background — lime on ink, coral on
+ * ink — and `--color-x-deep` is what that accent looks like as a WORD on paper.
+ * Legibility as text is the deep variant's entire reason to exist, so it is
+ * the thing worth pinning.
+ *
+ * `signal-deep` shipped at #7f9c0d: 3.02:1 on paper, used in 38 places as
+ * `text-signal-deep`. The ink ramp got this treatment and the accents did not,
+ * so it survived. It was also the only one of the five below AA — pulse 5.23,
+ * flow 9.37, mint 5.42, amber 5.06 — which is what makes it one token out of
+ * step with its own family rather than a decision the palette had made.
+ */
+const ACCENTS = ["signal-deep", "pulse-deep", "flow-deep", "mint-deep", "amber-deep"] as const;
+
+describe("accent text clears WCAG AA", () => {
+  for (const accent of ACCENTS) {
+    it(`${accent} is readable as body text on every surface`, () => {
+      for (const [label, surface] of SURFACES) {
+        const ratio = contrast(token(accent), surface());
+        assert.ok(
+          ratio >= AA_BODY,
+          `${accent} is ${ratio.toFixed(2)}:1 on ${label}, below the ${AA_BODY}:1 AA needs`,
+        );
+      }
+    });
+  }
+
+  it("keeps signal-deep readable on the raised surfaces too", () => {
+    /* paper-2 and paper-3 paint a card and a nested card, and they are darker
+       than either surface above — so they are the harder case, and the one an
+       eye check on a white background misses.
+
+       Only signal-deep is held to this. pulse-deep (4.38) and amber-deep
+       (4.24) sit just under on paper-3 and predate this test; moving them is a
+       colour decision about two more tokens, not something this test found. */
+    const ratio = contrast(token("signal-deep"), token("paper-3"));
+    assert.ok(ratio >= AA_BODY, `signal-deep is ${ratio.toFixed(2)}:1 on paper-3`);
+  });
+
+  it("keeps signal-deep inside the band its siblings occupy", () => {
+    /* The fix was to bring one outlier into line, not to invent a new rule. A
+       value far darker than the family stops reading as the same palette,
+       which is why the original was chosen where it was. */
+    const ratio = contrast(token("signal-deep"), token("paper"));
+    assert.ok(ratio <= 10, `signal-deep is ${ratio.toFixed(2)}:1, darker than the whole family`);
+  });
+});
