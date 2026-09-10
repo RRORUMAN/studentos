@@ -197,66 +197,88 @@ export const stageMeta: Record<
   "before-arrival": {
     label: "Before you arrive",
     summary: "Getting the things done that are easier from home than from a hostel.",
-    blocks: ["countdown", "arrival-tasks", "first-month-estimate", "city-questions", "campus", "saved"],
+    /* No `today` and no `right-now`: both answer "what is on near you", and
+       the answer is a city this student has not reached. Leading with an event
+       starting in two hours is the clearest way to tell somebody the product
+       has not noticed where they are. */
+    blocks: ["countdown", "arrival-tasks", "money", "my-day", "brief", "ask", "for-you", "meet-people", "pulse"],
     mascot: "thinking",
   },
   "first-24h": {
     label: "Day one",
     summary: "Supermarket, transport, pharmacy, campus. In that order.",
-    blocks: ["arrival-tasks", "starter-pack", "money", "nearby", "campus"],
+    /* The checklist is the whole of day one, so it is the hero and money comes
+       after it — on the day you land, knowing where the supermarket is beats
+       knowing your weekly target. */
+    blocks: ["arrival-tasks", "today", "quick-actions", "right-now", "money", "my-day", "brief", "for-you", "meet-people", "pulse"],
     mascot: "explorer",
   },
   "first-week": {
     label: "First week",
     summary: "The admin that unblocks everything else, and the first people.",
-    blocks: ["arrival-tasks", "money", "free-today", "meet-people", "starter-pack", "pulse"],
+    blocks: ["arrival-tasks", "money", "today", "quick-actions", "right-now", "my-day", "brief", "mission", "for-you", "meet-people", "ask", "pulse"],
     mascot: "explorer",
   },
   "first-month": {
     label: "First month",
     summary: "Settling: a routine, a budget that holds, a group.",
-    blocks: ["money", "for-you", "free-today", "meet-people", "pulse", "arrival-tasks"],
+    /* Money leads from here on: the first month is where a budget either holds
+       or does not, and the checklist drops to the bottom because what is left
+       of it is the part nobody urgently needs. */
+    blocks: ["money", "today", "quick-actions", "my-day", "right-now", "brief", "mission", "for-you", "meet-people", "ask", "arrival-tasks", "pulse"],
     mascot: "social",
   },
   established: {
     label: "Your city",
     summary: "What is on, what it costs, who is going.",
-    blocks: ["money", "ask", "for-you", "free-today", "under-ten", "pulse", "plans"],
+    blocks: ["money", "today", "quick-actions", "brief", "my-day", "right-now", "ask", "mission", "for-you", "meet-people", "pulse"],
     mascot: "neutral",
   },
   leaving: {
     label: "Before you go",
     summary: "The list that stops a deposit or a subscription following you home.",
-    blocks: ["leaving-tasks", "money", "sell-items", "final-events", "recap", "pulse"],
+    blocks: ["leaving-tasks", "money", "my-day", "brief", "today", "ask", "for-you", "meet-people", "pulse"],
     mascot: "determined",
   },
 };
 
 /**
- * Every block Home can render. The union is exhaustive so `stageMeta` cannot
- * name a block the renderer does not implement.
+ * Every block Home can render.
+ *
+ * This union used to carry twenty names and claimed in its own comment to be
+ * "exhaustive so `stageMeta` cannot name a block the renderer does not
+ * implement". Ten of them — `first-month-estimate`, `city-questions`,
+ * `starter-pack`, `nearby`, `under-ten`, `campus`, `saved`, `sell-items`,
+ * `final-events`, `recap` — had no renderer anywhere, and the six that did
+ * were not read by Home either: it was a fixed JSX stack with three `stage ===`
+ * conditionals in it, so the whole per-stage ordering below was config nothing
+ * consulted. A student sixty days from arriving and one eight months in were
+ * served the same page in the same order.
+ *
+ * It is now the list Home actually renders from, so every name here has a
+ * component behind it and adding a name without one fails the build. The ten
+ * that never existed are gone rather than left in as a promise: a block named
+ * in config and missing from the product is the same defect as a button that
+ * does nothing, only harder to notice.
  */
 export type HomeBlock =
+  /* stage leads */
   | "countdown"
   | "arrival-tasks"
   | "leaving-tasks"
-  | "first-month-estimate"
-  | "city-questions"
-  | "starter-pack"
+  /* the spine */
   | "money"
+  | "today"
+  | "quick-actions"
+  | "brief"
+  | "my-day"
+  | "right-now"
   | "ask"
+  | "mission"
+  /* discovery and people */
   | "for-you"
-  | "free-today"
-  | "under-ten"
-  | "nearby"
   | "meet-people"
-  | "pulse"
-  | "plans"
-  | "campus"
-  | "saved"
-  | "sell-items"
-  | "final-events"
-  | "recap";
+  | "pulse";
 
 /** True when Arrival Mode should be offered at all. */
 export function showsArrivalMode(stage: LifeStage): boolean {

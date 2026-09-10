@@ -2,6 +2,7 @@ import { ArrowRight, CalendarClock, Sparkles } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { after } from "next/server";
+import type { ReactNode } from "react";
 
 import { AskBar } from "@/components/app/ask-bar";
 import { Empty } from "@/components/app/cards";
@@ -18,6 +19,7 @@ import {
 } from "@/components/app/home-blocks";
 import { PersonRow } from "@/components/app/people";
 import { MascotArt } from "@/components/mascot/mascot-art";
+import { type HomeBlock, stageMeta } from "@/domain/lifecycle";
 import { askSuggestions, greeting } from "@/server/engines/suggestions";
 import { loadHome } from "@/server/queries/home";
 import { syncNotifications } from "@/server/queries/notify-sync";
@@ -35,23 +37,24 @@ export const metadata: Metadata = {
  * ============================================================================
  * HOME — my day
  * ----------------------------------------------------------------------------
- * One hierarchy, top to bottom, and the further down the quieter:
+ * THE ORDER IS NOT IN THIS FILE. It is `stageMeta[stage].blocks` in
+ * `src/domain/lifecycle.ts`, one declared order per lifecycle stage, and this
+ * file is the renderer for it: a map from block name to element, and a loop.
  *
- *   PRIMARY    what matters today
- *     1. who and where            greeting, city, university
- *     2. what can I afford        safe to spend today · safe to spend this week · one sentence
- *     3. today for you            three to five things, one of each kind
+ * That list existed before, with a different order for each of the six stages
+ * and unit tests over it, and nothing read it. Home was a fixed stack with
+ * three `stage ===` conditionals in it, so a student sixty days from arriving
+ * and a student eight months in got the same page in the same order — the
+ * first one led with what they could spend today in a city they had not
+ * reached yet. The ordering engine was written, tested, and unplugged.
  *
- *   SECONDARY  what should I do
- *     4. the brief                counts that matter, each a link
- *     5. my day                   the timeline, and the money after it
- *     6. right now                only when something is on
- *     7. ask                      the concierge, with real questions
+ * Now it decides. Day one leads with the arrival checklist, because on the day
+ * you land, knowing where the supermarket is beats knowing your weekly target.
+ * Before arrival leads with the countdown and drops "today" and "right now"
+ * entirely. From the first month on, money leads.
  *
- *   TERTIARY   explore more
- *     8. mission                  the next step
- *     9. for you                  the mixed feed
- *    10. people                   opt-in
+ * A block whose data is empty returns null and is skipped, which is what lets
+ * the stage lists be declared with no condition beside each entry.
  *
  * Everything is Tier 0. No model is called to render this screen.
  * ============================================================================
@@ -106,9 +109,139 @@ export default async function HomePage() {
     ? new Intl.DateTimeFormat("en-GB", { weekday: "long", timeZone: tz }).format(now)
     : "";
 
+  /**
+   * Every block Home can show, keyed by the name `stageMeta` uses.
+   *
+   * Built as a map rather than written down the page in order, because the
+   * order is not this file's to decide: `stageMeta[stage].blocks` decides it,
+   * and that list differs per lifecycle stage. Preparing a block a stage does
+   * not use costs nothing — these are elements over data already loaded, and
+   * an element that is never rendered never runs.
+   *
+   * A `null` here is a block with nothing to say, and it is skipped. That is
+   * what lets the order be declared once per stage with no condition beside
+   * each entry.
+   */
+  const blocks: Partial<Record<HomeBlock, ReactNode>> = {
+    countdown: <Countdown days={viewer.stage.daysUntilArrival ?? 0} cityName={viewer.city.name} />,
+    "leaving-tasks": <LeavingPrompt days={viewer.stage.daysUntilDeparture ?? 0} />,
+    "arrival-tasks":
+      data.arrivalTotal > 0 ? (
+        <ArrivalProgress done={data.arrivalDone} total={data.arrivalTotal} cityName={viewer.city.name} />
+      ) : null,
+
+    money: (
+      <MoneySummary
+        reading={data.money.reading}
+        weekTargetCents={data.money.week.targetCents}
+        weekSpentCents={data.money.week.spentCents}
+        sentence={data.sentence}
+        where={where}
+      />
+    ),
+    today: <TodayForYou picks={data.today} where={where} />,
+    "quick-actions": <QuickActions actions={data.actions} />,
+    brief: <DailyBrief lines={data.brief} name={viewer.profile.displayName} />,
+    "my-day": (
+      <LifeOpsPeek
+        items={[...data.timeline.overdue, ...data.timeline.today]}
+        slipped={data.timeline.overdue.length}
+        budgetAfterTodayCents={data.timeline.budgetAfterTodayCents}
+        where={where}
+        timeLabels={timeLabels}
+      />
+    ),
+    "right-now": <RightNowStrip items={data.rightNow} />,
+    ask: (
+      <AskBar
+        suggestions={suggestions}
+        safeTodayLabel={data.money.unset ? null : `${money(data.money.reading.safeTodayCents / 100, where)} today`}
+      />
+    ),
+    mission: <MissionCard mission={mission} />,
+
+    "for-you": (
+      <section aria-labelledby="for-you-heading">
+        <SectionHead title="For you" hint="Events, places, deals and people — each with the reason it is here." href="/discover" hrefLabel="Discover" />
+        {data.feed.length === 0 ? (
+          <Empty line="Nothing matches you closely enough yet. Add a few interests and it fills in." action="Edit interests" href="/you/profile" />
+        ) : (
+          <ul className="space-y-3">
+            {data.feed.slice(0, 6).map((item) => (
+              <li key={`${item.kind}-${item.id}`}>
+                <FeedCard item={item} where={where} now={now} timeZone={tz} />
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    ),
+
+    /* Opt-out is absolute: a student who chose "mostly private" never gets a
+       people block, whatever the stage list says. */
+    "meet-people": social ? (
+      <section aria-labelledby="people-heading">
+        <SectionHead title="People and plans for you" hint="Students near your campus and interests. Opt-in, campus and interests only — never location." href="/anyone-down" hrefLabel="Anyone down?" />
+
+        {data.openInvites.length === 0 && data.people.length === 0 ? (
+          <Empty line="Start with your campus. Join a plan, or post one, and this fills in." action="Post a plan" href="/anyone-down" />
+        ) : (
+          <div className="space-y-3">
+            {data.openInvites.slice(0, 2).map((invite) => (
+              <Link
+                key={invite.id}
+                href={`/anyone-down/${invite.id}`}
+                className="flex items-center gap-3.5 rounded-xl bg-white p-4 shadow-[var(--shadow-flat)] ring-1 ring-ink-950/6 transition-shadow hover:shadow-[var(--shadow-raise)]"
+              >
+                <MascotArt state="social" className="size-10 shrink-0" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[0.9375rem] font-semibold text-ink-950">{invite.title}</span>
+                  <span className="mt-0.5 block text-[0.8125rem] text-ink-500">
+                    {invite.going} in · {Math.max(0, invite.capacity - invite.going)} spots · {fmtWhen(invite.startsAt, tz, now)}
+                  </span>
+                </span>
+                <span className="shrink-0 rounded-full bg-signal px-3 py-1.5 text-[0.8125rem] font-semibold text-ink-950">Join</span>
+              </Link>
+            ))}
+
+            {data.people.length > 0 ? (
+              <ul className="space-y-2">
+                {data.people.slice(0, 3).map((entry) => (
+                  <PersonRow
+                    key={entry.profile.userId}
+                    profile={entry.profile}
+                    state="none"
+                    reason={
+                      entry.shared.length > 0
+                        ? `Also into ${entry.shared.slice(0, 2).map((tag) => tag.replace(/-/g, " ")).join(" and ")}${entry.sameCampus ? " · your campus" : ""}`
+                        : "Your campus"
+                    }
+                  />
+                ))}
+              </ul>
+            ) : null}
+          </div>
+        )}
+      </section>
+    ) : null,
+
+    pulse: (
+      <Link href="/pulse" className="flex items-center gap-4 rounded-xl bg-white p-4 shadow-[var(--shadow-flat)] ring-1 ring-ink-950/6 transition-shadow hover:shadow-[var(--shadow-raise)]">
+        <span className="grid size-10 shrink-0 place-items-center rounded-full bg-flow-soft">
+          <Sparkles className="size-4.5 text-flow-deep" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[0.9375rem] font-semibold text-ink-950">What students in {viewer.city.name} are saying</span>
+          <span className="mt-0.5 block text-[0.8125rem] text-ink-500">Prices, deals and questions, from people who live here.</span>
+        </span>
+        <ArrowRight className="size-4 shrink-0 text-ink-400" />
+      </Link>
+    ),
+  };
+
   return (
     <div className="page max-w-3xl py-6 sm:py-8">
-      {/* ---- 1. who and where -------------------------------------------- */}
+      {/* ---- who and where ----------------------------------------------- */}
       <header className="mb-5">
         <p className="font-mono text-micro uppercase tracking-[0.12em] text-ink-400">
           {viewer.city.name}
@@ -120,135 +253,16 @@ export default async function HomePage() {
         </h1>
       </header>
 
-      {/* ---- stage leads -------------------------------------------------- */}
-      {stage === "before-arrival" ? <Countdown days={viewer.stage.daysUntilArrival ?? 0} cityName={viewer.city.name} /> : null}
-      {stage === "leaving" ? <LeavingPrompt days={viewer.stage.daysUntilDeparture ?? 0} /> : null}
-
-      {/* ---- 2. money ----------------------------------------------------- */}
-      <div className="mt-4">
-        <MoneySummary
-          reading={data.money.reading}
-          weekTargetCents={data.money.week.targetCents}
-          weekSpentCents={data.money.week.spentCents}
-          sentence={data.sentence}
-          where={where}
-        />
-      </div>
-
-      {/* ---- 3. today for you -------------------------------------------- */}
-      <div className="mt-6">
-        <TodayForYou picks={data.today} where={where} />
-      </div>
-
-      {/* ---- quick actions ----------------------------------------------- */}
-      <div className="mt-5">
-        <QuickActions actions={data.actions} />
-      </div>
-
-      <div className="mt-8 space-y-8">
-        {/* ---- 4. brief --------------------------------------------------- */}
-        <DailyBrief lines={data.brief} name={viewer.profile.displayName} />
-
-        {/* ---- arrival progress, while it applies ------------------------- */}
-        {(stage === "first-24h" || stage === "first-week" || stage === "first-month") && data.arrivalTotal > 0 ? (
-          <ArrivalProgress done={data.arrivalDone} total={data.arrivalTotal} cityName={viewer.city.name} />
-        ) : null}
-
-        {/* ---- 5. my day -------------------------------------------------- */}
-        <LifeOpsPeek
-          items={[...data.timeline.overdue, ...data.timeline.today]}
-          slipped={data.timeline.overdue.length}
-          budgetAfterTodayCents={data.timeline.budgetAfterTodayCents}
-          where={where}
-          timeLabels={timeLabels}
-        />
-
-        {/* ---- 6. right now ---------------------------------------------- */}
-        <RightNowStrip items={data.rightNow} />
-
-        {/* ---- 7. ask ------------------------------------------------------ */}
-        <AskBar
-          suggestions={suggestions}
-          safeTodayLabel={data.money.unset ? null : `${money(data.money.reading.safeTodayCents / 100, where)} today`}
-        />
-
-        {/* ---- 8. mission -------------------------------------------------- */}
-        <MissionCard mission={mission} />
-
-        {/* ---- 9. for you ------------------------------------------------- */}
-        <section aria-labelledby="for-you-heading">
-          <SectionHead title="For you" hint="Events, places, deals and people — each with the reason it is here." href="/discover" hrefLabel="Discover" />
-          {data.feed.length === 0 ? (
-            <Empty line="Nothing matches you closely enough yet. Add a few interests and it fills in." action="Edit interests" href="/you/profile" />
-          ) : (
-            <ul className="space-y-3">
-              {data.feed.slice(0, 6).map((item) => (
-                <li key={`${item.kind}-${item.id}`}>
-                  <FeedCard item={item} where={where} now={now} timeZone={tz} />
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-
-        {/* ---- 10. people ------------------------------------------------- */}
-        {social ? (
-          <section aria-labelledby="people-heading">
-            <SectionHead title="People and plans for you" hint="Students near your campus and interests. Opt-in, campus and interests only — never location." href="/anyone-down" hrefLabel="Anyone down?" />
-
-            {data.openInvites.length === 0 && data.people.length === 0 ? (
-              <Empty line="Start with your campus. Join a plan, or post one, and this fills in." action="Post a plan" href="/anyone-down" />
-            ) : (
-              <div className="space-y-3">
-                {data.openInvites.slice(0, 2).map((invite) => (
-                  <Link
-                    key={invite.id}
-                    href={`/anyone-down/${invite.id}`}
-                    className="flex items-center gap-3.5 rounded-xl bg-white p-4 shadow-[var(--shadow-flat)] ring-1 ring-ink-950/6 transition-shadow hover:shadow-[var(--shadow-raise)]"
-                  >
-                    <MascotArt state="social" className="size-10 shrink-0" />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[0.9375rem] font-semibold text-ink-950">{invite.title}</span>
-                      <span className="mt-0.5 block text-[0.8125rem] text-ink-500">
-                        {invite.going} in · {Math.max(0, invite.capacity - invite.going)} spots · {fmtWhen(invite.startsAt, tz, now)}
-                      </span>
-                    </span>
-                    <span className="shrink-0 rounded-full bg-signal px-3 py-1.5 text-[0.8125rem] font-semibold text-ink-950">Join</span>
-                  </Link>
-                ))}
-
-                {data.people.length > 0 ? (
-                  <ul className="space-y-2">
-                    {data.people.slice(0, 3).map((entry) => (
-                      <PersonRow
-                        key={entry.profile.userId}
-                        profile={entry.profile}
-                        state="none"
-                        reason={
-                          entry.shared.length > 0
-                            ? `Also into ${entry.shared.slice(0, 2).map((tag) => tag.replace(/-/g, " ")).join(" and ")}${entry.sameCampus ? " · your campus" : ""}`
-                            : "Your campus"
-                        }
-                      />
-                    ))}
-                  </ul>
-                ) : null}
-              </div>
-            )}
-          </section>
-        ) : null}
-
-        {/* ---- pulse prompt ---------------------------------------------- */}
-        <Link href="/pulse" className="flex items-center gap-4 rounded-xl bg-white p-4 shadow-[var(--shadow-flat)] ring-1 ring-ink-950/6 transition-shadow hover:shadow-[var(--shadow-raise)]">
-          <span className="grid size-10 shrink-0 place-items-center rounded-full bg-flow-soft">
-            <Sparkles className="size-4.5 text-flow-deep" />
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block text-[0.9375rem] font-semibold text-ink-950">What students in {viewer.city.name} are saying</span>
-            <span className="mt-0.5 block text-[0.8125rem] text-ink-500">Prices, deals and questions, from people who live here.</span>
-          </span>
-          <ArrowRight className="size-4 shrink-0 text-ink-400" />
-        </Link>
+      {/* ---- this student's order, not everyone's ------------------------
+           The difference between a student sixty days from arriving and one
+           eight months in is now a data change in `stageMeta`, not a branch
+           in this file. It used to be three `stage ===` conditionals over a
+           fixed stack, which meant both were served the same page. */}
+      <div className="space-y-6">
+        {stageMeta[stage].blocks.map((block) => {
+          const node = blocks[block];
+          return node ? <div key={block}>{node}</div> : null;
+        })}
       </div>
     </div>
   );
@@ -260,7 +274,7 @@ export default async function HomePage() {
 
 function Countdown({ days, cityName }: { days: number; cityName: string }) {
   return (
-    <Link href="/lifeops" className="mt-4 flex items-center gap-4 rounded-2xl bg-flow-soft/70 p-5 ring-1 ring-flow-deep/15 transition-shadow hover:shadow-[var(--shadow-raise)]">
+    <Link href="/lifeops" className="flex items-center gap-4 rounded-2xl bg-flow-soft/70 p-5 ring-1 ring-flow-deep/15 transition-shadow hover:shadow-[var(--shadow-raise)]">
       <MascotArt state="arrival" accessory="backpack" className="size-14 shrink-0" />
       <span className="min-w-0 flex-1">
         <span className="font-mono text-micro uppercase tracking-[0.1em] text-flow-deep">Arriving in</span>
@@ -297,7 +311,7 @@ function ArrivalProgress({ done, total, cityName }: { done: number; total: numbe
 
 function LeavingPrompt({ days }: { days: number }) {
   return (
-    <Link href="/leaving" className="mt-4 flex items-center gap-4 rounded-2xl bg-pulse-soft/60 p-5 ring-1 ring-pulse-deep/15 transition-shadow hover:shadow-[var(--shadow-raise)]">
+    <Link href="/leaving" className="flex items-center gap-4 rounded-2xl bg-pulse-soft/60 p-5 ring-1 ring-pulse-deep/15 transition-shadow hover:shadow-[var(--shadow-raise)]">
       <MascotArt state="survival" className="size-12 shrink-0" />
       <span className="min-w-0 flex-1">
         <span className="block text-[1.0625rem] font-semibold text-ink-950">{days} days left here</span>

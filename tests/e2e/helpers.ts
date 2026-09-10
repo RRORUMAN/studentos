@@ -39,7 +39,7 @@ export async function signUp(page: Page, email = uniqueEmail()): Promise<string>
  */
 export async function completeOnboarding(
   page: Page,
-  options: { budget?: string } = {},
+  options: { budget?: string; arrivingInDays?: number } = {},
 ): Promise<void> {
   const budget = options.budget ?? "760";
 
@@ -49,6 +49,19 @@ export async function completeOnboarding(
 
   // 2. City
   await page.getByRole("button", { name: /^Madrid/ }).click();
+
+  /* An arrival date in the future is what puts a student in the
+     `before-arrival` stage, and that stage is the one whose Home differs most
+     — it leads with the countdown and drops "today" and "right now" entirely,
+     because both answer "what is on near you" about a city this student has
+     not reached. Without this the suite only ever tested a student who is
+     already there. */
+  if (options.arrivingInDays !== undefined) {
+    await page.getByRole("checkbox", { name: /moving there soon/i }).check();
+    const arriving = new Date(Date.now() + options.arrivingInDays * 86_400_000);
+    await page.getByLabel("Arriving", { exact: true }).fill(arriving.toISOString().slice(0, 10));
+  }
+
   await page.getByRole("button", { name: "Continue" }).click();
 
   /* 3. University — skippable, but the campus drives a lot, so pick one.

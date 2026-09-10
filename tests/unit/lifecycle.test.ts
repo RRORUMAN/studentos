@@ -115,7 +115,37 @@ describe("stageMeta", () => {
 
   it("leads pre-arrival with the countdown, not with tonight", () => {
     assert.equal(stageMeta["before-arrival"].blocks[0], "countdown");
-    assert.ok(!stageMeta["before-arrival"].blocks.includes("free-today"));
+
+    /* Both of these answer "what is on near you", and for this student the
+       answer is a city they have not reached. Leading with an event starting
+       in two hours is the clearest way to tell somebody the product has not
+       noticed where they are. */
+    for (const block of ["today", "right-now"] as const) {
+      assert.ok(
+        !stageMeta["before-arrival"].blocks.includes(block),
+        `pre-arrival must not show "${block}"`,
+      );
+    }
+  });
+
+  it("never lists the same block twice in one stage", () => {
+    /* Home renders this list in order and keys each entry by block name, so a
+       duplicate is both a repeated section and a duplicate React key. */
+    for (const [stage, meta] of Object.entries(stageMeta)) {
+      assert.equal(
+        new Set(meta.blocks).size,
+        meta.blocks.length,
+        `${stage} lists a block twice`,
+      );
+    }
+  });
+
+  it("gives every stage a different order from the others", () => {
+    /* The whole point of the per-stage list. Two stages with identical orders
+       would mean Home cannot tell those students apart — which is exactly the
+       state it was in when nothing read this at all. */
+    const orders = Object.values(stageMeta).map((meta) => meta.blocks.join(">"));
+    assert.equal(new Set(orders).size, orders.length, "two stages render identically");
   });
 
   it("leads a settled student with money", () => {
