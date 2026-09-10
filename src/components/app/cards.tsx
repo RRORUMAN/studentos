@@ -1,4 +1,4 @@
-import { ArrowRight, Clock, MapPin, Users } from "lucide-react";
+import { ArrowRight, MapPin, Users } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
@@ -6,10 +6,8 @@ import type { Place } from "@/data/types";
 import { describeProximity } from "@/domain/places";
 import { PriceBand } from "@/components/product/place-meta";
 import { accents, type Accent } from "@/components/ui/accent";
-import { Badge } from "@/components/ui/primitives";
-import type { CityEvent } from "@/domain/types";
 import type { Scored } from "@/server/engines/recommend";
-import { cn, money } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 
 /**
  * ============================================================================
@@ -25,45 +23,6 @@ import { cn, money } from "@/lib/utils";
  * and a missing value renders as absent rather than as a plausible guess.
  * ============================================================================
  */
-
-/* -------------------------------------------------------------------------- */
-/* Price                                                                       */
-/* -------------------------------------------------------------------------- */
-
-/**
- * Free is a badge, not a number.
- *
- * Rendering €0 next to €8 makes the eye compare two prices; rendering FREE
- * makes it spot the thing that costs nothing, which is the single most useful
- * signal on the screen for this audience.
- */
-export function PriceTag({
-  cents,
-  where,
-  className,
-}: {
-  cents: number | null;
-  where: { currency: string; locale: string };
-  className?: string;
-}) {
-  if (cents === null) {
-    return <span className={cn("text-[0.8125rem] text-ink-400", className)}>Price varies</span>;
-  }
-
-  if (cents === 0) {
-    return (
-      <Badge accent="mint" tone="solid" className={className}>
-        Free
-      </Badge>
-    );
-  }
-
-  return (
-    <span className={cn("tnum font-mono text-[0.9375rem] font-medium text-ink-900", className)}>
-      {money(cents / 100, where)}
-    </span>
-  );
-}
 
 /* -------------------------------------------------------------------------- */
 /* Match                                                                       */
@@ -98,73 +57,6 @@ export function Reasons({ reasons }: { reasons: readonly string[] }) {
     <p className="mt-2 text-[0.8125rem] leading-snug text-ink-500">
       {reasons.slice(0, 3).join(" · ")}
     </p>
-  );
-}
-
-/* -------------------------------------------------------------------------- */
-/* Event card                                                                  */
-/* -------------------------------------------------------------------------- */
-
-function eventTime(iso: string): string {
-  const date = new Date(iso);
-  const now = new Date();
-  const sameDay = date.toDateString() === now.toDateString();
-
-  const time = date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
-  if (sameDay) return `Tonight ${time}`;
-
-  const tomorrow = new Date(now);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  if (date.toDateString() === tomorrow.toDateString()) return `Tomorrow ${time}`;
-
-  return `${date.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })} ${time}`;
-}
-
-export function EventCard({
-  scored,
-  where,
-}: {
-  scored: Scored<CityEvent>;
-  where: { currency: string; locale: string };
-}) {
-  const event = scored.item;
-
-  return (
-    <article className="group relative flex flex-col rounded-lg border border-ink-200 bg-white p-4 transition-[border-color,box-shadow] hover:border-ink-300 hover:shadow-[var(--shadow-raise)]">
-      <div className="flex items-start justify-between gap-3">
-        <PriceTag cents={event.priceCents} where={where} />
-        <MatchChip match={scored.match} />
-      </div>
-
-      <h3 className="mt-2.5 text-[1.0625rem] leading-snug font-semibold text-ink-950">
-        <Link href={`/events/${event.id}`} className="after:absolute after:inset-0">
-          {event.title}
-        </Link>
-      </h3>
-
-      <p className="mt-1 line-clamp-2 text-[0.875rem] leading-snug text-ink-600">{event.blurb}</p>
-
-      <dl className="mt-3 flex flex-wrap items-center gap-x-3.5 gap-y-1 text-[0.8125rem] text-ink-500">
-        <div className="flex items-center gap-1.5">
-          <Clock className="size-3.5" aria-hidden />
-          <dd>{eventTime(event.startsAt)}</dd>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <MapPin className="size-3.5" aria-hidden />
-          <dd className="truncate">{event.venue}</dd>
-        </div>
-        {event.interested > 0 ? (
-          <div className="flex items-center gap-1.5">
-            <Users className="size-3.5" aria-hidden />
-            <dd>
-              <span className="tnum">{event.interested}</span> interested
-            </dd>
-          </div>
-        ) : null}
-      </dl>
-
-      <Reasons reasons={scored.reasons} />
-    </article>
   );
 }
 
@@ -309,25 +201,19 @@ export function Empty({
 }
 
 /* -------------------------------------------------------------------------- */
-/* Rails                                                                       */
+/* What used to be here                                                        */
 /* -------------------------------------------------------------------------- */
 
-/** A horizontal scroller on mobile, a grid on desktop. */
-export function Rail({ children }: { children: ReactNode }) {
-  return (
-    <div
-      className={cn(
-        "-mx-5 flex snap-x snap-mandatory gap-3 overflow-x-auto px-5 pb-1 no-scrollbar edge-fade-x",
-        "sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 sm:[mask-image:none]",
-        "lg:grid-cols-3",
-      )}
-    >
-      {children}
-    </div>
-  );
-}
-
-/** One item inside a `Rail`: fixed width when scrolling, auto in the grid. */
-export function RailItem({ children }: { children: ReactNode }) {
-  return <div className="w-[17rem] shrink-0 snap-start sm:w-auto">{children}</div>;
-}
+/*
+ * `EventCard`, `PriceTag`, `Rail` and `RailItem` were removed on 2026-09-10.
+ * Nothing rendered any of them: every surface that shows an event grew its own
+ * card, and the rails became grids. They were not harmless. `EventCard` carried
+ * a private `eventTime` that formatted an event in the SERVER's timezone and
+ * compared it against the server's idea of today, so the one card in the
+ * codebase that would have printed "Tonight" for a Madrid student was deciding
+ * what "tonight" meant in whichever region the instance ran in — the bug
+ * `src/lib/dates.ts` exists to make impossible, sitting in a file a new screen
+ * would reasonably import from.
+ *
+ * `PlaceCard`, `Block` and `Empty` below are used and stay.
+ */

@@ -15,6 +15,7 @@ import { loadPlaces, loadRecommendContext, loadScoredEvents } from "@/server/que
 import { loadMoney } from "@/server/queries/money";
 import { requestDate } from "@/server/now";
 import { requireViewer } from "@/server/viewer";
+import { fmtWeekdayDay } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = {
@@ -199,7 +200,7 @@ export default async function ArrivalPage() {
               <li key={day.offset} className={cn("flex items-start gap-4 border-b border-ink-100 px-5 py-3.5 last:border-0", day.done && "bg-paper-2/60")}>
                 <span className="w-16 shrink-0">
                   <span className="block font-mono text-micro uppercase tracking-[0.1em] text-ink-400">{day.label}</span>
-                  <span className="block text-[0.75rem] text-ink-400">{new Date(day.dateIso).toLocaleDateString("en-GB", { weekday: "short", day: "numeric" })}</span>
+                  <span className="block text-[0.75rem] text-ink-400">{fmtWeekdayDay(day.dateIso, viewer.city.timezone)}</span>
                 </span>
                 <span className="min-w-0 flex-1">
                   <Link href={day.href} className={cn("block text-[0.9375rem] font-medium hover:underline", day.done ? "text-ink-400 line-through" : "text-ink-900")}>{day.title}</Link>

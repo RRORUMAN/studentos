@@ -62,6 +62,7 @@ export default async function WeekPage(props: PageProps<"/plans/week">) {
 
   const plan = planWeek({
     now,
+    timeZone,
     events,
     places: places.places,
     weekBudgetCents: money$.unset ? null : money$.reading.safeThisWeekCents,
@@ -160,7 +161,14 @@ export default async function WeekPage(props: PageProps<"/plans/week">) {
 
       <div className="mt-6">
         {unlocked ? (
-          plan.items.length > 0 ? <SaveWeekButton items={plan.items} weekStartIso={now.toISOString()} budgetCents={plan.budgetCents} /> : null
+          plan.items.length > 0 ? (
+            <SaveWeekButton
+              items={plan.items}
+              weekStartIso={now.toISOString()}
+              budgetCents={plan.budgetCents}
+              timeZone={timeZone}
+            />
+          ) : null
         ) : (
           <Upsell
             feature="weeklyPlanner"

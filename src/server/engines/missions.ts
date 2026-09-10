@@ -7,6 +7,7 @@ import {
   type MissionVariant,
 } from "@/domain/missions";
 import type { Cents, CityEvent, Invite } from "@/domain/types";
+import { fmtShortDay } from "@/lib/dates";
 import type { Scored } from "@/server/engines/recommend";
 
 /**
@@ -162,11 +163,13 @@ export function buildMission(input: {
   candidates: MissionCandidates;
   variant: MissionVariant;
   now: Date;
+  /** The city's zone, so "Sat 12 Sep" on a step is the city's Saturday. */
+  timeZone: string;
   ratio: number;
   social: boolean;
   fmt: (cents: Cents) => string;
 }): BuiltMission {
-  const { template, candidates, variant, now, ratio, fmt } = input;
+  const { template, candidates, variant, now, ratio, fmt, timeZone } = input;
   const used = new Set<string>();
   const steps: BuiltStep[] = [];
   const budgetCents = template.budgetCents === null ? null : scaled(template.budgetCents, ratio);
@@ -227,11 +230,10 @@ export function buildMission(input: {
         const found = pickEvent(step, candidates.events, used, ratio, variant, now);
         if (found) {
           used.add(found.item.id);
-          const when = new Date(found.item.startsAt);
           steps.push({
             ...base,
             label: `${step.label}: ${found.item.title}`,
-            detail: `${found.item.venue} · ${when.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}${
+            detail: `${found.item.venue} · ${fmtShortDay(found.item.startsAt, timeZone)}${
               found.item.interested >= 5 ? ` · ${found.item.interested} interested` : ""
             }`,
             priceCents: found.item.priceCents,

@@ -235,7 +235,7 @@ export default async function EventPage(props: PageProps<"/events/[id]">) {
       <div className="mt-4 flex flex-wrap gap-2">
         <SaveButton kind="event" targetId={event.id} saved={Boolean(saved)} />
         <ShareButton path={`/events/${event.id}`} title={event.title} />
-        <AddToPlanButton refKind="event" refId={event.id} plans={plans} title={event.title} />
+        <AddToPlanButton refKind="event" refId={event.id} plans={plans} title={event.title} timeZone={timeZone} />
         <a
           href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${event.venue}, ${viewer.city.name}`)}`}
           target="_blank"

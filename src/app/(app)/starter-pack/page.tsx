@@ -9,6 +9,7 @@ import { findMany } from "@/server/db";
 import { loadDeals, loadPlaces, loadRecommendContext, loadScoredEvents } from "@/server/queries/discovery";
 import { loadMoney } from "@/server/queries/money";
 import { requireViewer } from "@/server/viewer";
+import { fmtWeekday, fmtTime } from "@/lib/dates";
 import { money } from "@/lib/utils";
 
 export const metadata: Metadata = {
@@ -169,11 +170,8 @@ export default async function StarterPackPage() {
             <p className="mt-1 text-[1rem] font-semibold text-ink-950">{firstFree.item.title}</p>
             <p className="mt-1 text-[0.8125rem] text-ink-600">
               {firstFree.item.venue} ·{" "}
-              {new Date(firstFree.item.startsAt).toLocaleDateString("en-GB", {
-                weekday: "long",
-                hour: "2-digit",
-                minute: "2-digit",
-              })}
+              {fmtWeekday(firstFree.item.startsAt, viewer.city.timezone)}{" "}
+              {fmtTime(firstFree.item.startsAt, viewer.city.timezone)}
             </p>
           </Link>
         ) : null}

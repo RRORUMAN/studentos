@@ -20,6 +20,7 @@
     "places:verify": "node --experimental-strip-types --import ./scripts/test-register.mjs scripts/places-verify.mjs",
     "cities:import": "node scripts/import-cities.mjs",
     "areas:import": "node scripts/import-neighbourhoods.mjs",
+    "areas:discover": "node scripts/import-areas.mjs",
     "test": "node --test --experimental-strip-types --import ./scripts/test-register.mjs \"tests/unit/*.test.ts\"",
     "test:e2e": "playwright test",
     "mascot:manifest": "node scripts/mascot-manifest.mjs"

@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { resolveCity } from "@/data/cities";
-import { fmtTime } from "@/lib/dates";
+import { fmtLongDay, fmtTime } from "@/lib/dates";
 import { loadPlacesByIds } from "@/server/queries/places";
 import type { SavedPlanItem } from "@/domain/types";
 import { findOne, insert, newId, nowIso, remove, transaction, update } from "@/server/db";
@@ -340,6 +340,15 @@ export async function inviteToPlan(planId: string, friendId: string): Promise<Pl
 
   const me = await findOne("profiles", (row) => row.userId === userId);
 
+  /* The plan's city decides what day the plan is on, exactly as it decides the
+     time on every line of it. This was the machine's calendar, which for a plan
+     dated at a boundary named the wrong weekday in a notification that is then
+     stored and read days later. */
+  const planDay =
+    plan.forDate === null
+      ? null
+      : fmtLongDay(plan.forDate, resolveCity(me?.citySlug ?? "")?.timezone ?? "UTC");
+
   await transaction((db) => {
     const index = db.planMembers.findIndex((row) => row.planId === planId && row.userId === friendId);
     const row = { planId, userId: friendId, status: "invited" as const, updatedAt: nowIso() };
@@ -351,9 +360,7 @@ export async function inviteToPlan(planId: string, friendId: string): Promise<Pl
       userId: friendId,
       topic: "plans",
       title: `${me?.displayName ?? "A friend"} invited you to ${plan.title}`,
-      body: plan.forDate
-        ? new Date(plan.forDate).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "short" })
-        : "Have a look and say if you are in.",
+      body: planDay ?? "Have a look and say if you are in.",
       href: `/plans/${planId}`,
       readAt: null,
       createdAt: nowIso(),

@@ -43,7 +43,7 @@ import {
 import { formatDistance, priceLevelLabel } from "@/domain/places";
 import { requestDate } from "@/server/now";
 import { requireViewer } from "@/server/viewer";
-import { fmtDay } from "@/lib/dates";
+import { fmtDay, fmtMonth } from "@/lib/dates";
 import { cn, currencySymbol, money } from "@/lib/utils";
 
 export const metadata: Metadata = {
@@ -207,7 +207,7 @@ export default async function BudgetPage() {
       <header className="mb-4 flex items-end justify-between gap-4">
         <div>
           <p className="font-mono text-micro uppercase tracking-[0.12em] text-ink-400 capitalize">
-            {now.toLocaleDateString(where.locale, { month: "long", year: "numeric" })} · {reading.daysLeft} days
+            {fmtMonth(now, zone, where.locale)} · {reading.daysLeft} days
             left
           </p>
           <h1 className="mt-1 text-display-xs text-ink-950 sm:text-display-sm">Budget</h1>

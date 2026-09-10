@@ -326,7 +326,7 @@ export default async function PlacePage(props: PageProps<"/discover/[...id]">) {
           Directions
           <ExternalLink className="size-3" />
         </a>
-        <AddToPlanButton refKind="place" refId={place.id} plans={plans} title={place.name} />
+        <AddToPlanButton refKind="place" refId={place.id} plans={plans} title={place.name} timeZone={viewer.city.timezone} />
       </div>
 
       {social ? (

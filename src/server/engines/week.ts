@@ -1,5 +1,6 @@
 import type { Place } from "@/data/types";
 import type { Cents, CityEvent } from "@/domain/types";
+import { fmtTime, weekdayIn } from "@/lib/dates";
 import { WALK_METRES_PER_MINUTE, type Scored } from "@/server/engines/recommend";
 
 /**
@@ -33,9 +34,18 @@ export const weekDials: readonly WeekDial[] = ["cheaper", "free", "social", "act
 export const freeWeekDials: readonly WeekDial[] = ["cheaper", "free"];
 
 export type WeekItem = {
-  /** 0-6, local day of week of the slot. */
+  /**
+   * 0-6, day of the week in the STUDENT'S CITY.
+   *
+   * It used to be `date.getDay()`, which is the day of the week where the
+   * server happens to be. The comment already said "local" and the code could
+   * not have known what local meant: on a UTC instance, a Madrid gig at 00:30
+   * on Tuesday is 22:30 Monday, so the plan put it on Monday, refused to put
+   * anything else on Monday, and left the student's Tuesday looking empty.
+   * Every day in this engine now comes from `weekdayIn` with the city's zone.
+   */
   day: number;
-  /** ISO date of the slot's day, so the UI can print "Tue 9". */
+  /** The instant of the slot. The UI prints it with `fmtDay` in the city's zone. */
   dateIso: string;
   kind: "event" | "place";
   refId: string;
@@ -61,6 +71,8 @@ const SOCIAL_TAGS = new Set(["social", "networking", "nightlife", "language-exch
 
 export function planWeek(input: {
   now: Date;
+  /** The student's city, so a day of the week means their day of the week. */
+  timeZone: string;
   events: readonly Scored<CityEvent>[];
   places: readonly Scored<Place>[];
   /** Money free for the coming seven days. Null when no budget is set. */
@@ -69,7 +81,7 @@ export function planWeek(input: {
   maxItems?: number;
   formatMoney: (cents: Cents) => string;
 }): WeekPlan {
-  const { now, dials } = input;
+  const { now, dials, timeZone } = input;
   const maxItems = Math.min(4, Math.max(2, input.maxItems ?? 4));
   const dialSet = new Set(dials);
 
@@ -110,10 +122,10 @@ export function planWeek(input: {
       }),
       priceCents: scored.item.priceCents,
       walk: null,
-      day: date.getDay(),
+      day: weekdayIn(date, timeZone),
       dateIso: date.toISOString(),
       title: scored.item.title,
-      detail: `${scored.item.venue} · ${date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`,
+      detail: `${scored.item.venue} · ${fmtTime(scored.item.startsAt, timeZone)}`,
       reasons: scored.reasons,
       refId: scored.item.id,
       href: `/events/${scored.item.id}`,
@@ -172,7 +184,7 @@ export function planWeek(input: {
     if (candidate.kind === "place") {
       if (placesUsed >= 2) continue;
       /* First free day from tomorrow. */
-      const slot = firstOpenDay(now, takenDays);
+      const slot = firstOpenDay(now, takenDays, timeZone);
       if (!slot) continue;
       day = slot.day;
       dateIso = slot.dateIso;
@@ -226,12 +238,26 @@ function adjust(
   return score;
 }
 
-function firstOpenDay(now: Date, taken: ReadonlySet<number>): { day: number; dateIso: string } | null {
+/**
+ * The first day from tomorrow that nothing is on yet, in the city's week.
+ *
+ * It used to `setHours(18, 0, 0, 0)` — six in the evening where the server is,
+ * which is eight in Madrid and eleven in the morning in New York, for a place
+ * that has no time at all. Nothing rendered that hour; only the day was ever
+ * printed. So the slot is now simply the same moment of day, that many days
+ * later, and the day it falls on is asked of the city rather than of the
+ * machine. Day and instant therefore always agree, which is the property the
+ * screen depends on: it prints `day` from one and the date from the other.
+ */
+function firstOpenDay(
+  now: Date,
+  taken: ReadonlySet<number>,
+  timeZone: string,
+): { day: number; dateIso: string } | null {
   for (let offset = 1; offset <= 7; offset += 1) {
-    const date = new Date(now);
-    date.setDate(date.getDate() + offset);
-    date.setHours(18, 0, 0, 0);
-    if (!taken.has(date.getDay())) return { day: date.getDay(), dateIso: date.toISOString() };
+    const at = new Date(now.getTime() + offset * 86_400_000);
+    const day = weekdayIn(at, timeZone);
+    if (!taken.has(day)) return { day, dateIso: at.toISOString() };
   }
   return null;
 }

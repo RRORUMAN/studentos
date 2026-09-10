@@ -25,6 +25,8 @@ import { planWeek } from "../../src/server/engines/week.ts";
  */
 
 const NOW = new Date("2026-09-10T18:00:00Z"); // a Thursday
+/** A city, because a day of the week is only a fact once you name a place. */
+const TZ = "Europe/Madrid";
 const fmt = (cents: number) => `€${(cents / 100).toFixed(2).replace(/\.00$/, "")}`;
 
 function reading(overrides: Partial<BudgetReading> = {}): BudgetReading {
@@ -419,6 +421,7 @@ describe("planWeek", () => {
   it("never books more than four things or more than the week can spare", () => {
     const plan = planWeek({
       now: NOW,
+      timeZone: TZ,
       events,
       places: [scored(place(), 75, ["Cheap"])],
       weekBudgetCents: 2_000,
@@ -435,6 +438,7 @@ describe("planWeek", () => {
     );
     const plan = planWeek({
       now: NOW,
+      timeZone: TZ,
       events: sameDay,
       places: [],
       weekBudgetCents: null,
@@ -447,6 +451,7 @@ describe("planWeek", () => {
   it("keeps everything free when the free dial is on", () => {
     const plan = planWeek({
       now: NOW,
+      timeZone: TZ,
       events,
       places: [scored(place({ layers: ["free"] }), 70, ["Free"])],
       weekBudgetCents: null,
@@ -454,6 +459,64 @@ describe("planWeek", () => {
       formatMoney: fmt,
     });
     assert.ok(plan.items.every((item) => item.priceCents === 0));
+  });
+
+  /**
+   * The day an event is on is the day it is on IN THE CITY.
+   *
+   * 22:30Z is half past midnight in Madrid, so this event is on a Tuesday for
+   * the student and on a Monday for a server running in UTC — which is what
+   * every Vercel instance does. The engine used to read `date.getDay()` and
+   * therefore filed it under the server's Monday, took Monday's only slot, and
+   * left the student looking at an empty Tuesday.
+   *
+   * Two zones on the same instant, so this fails on the old behaviour wherever
+   * it runs rather than only on a machine that happens to be set to UTC.
+   */
+  it("puts an event on the day it falls on in the student's city, not the server's", () => {
+    const justAfterMidnightInMadrid = "2026-09-15T22:30:00.000Z";
+    const one = scored(event({ id: "late", startsAt: justAfterMidnightInMadrid, priceCents: 0 }), 90, ["Late"]);
+
+    const madrid = planWeek({
+      now: NOW,
+      timeZone: "Europe/Madrid",
+      events: [one],
+      places: [],
+      weekBudgetCents: null,
+      dials: [],
+      formatMoney: fmt,
+    });
+    const london = planWeek({
+      now: NOW,
+      timeZone: "Europe/London",
+      events: [one],
+      places: [],
+      weekBudgetCents: null,
+      dials: [],
+      formatMoney: fmt,
+    });
+
+    /* 2026-09-15 is a Tuesday. Madrid has rolled over to Wednesday; London
+       has not. Same instant, two different days, and each city gets its own. */
+    assert.equal(madrid.items[0].day, 3);
+    assert.equal(london.items[0].day, 2);
+  });
+
+  /** The time on the card is the city's clock too, not the machine's. */
+  it("prints an event's time in the city's zone", () => {
+    const one = scored(event({ id: "late", startsAt: "2026-09-15T22:30:00.000Z", priceCents: 0 }), 90, ["Late"]);
+
+    const madrid = planWeek({
+      now: NOW,
+      timeZone: "Europe/Madrid",
+      events: [one],
+      places: [],
+      weekBudgetCents: null,
+      dials: [],
+      formatMoney: fmt,
+    });
+
+    assert.ok(madrid.items[0].detail.includes("00:30"), madrid.items[0].detail);
   });
 });
 

@@ -8,6 +8,7 @@ import { useToast } from "@/components/ui/toast";
 import { respondToEvent } from "@/server/actions/events";
 import { addToPlan } from "@/server/actions/plans";
 import type { PlanChoice } from "@/server/queries/plans";
+import { fmtShortDay } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 
 /**
@@ -208,6 +209,7 @@ export function AddToPlanButton({
   refId,
   plans,
   title,
+  timeZone,
   size = "md",
   className,
 }: {
@@ -217,6 +219,8 @@ export function AddToPlanButton({
   plans: readonly PlanChoice[];
   /** What is being added, as the default name for a new plan. */
   title?: string;
+  /** The city's zone. The dates in this menu are dates in the city. */
+  timeZone: string;
   size?: "sm" | "md";
   className?: string;
 }) {
@@ -345,9 +349,7 @@ export function AddToPlanButton({
                       <span className="min-w-0">
                         <span className="block truncate text-[0.9375rem] font-medium text-ink-900">{plan.title}</span>
                         <span className="block text-[0.75rem] text-ink-500">
-                          {plan.forDate
-                            ? new Date(plan.forDate).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })
-                            : "No date yet"}
+                          {plan.forDate ? fmtShortDay(plan.forDate, timeZone) : "No date yet"}
                           {" · "}
                           {plan.stops} {plan.stops === 1 ? "stop" : "stops"}
                         </span>

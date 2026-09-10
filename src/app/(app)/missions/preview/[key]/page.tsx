@@ -35,6 +35,7 @@ export default async function MissionPreviewPage(props: PageProps<"/missions/pre
     candidates,
     variant: { cheaper: false, social: false },
     now,
+    timeZone: viewer.city.timezone,
     ratio: cityRatio(viewer.city.anchors),
     social: !viewer.profile.socialGoals.includes("private"),
     fmt,

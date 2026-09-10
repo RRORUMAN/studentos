@@ -52,6 +52,30 @@ export function fmtDayLabel(iso: string, timeZone: string): string {
   return new Intl.DateTimeFormat(LOCALE, { day: "numeric", month: "short", timeZone }).format(new Date(iso));
 }
 
+/** "Sat 12". The weekday and date with no month, for a narrow column. */
+export function fmtWeekdayDay(iso: string, timeZone: string): string {
+  return new Intl.DateTimeFormat(LOCALE, { weekday: "short", day: "numeric", timeZone }).format(new Date(iso));
+}
+
+/** "Sat". The weekday alone, for a column header or a saved plan line. */
+export function fmtWeekday(iso: string, timeZone: string): string {
+  return new Intl.DateTimeFormat(LOCALE, { weekday: "short", timeZone }).format(new Date(iso));
+}
+
+/** "Sat 12 Sep". The day with no "Today" or "Tomorrow" relative wording. */
+export function fmtShortDay(iso: string, timeZone: string): string {
+  return new Intl.DateTimeFormat(LOCALE, { weekday: "short", day: "numeric", month: "short", timeZone }).format(
+    new Date(iso),
+  );
+}
+
+/** "September 2026". The month a reading belongs to, in the city's calendar. */
+export function fmtMonth(iso: string | Date, timeZone: string, locale = LOCALE): string {
+  return new Intl.DateTimeFormat(locale, { month: "long", year: "numeric", timeZone }).format(
+    typeof iso === "string" ? new Date(iso) : iso,
+  );
+}
+
 /** Local hour (0-23) in the city, for "tonight" decisions. */
 export function hourIn(now: Date, timeZone: string): number {
   return Number(new Intl.DateTimeFormat("en-GB", { hour: "numeric", hour12: false, timeZone }).format(now));
