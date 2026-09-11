@@ -76,6 +76,11 @@ test.describe("one student cannot read another's", () => {
     page,
     browser,
   }) => {
+    /* Two full sign-ups with onboarding in one test. Each one walks twelve
+       animated setup steps and a 2.2s build reveal, so this sat at the 30s
+       default with no margin and failed on a slow run. Slow, not broken. */
+    test.slow();
+
     /* A makes a plan. It is private: nothing was shared. */
     await signUpAndOnboard(page);
     await page.goto("/plans");
@@ -105,6 +110,11 @@ test.describe("one student cannot read another's", () => {
   });
 
   test("a direct message refuses everyone who is not in it", async ({ page, browser }) => {
+    /* Three full sign-ups with onboarding in one test. Each one walks twelve
+       animated setup steps and a 2.2s build reveal, so this sat at the 30s
+       default with no margin and failed on a slow run. Slow, not broken. */
+    test.slow();
+
     /* Two students who could have a conversation between them... */
     const emailA = await signUpAndOnboard(page);
     const b = await secondStudent(browser);
