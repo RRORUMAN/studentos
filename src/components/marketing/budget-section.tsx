@@ -65,7 +65,7 @@ export function BudgetSection() {
       <div className="page">
         <SectionHeader
           eyebrow={brand.surfaces.budget}
-          eyebrowIndex="07"
+          eyebrowIndex="05"
           title="Your budget should tell you what you can do."
           lead="Not a pie chart of what you already spent. Two numbers that decide tonight, and a cheaper version of the plan when the answer is no."
         />

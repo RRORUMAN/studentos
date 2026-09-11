@@ -573,6 +573,15 @@
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 12' preserveAspectRatio='none'%3E%3Cpath d='M2 8.5c22-4 44-5.5 76-4.2 16 .7 30 2.4 40 3.6' fill='none' stroke='%23d8ff3e' stroke-width='5' stroke-linecap='round'/%3E%3C/svg%3E");
 }
 
+/* The torn bottom edge of a receipt: white above, a row of semicircles cut out
+   along the bottom. Background only, so it costs nothing to render, and a
+   `drop-shadow` filter on the parent follows the scallops. */
+@utility receipt-edge {
+  background-image: radial-gradient(circle at 7px 100%, transparent 6px, white 6.5px);
+  background-size: 14px 100%;
+  background-repeat: repeat-x;
+}
+
 /* The sticker treatment: hard 2px keyline plus a solid offset shadow. Used on
    shareable objects only, so "this thing is meant to leave the site" is a
    visual rule rather than a caption. */

@@ -71,10 +71,13 @@ export function PricingTable({
   tone = "paper",
   showHeader = true,
   showFaq = false,
+  eyebrowIndex,
 }: {
   tone?: SectionTone;
   showHeader?: boolean;
   showFaq?: boolean;
+  /** The landing page numbers its sections; the pricing page does not. */
+  eyebrowIndex?: string;
 }) {
   const [period, setPeriod] = useState<BillingPeriod>("monthly");
 
@@ -85,7 +88,7 @@ export function PricingTable({
           <SectionHeader
             align="center"
             eyebrow="Pricing"
-            eyebrowIndex="17"
+            eyebrowIndex={eyebrowIndex}
             title="Free is genuinely free. Paying buys depth."
             lead="The community, discovery, events, Anyone Down?, Arrival Mode, LifeOps, missions and a real budget cost nothing, permanently. Paid tiers add intelligence over the same data — never access to other students."
           />

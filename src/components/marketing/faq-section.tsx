@@ -28,7 +28,7 @@ export function FaqSection() {
       <div className="page">
         <SectionHeader
           eyebrow="Questions"
-          eyebrowIndex="18"
+          eyebrowIndex="10"
           title="The awkward questions, answered."
           lead="What it costs, what happens to your location, whether it works where you are going, and whether any of this is real."
         />

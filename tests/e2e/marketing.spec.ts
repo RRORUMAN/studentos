@@ -101,6 +101,48 @@ test.describe("the public site", () => {
     expect(scrolled, "the page cannot be dragged to the right").toBe(0);
   });
 
+  test("no landing page content is cut off at the edge of the window", async ({ page }) => {
+    await page.goto("/");
+
+    /* The test above cannot see this. `overflow-x: clip` on html (which it
+       depends on) stops the page scrolling sideways, but it does not stop a
+       box being wider than the window — it just cuts the overflow off. The
+       redesigned hero shipped exactly that on a 375px phone: an implicit
+       `auto` grid column sized to the lead paragraph, 446px wide, every line
+       clipped mid-word, and "never scrolls sideways" still green.
+
+       So this measures boxes rather than scroll positions. Excluded: anything
+       inside a horizontal scroll rail (those overflow on purpose and scroll),
+       anything aria-hidden (decorative tilted plates, the city ticker), and
+       the header, which has its own test. */
+    await page.evaluate(async () => {
+      for (let y = 0; y < document.body.scrollHeight; y += window.innerHeight) {
+        window.scrollTo({ top: y, behavior: "instant" });
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+      }
+      window.scrollTo({ top: 0, behavior: "instant" });
+    });
+
+    const clipped = await page.evaluate(() => {
+      const width = window.innerWidth;
+      const exempt = (element: Element) =>
+        element.closest('.overflow-x-auto, .no-scrollbar, [aria-hidden="true"], header');
+      return [...document.querySelectorAll("main *")]
+        .filter((element) => {
+          const box = element.getBoundingClientRect();
+          return box.width > 0 && (box.right > width + 1 || box.left < -1) && !exempt(element);
+        })
+        .slice(0, 5)
+        .map((element) => {
+          const box = element.getBoundingClientRect();
+          const text = (element.textContent ?? "").trim().slice(0, 40);
+          return `<${element.tagName.toLowerCase()}> ${Math.round(box.left)}–${Math.round(box.right)}px "${text}"`;
+        });
+    });
+
+    expect(clipped, "every box on the page fits inside the window").toEqual([]);
+  });
+
   test("the mobile menu opens, navigates, and closes", async ({ page }) => {
     await page.goto("/");
 

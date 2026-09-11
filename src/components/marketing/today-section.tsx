@@ -44,12 +44,8 @@ export function TodaySection() {
             <SectionHeader
               eyebrow="Today"
               eyebrowIndex="02"
-              title={
-                <>
-                  Open {brand.name}. Know what matters today.
-                </>
-              }
-              lead="No feed to scroll before you find out. One screen: what your money allows, what is on, what needs doing, and who is already going."
+              title={<>Open {brand.name}. Know what matters.</>}
+              lead="No feed to scroll first. One screen: what your money allows, what's on, what needs doing, and who's already going."
             />
 
             <ul className="mt-8 flex max-w-lg flex-col gap-4">

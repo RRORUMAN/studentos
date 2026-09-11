@@ -1,88 +1,63 @@
-import { AnyoneDown } from "@/components/marketing/anyone-down";
-import { ArrivalSection } from "@/components/marketing/arrival-section";
 import { AskSection } from "@/components/marketing/ask-section";
 import { BudgetSection } from "@/components/marketing/budget-section";
-import { EventRadar } from "@/components/marketing/event-radar";
-import { ExchangeSection } from "@/components/marketing/exchange-section";
+import { CoverageTicker } from "@/components/marketing/coverage-ticker";
 import { FaqSection } from "@/components/marketing/faq-section";
 import { FinalCta } from "@/components/marketing/final-cta";
 import { GlobalCities } from "@/components/marketing/global-cities";
 import { Hero } from "@/components/marketing/hero";
-import { LanguageSection } from "@/components/marketing/language-section";
-import { LifeOpsSection } from "@/components/marketing/lifeops-section";
-import { MissionsSection } from "@/components/marketing/missions-section";
-import { OneApp } from "@/components/marketing/one-app";
+import { PlatformExplorer } from "@/components/marketing/platform-explorer";
 import { PricingTable } from "@/components/marketing/pricing-table";
+import { ProblemSection } from "@/components/marketing/problem-section";
 import { PulseSection } from "@/components/marketing/pulse-section";
-import { RightNow } from "@/components/marketing/right-now";
-import { ShareSection } from "@/components/marketing/share-section";
-import { WorkSection } from "@/components/marketing/work-section";
-import { SurvivalMode } from "@/components/marketing/survival-mode";
 import { Testimonials } from "@/components/marketing/testimonials";
 import { TodaySection } from "@/components/marketing/today-section";
-import { TrustStrip } from "@/components/marketing/trust-strip";
-import { WhyStudentOS } from "@/components/marketing/why-studentos";
+import { TrustSection } from "@/components/marketing/trust-section";
 
 /**
  * ============================================================================
  * LANDING PAGE
  * ----------------------------------------------------------------------------
- * The order is an argument, read top to bottom:
+ * Twelve sections, down from twenty-two. The order is a story, read top to
+ * bottom:
  *
- *   hand over the working product, name the problem it solves, show the screen
- *   you would open every day, show how a question becomes an answer, show the
- *   people it is built from, how you end up going with them, what is on, what
- *   you can afford, what happens when you can barely afford anything, what you
- *   have to remember, what to actually do with your week, how to arrive, how
- *   students supply each other, what is on right now, where it works, why it
- *   replaces eight apps, how a plan travels, what we will not do with your
- *   data — and only then price, questions, and the ask.
+ *   the product running (hero) · where it works (ticker) · 01 the problem ·
+ *   02 the screen you open every day · 03 how a question becomes an answer ·
+ *   04 the people · 05 the money · 06 everything else, in one window ·
+ *   07 is my city covered · 08 the rules behind every number · 09 price ·
+ *   10 questions · the ask.
  *
- * Two deliberate choices.
- *
- * The demo is *in* the hero rather than below the fold: a visitor drives the
- * product before being asked to take a single claim on trust.
- *
- * Pricing sits near the end and the FAQ after it, because most of the
- * questions a student has are created by the price.
+ * Nine product surfaces that used to be nine full sections (events, Anyone
+ * Down?, missions, Survival Mode, Work, Arrival, Speak Local, Exchange,
+ * LifeOps) now live in the platform window as tabs, each still running its
+ * real demo. Their old anchors (`/#events`, `/#missions`…) are the tab ids, so
+ * nothing linking to them broke.
  *
  * ---------------------------------------------------------------------------
  * Ground rhythm. No two adjacent sections share a tone, and exactly two are
- * full-bleed dark: Ask, in the middle, where the product is at its most
- * impressive, and the closing CTA. Every other dark rectangle on the page is a
- * ProductPanel or an AppSurface inside a light section, which keeps "dark means
- * the product" a rule the eye can learn.
+ * full-bleed dark: Ask, where the product is at its most impressive, and the
+ * closing ask. Every other dark rectangle is the product inside a light
+ * section, which keeps "dark means the app" a rule the eye can learn.
  *
- *   paper · warm · paper · DARK · pulse · paper · warm · flow · paper · warm ·
- *   tint · paper · warm · paper · flow · warm · pulse · warm · [testimonials:
- *   renders nothing until a real quote exists] · paper · warm · DARK
+ *   paper · white band · warm · paper · DARK · pulse · flow · paper(window) ·
+ *   paper(cities, divided by the window's own frame) · warm · paper · warm ·
+ *   [testimonials: renders nothing until a real quote exists] · DARK
  * ============================================================================
  */
 export default function HomePage() {
   return (
     <>
       <Hero />
-      <WhyStudentOS />
+      <CoverageTicker />
+      <ProblemSection />
       <TodaySection />
       <AskSection />
       <PulseSection />
-      <AnyoneDown />
-      <EventRadar />
       <BudgetSection />
-      <SurvivalMode />
-      <WorkSection />
-      <LanguageSection />
-      <LifeOpsSection />
-      <MissionsSection />
-      <ArrivalSection />
-      <ExchangeSection />
-      <RightNow />
+      <PlatformExplorer />
       <GlobalCities />
-      <OneApp />
-      <ShareSection />
-      <TrustStrip />
+      <TrustSection />
       <Testimonials />
-      <PricingTable tone="paper" />
+      <PricingTable tone="paper" eyebrowIndex="09" />
       <FaqSection />
       <FinalCta />
     </>
