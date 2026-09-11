@@ -32,8 +32,8 @@ export default async function GetStartedPage(props: PageProps<"/get-started">) {
         <div className="mb-10 flex flex-col items-center text-center">
           <Wordmark />
           <p className="mt-4 max-w-md text-sm leading-relaxed text-ink-500">
-            Four questions. No account, no card. At the end you get a real setup for your city that
-            you can look around straight away.
+            Four questions, no account. See what your city looks like — and if you sign up after,
+            your answers come with you.
           </p>
         </div>
 

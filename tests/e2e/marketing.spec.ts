@@ -102,19 +102,29 @@ test.describe("the public site", () => {
   });
 
   test("no landing page content is cut off at the edge of the window", async ({ page }) => {
-    await page.goto("/");
+    /* The landing page first, where the bug was found, then the three screens
+       a new student meets next — the preview, sign-up and sign-in — which
+       share the same grid-based layouts and the same clip on html. */
+    for (const route of ["/", "/get-started", "/signup", "/login"]) {
+      await expectNothingClipped(page, route);
+    }
+  });
 
-    /* The test above cannot see this. `overflow-x: clip` on html (which it
-       depends on) stops the page scrolling sideways, but it does not stop a
-       box being wider than the window — it just cuts the overflow off. The
-       redesigned hero shipped exactly that on a 375px phone: an implicit
-       `auto` grid column sized to the lead paragraph, 446px wide, every line
-       clipped mid-word, and "never scrolls sideways" still green.
-
-       So this measures boxes rather than scroll positions. Excluded: anything
-       inside a horizontal scroll rail (those overflow on purpose and scroll),
-       anything aria-hidden (decorative tilted plates, the city ticker), and
-       the header, which has its own test. */
+  /**
+   * "Never scrolls sideways" cannot see this. `overflow-x: clip` on html
+   * (which that test depends on) stops the page scrolling sideways, but it does
+   * not stop a box being wider than the window — it just cuts the overflow
+   * off. The redesigned hero shipped exactly that on a 375px phone: an
+   * implicit `auto` grid column sized to the lead paragraph, 446px wide, every
+   * line clipped mid-word, and "never scrolls sideways" still green.
+   *
+   * So this measures boxes rather than scroll positions. Excluded: anything
+   * inside a horizontal scroll rail (those overflow on purpose and scroll),
+   * anything aria-hidden (decorative tilted plates, the city ticker), and the
+   * header, which has its own test.
+   */
+  async function expectNothingClipped(page: Page, route: string) {
+    await page.goto(route);
     await page.evaluate(async () => {
       for (let y = 0; y < document.body.scrollHeight; y += window.innerHeight) {
         window.scrollTo({ top: y, behavior: "instant" });
@@ -140,8 +150,8 @@ test.describe("the public site", () => {
         });
     });
 
-    expect(clipped, "every box on the page fits inside the window").toEqual([]);
-  });
+    expect(clipped, `${route}: every box on the page fits inside the window`).toEqual([]);
+  }
 
   test("the mobile menu opens, navigates, and closes", async ({ page }) => {
     await page.goto("/");

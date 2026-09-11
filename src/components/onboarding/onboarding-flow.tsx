@@ -1,56 +1,83 @@
 "use client";
 
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { ArrowLeft, ArrowRight, RotateCcw } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, RotateCcw } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
+import { MoneyInput } from "@/components/onboarding/controls";
+import { seedDraftFromPreview, type PreviewStep } from "@/components/onboarding/draft";
+import { UniversityPicker, type UniversityChoice } from "@/components/onboarding/university-picker";
 import { AppSurface } from "@/components/product/app-surface";
 import { PlanView } from "@/components/product/plan-view";
-import { WaitlistForm } from "@/components/marketing/waitlist-form";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { brand } from "@/brand/brand.config";
+import { allInterests } from "@/config/onboarding";
 import { plans as pricingPlans, type PlanKey } from "@/config/pricing";
 import { arrivalTasksFor } from "@/data/arrival";
-import { campusesForCity, cities, cityStatusLabel, getCity } from "@/data/cities";
-import { UniversityPicker, type UniversityChoice } from "@/components/onboarding/university-picker";
-import { heroPlans, planTotal } from "@/data/plans";
+import { cityDirectory, cityStatusLabel, cityStatusNote, resolveCity } from "@/data/cities";
 import { loopSummaries } from "@/data/loop";
-import type { PlaceLayer } from "@/data/types";
+import { heroPlans, planTotal } from "@/data/plans";
+import { searchCities } from "@/domain/cities";
 import { duration, ease, spring } from "@/lib/motion";
-import { cn, money } from "@/lib/utils";
+import { cn, money, type MoneyLocale } from "@/lib/utils";
 import { track } from "@/services/analytics";
 
 /* -------------------------------------------------------------------------- */
 /* Model                                                                       */
 /* -------------------------------------------------------------------------- */
 
-const INTERESTS: readonly { key: string; label: string; layers: readonly PlaceLayer[] }[] = [
-  { key: "cheap-eats", label: "Cheap eats", layers: ["cheap-food"] },
-  { key: "free-culture", label: "Free culture", layers: ["free"] },
-  { key: "nightlife", label: "Nightlife", layers: ["nightlife"] },
-  { key: "sport", label: "Sport", layers: ["fitness"] },
-  { key: "study", label: "Study spots", layers: ["study"] },
-  { key: "markets", label: "Markets and groceries", layers: ["groceries"] },
-  { key: "events", label: "Events", layers: ["culture"] },
-  { key: "deals", label: "Deals", layers: ["deals"] },
-];
+/**
+ * The preview's interests are setup's own values — a curated dozen of them —
+ * so the answers can be handed over as they are. They used to be a separate
+ * vocabulary ("free-culture", "markets") that meant nothing to setup, which is
+ * half of why the two flows could never share anything.
+ */
+const PREVIEW_INTERESTS = [
+  "cheap-food",
+  "coffee",
+  "nightlife",
+  "music",
+  "football",
+  "gym",
+  "museums",
+  "culture",
+  "language-exchange",
+  "study-groups",
+  "travel",
+  "festivals",
+]
+  .map((value) => allInterests.find((item) => item.value === value))
+  .filter((item): item is NonNullable<typeof item> => Boolean(item));
 
 const STEPS = ["City", "University", "Budget", "Interests"] as const;
 
-const BUDGET_MIN = 200;
-const BUDGET_MAX = 1200;
-const BUDGET_DEFAULT = 680;
-
 /**
  * ============================================================================
- * ONBOARDING
+ * THE PREVIEW (`/get-started`)
  * ----------------------------------------------------------------------------
- * Four questions, then a real answer. The result page is assembled from the
- * same seeded rows the marketing sections use, filtered by what the visitor
- * actually said — so "Get started free" leads somewhere that does something,
- * rather than to a form that collects an email and shows a thank-you.
+ * Four questions, no account, then a look at what that buys.
+ *
+ * Three things changed, each because the old version said something untrue:
+ *
+ *  - It only offered the five full cities, and told everyone else to "pick
+ *    the closest for now". It now searches all of them, with the same
+ *    `searchCities` setup uses.
+ *
+ *  - Its "Tonight in {city}" plan was chosen by price alone from a list that
+ *    only contains Madrid, so a student who picked Berlin was shown a Madrid
+ *    ramen bar under a Berlin heading. The plan now appears only for the city
+ *    it belongs to, and every other city gets an honest description of what
+ *    works there on day one.
+ *
+ *  - It ended in a waitlist ("accounts open once the first groups are in
+ *    place") sitting above a "Create your account" button, long after accounts
+ *    opened. It now ends in the account, and the answers go with it: they are
+ *    written to the onboarding draft so setup opens pre-filled.
+ *
+ * The budget is typed in the city's currency rather than dragged along a
+ * slider fixed at €200–€1,200, which meant nothing in yen or lei.
  * ============================================================================
  */
 export function OnboardingFlow({
@@ -63,37 +90,58 @@ export function OnboardingFlow({
   const reduced = useReducedMotion();
 
   const [step, setStep] = useState(0);
+  const [direction, setDirection] = useState<1 | -1>(1);
   const [citySlug, setCitySlug] = useState<string | null>(null);
   /* A student whose university is not in the register still has one, so this
      holds the whole choice rather than a slug: see `UniversityChoice`. */
   const [university, setUniversity] = useState<UniversityChoice | null>(null);
-  const campusSlug = university?.campusSlug ?? null;
-  const universityName = university?.name ?? "";
-  const [budget, setBudget] = useState(BUDGET_DEFAULT);
-  const [interests, setInterests] = useState<string[]>(["cheap-eats", "free-culture"]);
+  const [budget, setBudget] = useState("");
+  const [interests, setInterests] = useState<string[]>(["cheap-food", "museums"]);
   const [done, setDone] = useState(false);
 
-  const city = citySlug ? getCity(citySlug) : undefined;
+  const city = citySlug ? resolveCity(citySlug) : null;
+  const where: MoneyLocale = city ? { currency: city.currency.code, locale: city.locale } : {};
+  const monthly = Number(budget) > 0 ? Number(budget) : 0;
 
   const canAdvance =
-    (step === 0 && Boolean(citySlug)) ||
-    step === 1 ||
-    step === 2 ||
-    (step === 3 && interests.length > 0);
+    (step === 0 && Boolean(citySlug)) || step === 1 || step === 2 || (step === 3 && interests.length > 0);
+
+  function goTo(next: number) {
+    setDirection(next > step ? 1 : -1);
+    setStep(next);
+  }
 
   function next() {
     if (step < STEPS.length - 1) {
       track("onboarding_step_completed", { step: STEPS[step], citySlug: citySlug ?? null });
-      setStep(step + 1);
+      goTo(step + 1);
       return;
     }
     track("onboarding_completed", {
       citySlug: citySlug ?? null,
-      campusSlug: campusSlug ?? null,
-      universityName: universityName || null,
-      budget,
+      campusSlug: university?.campusSlug ?? null,
+      universityName: university?.name || null,
+      budget: monthly,
       interests: interests.join(","),
     });
+
+    /* Hand the answers to setup. Written on completion, not in an effect: this
+       is the moment the student said "yes, these". */
+    if (citySlug) {
+      const fromPreview: PreviewStep[] = ["city", "interests"];
+      if (university) fromPreview.push("university");
+      if (monthly > 0) fromPreview.push("budget");
+      seedDraftFromPreview({
+        citySlug,
+        institutionId: university?.institutionId ?? null,
+        campusSlug: university?.campusSlug ?? null,
+        universityName: university?.name ?? "",
+        monthlyTotal: monthly > 0 ? String(monthly) : "",
+        excludeHousing: true,
+        interests,
+        fromPreview,
+      });
+    }
     setDone(true);
   }
 
@@ -101,8 +149,8 @@ export function OnboardingFlow({
     return (
       <Result
         citySlug={city.slug}
-        campusSlug={campusSlug}
-        budget={budget}
+        universityName={university?.name ?? null}
+        monthly={monthly}
         interests={interests}
         preselectedPlan={preselectedPlan}
         billing={billing}
@@ -117,12 +165,12 @@ export function OnboardingFlow({
   return (
     <div className="mx-auto w-full max-w-2xl">
       {/* progress */}
-      <div className="flex items-center gap-2">
+      <div className="grid grid-cols-4 gap-2">
         {STEPS.map((label, index) => (
-          <div key={label} className="flex flex-1 flex-col gap-1.5">
+          <div key={label} className="min-w-0">
             <div className="h-1 overflow-hidden rounded-full bg-ink-200">
               <motion.div
-                className="h-full rounded-full bg-signal"
+                className="h-full rounded-full bg-ink-950"
                 initial={false}
                 animate={{ width: index <= step ? "100%" : "0%" }}
                 transition={reduced ? { duration: 0 } : { duration: 0.4, ease: ease.out }}
@@ -130,8 +178,8 @@ export function OnboardingFlow({
             </div>
             <span
               className={cn(
-                "font-mono text-micro uppercase tracking-[0.08em]",
-                index === step ? "text-ink-900" : "text-ink-400",
+                "mt-2 block truncate font-mono text-micro tracking-[0.1em] uppercase",
+                index === step ? "text-ink-950" : "text-ink-400",
               )}
             >
               {label}
@@ -140,40 +188,65 @@ export function OnboardingFlow({
         ))}
       </div>
 
-      <div className="mt-8 min-h-[22rem]">
+      <div className="mt-8 min-h-[24rem]">
         <AnimatePresence mode="wait" initial={false}>
           <motion.div
             key={step}
-            initial={reduced ? false : { opacity: 0, x: 16 }}
+            initial={reduced ? false : { opacity: 0, x: 18 * direction }}
             animate={{ opacity: 1, x: 0 }}
-            exit={reduced ? { opacity: 0 } : { opacity: 0, x: -16 }}
-            transition={{ duration: reduced ? 0 : duration.base, ease: ease.out }}
+            exit={reduced ? { opacity: 0 } : { opacity: 0, x: -18 * direction }}
+            transition={{ duration: reduced ? 0 : duration.quick, ease: ease.out }}
           >
             {step === 0 ? (
-              <StepCity value={citySlug} onChange={setCitySlug} onPick={() => setStep(1)} />
-            ) : null}
-
-            {step === 1 ? (
-              <StepCampus
-                cityName={city?.name ?? ""}
-                citySlug={citySlug}
-                countryCode={city?.countryCode ?? null}
-                choice={university}
-                onPick={setUniversity}
-                onClear={() => setUniversity(null)}
+              <StepCity
+                value={citySlug}
+                onPick={(slug) => {
+                  setCitySlug(slug);
+                  setUniversity(null);
+                  /* Advance only if still on the city step. This used to call
+                     `goTo(1)` from a stale closure: a student who picked a city
+                     and tapped Continue twice inside 220ms reached the budget
+                     step and was then pulled back to the university. */
+                  window.setTimeout(() => {
+                    setDirection(1);
+                    setStep((current) => (current === 0 ? 1 : current));
+                  }, 220);
+                }}
               />
             ) : null}
 
-            {step === 2 ? <StepBudget value={budget} onChange={setBudget} /> : null}
+            {step === 1 && city ? (
+              <>
+                <StepHeading
+                  title={`Which university in ${city.name}?`}
+                  lead="Search for yours. If it isn't there, type it — only the campus feed needs us to know the place."
+                />
+                <UniversityPicker
+                  cityName={city.name}
+                  citySlug={city.slug}
+                  countryCode={city.countryCode}
+                  choice={university}
+                  onPick={setUniversity}
+                  onClear={() => setUniversity(null)}
+                />
+              </>
+            ) : null}
+
+            {step === 2 ? (
+              <StepBudget
+                value={budget}
+                onChange={setBudget}
+                symbol={city?.currency.symbol ?? "€"}
+                where={where}
+              />
+            ) : null}
 
             {step === 3 ? (
               <StepInterests
                 value={interests}
                 onToggle={(key) =>
                   setInterests((current) =>
-                    current.includes(key)
-                      ? current.filter((item) => item !== key)
-                      : [...current, key],
+                    current.includes(key) ? current.filter((item) => item !== key) : [...current, key],
                   )
                 }
               />
@@ -183,22 +256,17 @@ export function OnboardingFlow({
       </div>
 
       <div className="mt-8 flex items-center justify-between gap-3 border-t border-ink-200 pt-5">
-        <Button
-          variant="ghost"
-          size="md"
-          onClick={() => setStep(Math.max(0, step - 1))}
-          disabled={step === 0}
-        >
+        <Button variant="ghost" size="md" onClick={() => goTo(Math.max(0, step - 1))} disabled={step === 0}>
           <ArrowLeft className="size-4" aria-hidden />
           Back
         </Button>
 
         <div className="flex items-center gap-3">
-          {step === 1 && !university ? (
-            <span className="text-[0.8125rem] text-ink-400">You can skip this</span>
+          {(step === 1 && !university) || (step === 2 && monthly === 0) ? (
+            <span className="text-[0.8125rem] text-ink-500">You can skip this</span>
           ) : null}
           <Button variant="signal" size="md" onClick={next} disabled={!canAdvance} className="group">
-            {step === STEPS.length - 1 ? `Build my ${brand.name}` : "Continue"}
+            {step === STEPS.length - 1 ? `Show me my ${brand.name}` : "Continue"}
             <ArrowRight
               className="size-4 transition-transform duration-200 group-hover:translate-x-0.5"
               aria-hidden
@@ -217,193 +285,177 @@ export function OnboardingFlow({
 function StepHeading({ title, lead }: { title: string; lead: string }) {
   return (
     <div className="mb-6">
-      <h2 className="text-display-sm text-ink-950">{title}</h2>
+      <h1 className="text-display-sm text-ink-950">{title}</h1>
       <p className="mt-2 text-base leading-relaxed text-ink-600">{lead}</p>
     </div>
   );
 }
 
-function StepCity({
-  value,
-  onChange,
-  onPick,
-}: {
-  value: string | null;
-  onChange: (slug: string) => void;
-  onPick: () => void;
-}) {
+function StepCity({ value, onPick }: { value: string | null; onPick: (slug: string) => void }) {
+  const [query, setQuery] = useState("");
+  const matches = useMemo(() => searchCities(cityDirectory, query, 8), [query]);
+  const full = cityDirectory.filter((city) => city.deep);
+  const needle = query.trim();
+
   return (
     <div>
       <StepHeading
         title="Where are you studying?"
-        lead="Everything else follows from this: prices, transport, what free means locally, and which community you land in."
+        lead="Everything follows from this: prices and currency, transport, what free means locally, and which students you land among."
       />
-      <div className="grid gap-2 sm:grid-cols-2">
-        {cities.map((city) => {
-          const selected = value === city.slug;
-          return (
-            <button
-              key={city.slug}
-              type="button"
-              aria-pressed={selected}
-              onClick={() => {
-                onChange(city.slug);
-                window.setTimeout(onPick, 220);
-              }}
-              className={cn(
-                "flex items-start justify-between gap-3 rounded-lg border p-4 text-left transition-all duration-150",
-                selected
-                  ? "border-ink-950 bg-white shadow-[var(--shadow-raise)]"
-                  : "border-ink-200 bg-paper hover:border-ink-300 hover:bg-white",
-              )}
-            >
-              <span className="min-w-0">
-                <span className="block font-display text-lg font-semibold tracking-[-0.02em] text-ink-950">
-                  {city.name}
-                </span>
-                <span className="mt-0.5 block text-xs text-ink-400">{city.country}</span>
-                <span className="mt-2 block text-[0.8125rem] leading-snug text-ink-600">
-                  {city.hook}
-                </span>
-              </span>
-              <span
+
+      <label className="block">
+        <span className="sr-only">Search {cityDirectory.length} cities</span>
+        <input
+          autoFocus
+          type="search"
+          autoComplete="off"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder={`Search ${cityDirectory.length} cities`}
+          className="h-14 w-full rounded-2xl border border-ink-200 bg-white px-5 text-[1.0625rem] text-ink-950 shadow-[var(--shadow-flat)] placeholder:text-ink-400 hover:border-ink-300"
+        />
+      </label>
+
+      {needle ? (
+        matches.length > 0 ? (
+          <ul className="mt-2 overflow-hidden rounded-2xl border border-ink-200 bg-white">
+            {matches.map(({ city }) => (
+              <li key={city.slug} className="border-b border-ink-100 last:border-b-0">
+                <button
+                  type="button"
+                  onClick={() => onPick(city.slug)}
+                  className={cn(
+                    "flex w-full items-center justify-between gap-3 px-5 py-3 text-left hover:bg-paper-2",
+                    value === city.slug && "bg-signal-soft",
+                  )}
+                >
+                  <span className="text-[0.9375rem] text-ink-900">
+                    {city.name} <span className="text-ink-500">· {city.country}</span>
+                  </span>
+                  <span className="shrink-0 text-[0.75rem] text-ink-500">
+                    {cityStatusLabel[city.status]}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-3 text-[0.875rem] text-ink-500">
+            Not on the list yet. Cities are added with real geography behind each one, so the list
+            only grows when it can be right.
+          </p>
+        )
+      ) : (
+        <>
+          <p className="mt-6 font-mono text-micro tracking-[0.12em] text-ink-500 uppercase">
+            Full cities
+          </p>
+          <div className="mt-2 grid gap-2 sm:grid-cols-2">
+            {full.map((city) => (
+              <button
+                key={city.slug}
+                type="button"
+                aria-pressed={value === city.slug}
+                onClick={() => onPick(city.slug)}
                 className={cn(
-                  "shrink-0 rounded-full px-2 py-0.5 text-micro font-semibold tracking-[0.06em] uppercase",
-                  city.status === "live"
-                    ? "bg-signal text-ink-950"
-                    : "bg-ink-100 text-ink-500",
+                  "flex items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-left transition-colors",
+                  value === city.slug
+                    ? "border-ink-950 bg-white shadow-[var(--shadow-raise)]"
+                    : "border-ink-200 bg-paper hover:border-ink-300 hover:bg-white",
                 )}
               >
-                {cityStatusLabel[city.status]}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-      <p className="mt-4 text-[0.8125rem] text-ink-400">
-        Somewhere else? Pick the closest for now — the setup carries over when your city opens.
-      </p>
+                <span className="min-w-0">
+                  <span className="block font-display text-lg font-semibold tracking-[-0.02em] text-ink-950">
+                    {city.name}
+                  </span>
+                  <span className="block text-xs text-ink-500">{city.country}</span>
+                </span>
+                <span className="shrink-0 rounded-full bg-mint-soft px-2 py-0.5 font-mono text-[0.625rem] font-semibold tracking-[0.08em] text-mint-deep uppercase">
+                  {cityStatusLabel[city.status]}
+                </span>
+              </button>
+            ))}
+          </div>
+          <p className="mt-3 text-[0.8125rem] text-ink-500">
+            Full cities have local prices, campuses and an arrival checklist. Every other city works
+            from provider and official data on day one.
+          </p>
+        </>
+      )}
     </div>
   );
 }
 
-function StepCampus({
-  cityName,
-  citySlug,
-  countryCode,
-  choice,
-  onPick,
-  onClear,
+function StepBudget({
+  value,
+  onChange,
+  symbol,
+  where,
 }: {
-  cityName: string;
-  citySlug: string | null;
-  countryCode: string | null;
-  choice: UniversityChoice | null;
-  onPick: (choice: UniversityChoice) => void;
-  onClear: () => void;
+  value: string;
+  onChange: (value: string) => void;
+  symbol: string;
+  where: MoneyLocale;
 }) {
-  return (
-    <div>
-      <StepHeading
-        title={`Which university in ${cityName}?`}
-        lead="Search for yours. If it is not here, type it — only the campus feed needs us to know the place."
-      />
-      <UniversityPicker
-        cityName={cityName}
-        citySlug={citySlug}
-        countryCode={countryCode}
-        choice={choice}
-        onPick={onPick}
-        onClear={onClear}
-      />
-    </div>
-  );
-}
-
-function StepBudget({ value, onChange }: { value: number; onChange: (value: number) => void }) {
-  const daily = Math.floor((value / 30) * 10) / 10;
-  const weekly = Math.round((value / 30) * 7);
+  const monthly = Number(value) > 0 ? Number(value) : 0;
+  const daily = Math.floor((monthly / 30) * 10) / 10;
+  const weekly = Math.round((monthly / 30) * 7);
 
   return (
     <div>
       <StepHeading
         title="What do you have to live on each month?"
-        lead="Not including rent. A rough number is fine — this is what turns suggestions into ones you can actually afford."
+        lead="After rent. A rough number is fine — it's what turns suggestions into ones you can actually afford."
       />
 
-      <div className="rounded-xl border border-ink-200 bg-paper-2 p-5 sm:p-6">
-        <div className="flex items-baseline justify-between">
-          <label htmlFor="budget" className="text-sm font-medium text-ink-700">
-            Monthly, after rent
-          </label>
-          <span className="tnum font-mono text-3xl font-semibold text-ink-950">{money(value)}</span>
-        </div>
+      <MoneyInput
+        large
+        label="Monthly, after rent"
+        symbol={symbol}
+        value={value}
+        onChange={onChange}
+        placeholder="600"
+      />
 
-        <input
-          id="budget"
-          type="range"
-          min={BUDGET_MIN}
-          max={BUDGET_MAX}
-          step={20}
-          value={value}
-          onChange={(event) => onChange(Number(event.target.value))}
-          className="mt-4 h-1.5 w-full cursor-pointer appearance-none rounded-full bg-ink-200 accent-flow"
-        />
-        <div className="mt-2 flex justify-between font-mono text-micro text-ink-400">
-          <span>{money(BUDGET_MIN)}</span>
-          <span>{money(BUDGET_MAX)}+</span>
-        </div>
-
-        <dl className="mt-6 grid grid-cols-2 gap-3">
-          <div className="rounded-lg bg-paper p-3.5">
-            <dt className="font-mono text-micro uppercase tracking-[0.1em] text-ink-400">
-              Roughly per day
-            </dt>
-            <dd className="tnum mt-1 font-mono text-xl font-semibold text-flow-deep">
-              {money(daily)}
-            </dd>
+      {monthly > 0 ? (
+        <dl className="mt-4 grid grid-cols-2 gap-px overflow-hidden rounded-2xl bg-ink-200">
+          <div className="bg-white px-4 py-3">
+            <dt className="font-mono text-micro tracking-[0.1em] text-ink-500 uppercase">About a day</dt>
+            <dd className="tnum mt-1 font-mono text-xl font-semibold text-flow-deep">{money(daily, where)}</dd>
           </div>
-          <div className="rounded-lg bg-paper p-3.5">
-            <dt className="font-mono text-micro uppercase tracking-[0.1em] text-ink-400">
-              Roughly per week
-            </dt>
-            <dd className="tnum mt-1 font-mono text-xl font-semibold text-flow-deep">
-              {money(weekly)}
-            </dd>
+          <div className="bg-white px-4 py-3">
+            <dt className="font-mono text-micro tracking-[0.1em] text-ink-500 uppercase">About a week</dt>
+            <dd className="tnum mt-1 font-mono text-xl font-semibold text-flow-deep">{money(weekly, where)}</dd>
           </div>
         </dl>
-      </div>
+      ) : null}
 
-      <p className="mt-4 text-[0.8125rem] leading-relaxed text-ink-400">
-        This stays in your account. It is never sold, never shared with venues, and never attached
-        to an error report.
+      <p className="mt-4 text-[0.8125rem] leading-relaxed text-ink-500">
+        It stays with your setup. Never sold, never shared with venues, never attached to an error
+        report.
       </p>
     </div>
   );
 }
 
-function StepInterests({
-  value,
-  onToggle,
-}: {
-  value: string[];
-  onToggle: (key: string) => void;
-}) {
+function StepInterests({ value, onToggle }: { value: string[]; onToggle: (key: string) => void }) {
   return (
     <div>
       <StepHeading
         title="What do you want more of?"
-        lead="Pick at least one. This decides which map layers open first and what your feed leads with."
+        lead="Pick at least one. It decides what your feed leads with — and you can add more in setup."
       />
       <div className="flex flex-wrap gap-2">
-        {INTERESTS.map((interest) => (
+        {PREVIEW_INTERESTS.map((interest) => (
           <Chip
-            key={interest.key}
+            key={interest.value}
             accent="signal"
-            active={value.includes(interest.key)}
-            onClick={() => onToggle(interest.key)}
+            active={value.includes(interest.value)}
+            onClick={() => onToggle(interest.value)}
             className="px-4 py-2.5 text-[0.9375rem]"
           >
+            {interest.emoji ? <span aria-hidden>{interest.emoji}</span> : null}
             {interest.label}
           </Chip>
         ))}
@@ -411,9 +463,7 @@ function StepInterests({
       {value.length === 0 ? (
         <p className="mt-4 text-[0.8125rem] text-pulse-deep">Pick at least one to continue.</p>
       ) : (
-        <p className="mt-4 text-[0.8125rem] text-ink-400">
-          {value.length} selected. You can change all of this later.
-        </p>
+        <p className="mt-4 text-[0.8125rem] text-ink-500">{value.length} selected.</p>
       )}
     </div>
   );
@@ -425,46 +475,43 @@ function StepInterests({
 
 function Result({
   citySlug,
-  campusSlug,
-  budget,
+  universityName,
+  monthly,
   interests,
   preselectedPlan,
   billing,
   onRestart,
 }: {
   citySlug: string;
-  campusSlug: string | null;
-  budget: number;
+  universityName: string | null;
+  monthly: number;
   interests: string[];
   preselectedPlan?: PlanKey;
   billing?: string;
   onRestart: () => void;
 }) {
   const reduced = useReducedMotion();
-  const city = getCity(citySlug);
-  const campus = campusesForCity(citySlug).find((item) => item.slug === campusSlug);
+  const city = resolveCity(citySlug)!;
+  const where: MoneyLocale = { currency: city.currency.code, locale: city.locale };
   const summary = loopSummaries[citySlug];
   const tasks = arrivalTasksFor(citySlug).slice(0, 4);
   const chosenPlan = pricingPlans.find((plan) => plan.key === preselectedPlan);
+  const daily = monthly > 0 ? Math.floor((monthly / 30) * 10) / 10 : null;
+  const chosenInterests = allInterests.filter((item) => interests.includes(item.value));
 
-  const daily = Math.floor((budget / 30) * 10) / 10;
-
-  /** The most substantial seeded plan that still fits a normal day's spend. */
+  /** A seeded plan for THIS city that fits a normal day, or none at all. */
   const plan = useMemo(() => {
-    const affordable = heroPlans
-      .filter((candidate) => planTotal(candidate) <= daily)
-      .sort((a, b) => planTotal(b) - planTotal(a));
-    return affordable[0] ?? heroPlans.find((candidate) => candidate.id === "free-tonight")!;
-  }, [daily]);
-
-  /* NO PLACE PREVIEW HERE, and deliberately.
-     This step used to end with three places, taken from the hand-written list
-     so that the last screen of onboarding looked full. Real places come from a
-     provider, which is a network call this client component cannot make, and
-     more to the point: a student has not told us where they live yet, so the
-     three would be picked from the middle of the city. The summary below shows
-     what onboarding actually established, and the places are on Today, ranked
-     against everything they just told us. */
+    const local = heroPlans.filter((candidate) => candidate.citySlug === citySlug);
+    if (local.length === 0) return null;
+    if (daily === null) return local.find((candidate) => planTotal(candidate) === 0) ?? local[0];
+    return (
+      local
+        .filter((candidate) => planTotal(candidate) <= daily)
+        .sort((a, b) => planTotal(b) - planTotal(a))[0] ??
+      local.find((candidate) => planTotal(candidate) === 0) ??
+      null
+    );
+  }, [citySlug, daily]);
 
   return (
     <motion.div
@@ -473,14 +520,12 @@ function Result({
       transition={reduced ? { duration: 0 } : spring.soft}
       className="mx-auto w-full max-w-4xl"
     >
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="font-mono text-micro uppercase tracking-[0.14em] text-ink-400">
-            Ready to go
-          </p>
-          <h2 className="mt-2 text-display-md text-ink-950">
-            Your {brand.name} for {city?.name}
-          </h2>
+          <p className="font-mono text-micro tracking-[0.14em] text-ink-500 uppercase">Your preview</p>
+          <h1 className="mt-2 text-display-md text-ink-950">
+            {brand.name} for {city.name}
+          </h1>
         </div>
         <Button variant="ghost" size="sm" onClick={onRestart}>
           <RotateCcw className="size-4" aria-hidden />
@@ -488,15 +533,27 @@ function Result({
         </Button>
       </div>
 
-      <p className="mt-4 max-w-2xl text-base leading-relaxed text-ink-600">
-        {campus ? `${campus.shortName} · ` : ""}
-        {money(budget)} a month after rent, which is about{" "}
-        <span className="tnum font-medium text-ink-950">{money(daily)} a day</span>. Here is what
-        that actually buys you in {city?.name}.
-      </p>
+      {/* what the preview established, as a line of facts */}
+      <ul className="mt-5 flex flex-wrap gap-1.5">
+        {[
+          `${city.name} · ${city.currency.code}`,
+          universityName,
+          daily !== null ? `${money(monthly, where)} a month · about ${money(daily, where)} a day` : null,
+          ...chosenInterests.map((item) => `${item.emoji ?? ""} ${item.label}`.trim()),
+        ]
+          .filter((bit): bit is string => Boolean(bit))
+          .map((bit) => (
+            <li
+              key={bit}
+              className="rounded-full bg-white px-3 py-1 text-[0.8125rem] font-medium text-ink-700 ring-1 ring-ink-950/8"
+            >
+              {bit}
+            </li>
+          ))}
+      </ul>
 
       {chosenPlan ? (
-        <div className="mt-5 flex flex-wrap items-center gap-2 rounded-lg border border-ink-200 bg-paper-2 px-4 py-3">
+        <div className="mt-5 flex flex-wrap items-center gap-2 rounded-2xl border border-ink-200 bg-paper-2 px-4 py-3">
           <span className="rounded-full bg-signal px-2.5 py-1 text-micro font-semibold tracking-[0.06em] text-ink-950 uppercase">
             {chosenPlan.name} selected
           </span>
@@ -508,42 +565,33 @@ function Result({
       ) : null}
 
       <div className="mt-8 grid gap-4 lg:grid-cols-2 lg:items-start">
-        {/* a plan that fits */}
-        <AppSurface
-          title={`Tonight in ${city?.name}`}
-          meta={`Fits inside ${money(daily)} a day`}
-        >
-          <PlanView plan={plan} animate={false} />
-        </AppSurface>
-
-        <div className="flex flex-col gap-4">
-          {/* what onboarding established */}
-          <div className="rounded-xl border border-ink-200 bg-paper-2 p-5">
-            <p className="font-mono text-micro uppercase tracking-[0.12em] text-ink-400">
-              Because you picked{" "}
-              {interests
-                .map((key) => INTERESTS.find((item) => item.key === key)?.label.toLowerCase())
-                .filter(Boolean)
-                .join(", ")}
+        {plan ? (
+          <AppSurface
+            title={`Tonight in ${city.name}`}
+            meta={daily !== null ? `Fits inside ${money(daily, where)} a day` : "A free evening"}
+          >
+            <PlanView plan={plan} animate={false} where={where} />
+          </AppSurface>
+        ) : (
+          <div className="rounded-2xl bg-white p-5 shadow-[var(--shadow-raise)] ring-1 ring-ink-950/5 sm:p-6">
+            <p className="font-mono text-micro tracking-[0.12em] text-ink-500 uppercase">
+              {city.name} on day one · {cityStatusLabel[city.status]}
             </p>
-            {/* This block used to list three places. They came from the
-                hand-written place file so the last screen of onboarding looked
-                full, and they were picked before the student had said where
-                they live — so even as a preview they were showing the middle
-                of the city. Real places are one request away, on Today, ranked
-                against everything just entered. Saying that is better than
-                three names nobody chose. */}
-            <p className="mt-3 text-sm leading-relaxed text-ink-600">
-              Your first list is built when you open {brand.name}: real places near where you are
-              staying, ordered by what you just told us. Nothing is picked in advance.
+            <p className="mt-3 text-[0.9375rem] leading-relaxed text-ink-700">
+              {cityStatusNote[city.status]}
+            </p>
+            <p className="mt-3 text-[0.8125rem] leading-relaxed text-ink-500">
+              No sample evening here on purpose: the only seeded plans are for Madrid, and showing
+              one under a {city.name} heading would be a plan for the wrong city.
             </p>
           </div>
+        )}
 
-          {/* pulse */}
+        <div className="flex flex-col gap-4">
           {summary ? (
-            <div className="rounded-xl border border-ink-200 bg-paper-2 p-5">
-              <p className="font-mono text-micro uppercase tracking-[0.12em] text-ink-400">
-                What {city?.name} students are talking about
+            <div className="rounded-2xl border border-ink-200 bg-paper-2 p-5">
+              <p className="font-mono text-micro tracking-[0.12em] text-ink-500 uppercase">
+                What {city.name} students are talking about
               </p>
               <p className="mt-3 text-[0.875rem] leading-relaxed text-ink-700">{summary.body}</p>
               <Link
@@ -556,68 +604,67 @@ function Result({
             </div>
           ) : null}
 
-          {/* arrival */}
-          <div className="rounded-xl border border-ink-200 bg-paper-2 p-5">
-            <p className="font-mono text-micro uppercase tracking-[0.12em] text-ink-400">
+          <div className="rounded-2xl border border-ink-200 bg-paper-2 p-5">
+            <p className="font-mono text-micro tracking-[0.12em] text-ink-500 uppercase">
               First four things to do
             </p>
             <ol className="mt-3 flex flex-col gap-2">
               {tasks.map((task, index) => (
                 <li key={task.id} className="flex items-baseline gap-3">
-                  <span className="tnum font-mono text-xs text-ink-300">
+                  <span className="tnum font-mono text-xs text-ink-400">
                     {String(index + 1).padStart(2, "0")}
                   </span>
                   <span className="text-[0.875rem] text-ink-800">{task.label}</span>
                 </li>
               ))}
             </ol>
-            <Link
-              href={`/city/${citySlug}/starter-pack`}
-              className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-ink-950 underline underline-offset-4"
-            >
-              See the whole list
-              <ArrowRight className="size-3.5" aria-hidden />
-            </Link>
+            {city.deep ? (
+              <Link
+                href={`/city/${citySlug}/starter-pack`}
+                className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-ink-950 underline underline-offset-4"
+              >
+                See the whole list
+                <ArrowRight className="size-3.5" aria-hidden />
+              </Link>
+            ) : null}
           </div>
         </div>
       </div>
 
-      {/* keep it */}
-      <div className="mt-8 rounded-xl border border-ink-200 bg-paper-2 p-5 sm:p-6">
-        <div className="flex flex-wrap items-start justify-between gap-6">
-          <div className="max-w-md">
-            <h3 className="text-display-xs text-ink-950">Keep this setup</h3>
-            <p className="mt-2 text-sm leading-relaxed text-ink-600">
-              {city?.name} accounts open{" "}
-              {city?.status === "live" ? "first" : "once the first groups are in place"}.
-              Leave an address and you get one email when it does.
-            </p>
-          </div>
-          <div className="w-full max-w-md">
-            <WaitlistForm citySlug={citySlug} cityName={city?.name} />
-          </div>
+      {/* ---- keep it: the account, with the answers carried over ------------ */}
+      <div
+        data-surface="dark"
+        className="mt-8 flex flex-col gap-5 rounded-2xl bg-linear-to-b from-console-2 to-console p-6 text-white shadow-[var(--shadow-console)] sm:flex-row sm:items-center sm:justify-between sm:p-7"
+      >
+        <div className="max-w-md">
+          <h2 className="text-display-xs text-white">Keep this. Your answers come with you.</h2>
+          <p className="mt-2 flex items-start gap-2 text-[0.875rem] leading-relaxed text-white/65">
+            <Check className="mt-0.5 size-4 shrink-0 text-signal" aria-hidden />
+            Setup opens with your city, campus, budget and interests already filled in.
+          </p>
+        </div>
+        <div className="flex shrink-0 flex-col gap-2 sm:items-end">
+          <ButtonLink href="/signup" variant="signal" size="lg">
+            Create your account
+          </ButtonLink>
+          <span className="text-[0.8125rem] text-white/45">Free. No card.</span>
         </div>
       </div>
 
-      <div className="mt-6 flex flex-wrap gap-3">
-        {/* The preview ends where it should: an account, which is what makes
-            any of this persist. Looking around the city page stays available
-            as the secondary path for anyone not ready to sign up. */}
-        <ButtonLink href="/signup" variant="signal" size="md">
-          Create your account
-        </ButtonLink>
-        <ButtonLink href={`/city/${citySlug}`} variant="outline" size="md">
-          Look around {city?.name}
-        </ButtonLink>
+      <div className="mt-4 flex flex-wrap gap-3">
+        {city.deep ? (
+          <ButtonLink href={`/city/${citySlug}`} variant="outline" size="md">
+            Look around {city.name}
+          </ButtonLink>
+        ) : null}
         <ButtonLink href="/pricing" variant="outline" size="md">
           Compare plans
         </ButtonLink>
       </div>
 
-      <p className="mt-6 text-[0.8125rem] leading-relaxed text-ink-400">
-        Everything above is assembled from the same sample rows used across this site, filtered by
-        what you just told us. Live answers, live prices and a live feed arrive when {city?.name}{" "}
-        opens.
+      <p className="mt-6 text-[0.8125rem] leading-relaxed text-ink-500">
+        {plan ? "The evening above is sample data, labelled as such. " : ""}
+        Live places, events and prices open on your Today screen once you&rsquo;re in.
       </p>
     </motion.div>
   );

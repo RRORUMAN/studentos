@@ -24,9 +24,10 @@ export default async function SignUpPage(props: PageProps<"/signup">) {
 
   return (
     <div>
-      <h1 className="text-display-sm text-ink-950">Make the city cheaper.</h1>
+      <h1 className="text-display-sm text-ink-950">Two minutes to your city.</h1>
       <p className="mt-3 mb-8 text-[0.9375rem] leading-relaxed text-ink-600">
-        Two minutes of setup and {brand.name} knows your city, your budget and what you are into.
+        Create an account, answer a few questions, and {brand.name} opens on your city, your
+        budget and what you&rsquo;re into. Free, no card.
       </p>
 
       <div className="mb-5">
