@@ -74,7 +74,10 @@ export function SiteNav() {
       className={cn(
         "fixed inset-x-0 top-0 z-50 transition-[background-color,box-shadow,backdrop-filter] duration-300",
         scrolled || menuOpen
-          ? "bg-paper/85 shadow-[0_1px_0_0_var(--color-ink-200)] backdrop-blur-md"
+          ? /* 95, not 85: at 85 the header went a muddy grey whenever it
+               crossed the dark Ask section, which is most of the scroll on a
+               phone. It still blurs, just no longer tints. */
+            "bg-paper/95 shadow-[0_1px_0_0_var(--color-ink-200)] backdrop-blur-md"
           : "bg-transparent",
       )}
     >

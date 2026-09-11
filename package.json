@@ -24,6 +24,7 @@
     "areas:discover": "node scripts/import-areas.mjs",
     "test": "node --test --experimental-strip-types --import ./scripts/test-register.mjs \"tests/unit/*.test.ts\"",
     "test:e2e": "playwright test",
+    "test:smoke": "playwright test --config playwright.smoke.config.ts",
     "mascot:manifest": "node scripts/mascot-manifest.mjs"
   },
   "dependencies": {

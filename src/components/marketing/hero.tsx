@@ -93,9 +93,9 @@ export function Hero() {
                 const Icon = item.icon;
                 return (
                   <div key={item.label} className="min-w-0">
-                    <dt className="flex items-center gap-1.5 text-[0.8125rem] font-semibold text-ink-950 sm:text-[0.875rem]">
-                      <Icon className="size-4 shrink-0 text-ink-400" aria-hidden />
-                      <span className="truncate">{item.label}</span>
+                    <dt className="flex items-start gap-1.5 text-[0.8125rem] leading-tight font-semibold text-ink-950 sm:text-[0.875rem]">
+                      <Icon className="mt-px size-4 shrink-0 text-ink-400" aria-hidden />
+                      <span>{item.label}</span>
                     </dt>
                     <dd className="mt-1 hidden text-[0.8125rem] leading-snug text-ink-500 sm:block">
                       {item.detail}
@@ -112,11 +112,11 @@ export function Hero() {
           <div id="demo" className="relative mx-auto w-full max-w-[36rem] scroll-mt-24">
             <div
               aria-hidden
-              className="pointer-events-none absolute inset-x-8 top-12 bottom-28 hidden rotate-[4deg] rounded-[1.75rem] bg-signal sm:block"
+              className="pointer-events-none absolute -right-2 -left-4 top-16 bottom-28 hidden rotate-[3deg] rounded-[1.75rem] bg-signal sm:block"
             />
             <div
               aria-hidden
-              className="pointer-events-none absolute inset-x-6 top-14 bottom-24 hidden -rotate-[3deg] rounded-[1.75rem] bg-pulse-soft ring-1 ring-pulse/20 sm:block"
+              className="pointer-events-none absolute -right-5 -left-2 top-20 bottom-24 hidden -rotate-[2deg] rounded-[1.75rem] bg-pulse-soft ring-1 ring-pulse/20 sm:block"
             />
             <p className="relative mb-3 flex items-center justify-center gap-2 font-mono text-micro tracking-[0.12em] text-ink-500 uppercase xl:justify-start">
               <span className="relative grid size-1.5 place-items-center" aria-hidden>

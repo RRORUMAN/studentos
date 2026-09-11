@@ -77,7 +77,9 @@ export function BudgetSection() {
               <div className="mb-4 flex justify-end">
                 <SampleTag onDark />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              {/* `items-end`: on a phone "Safe to spend this week" wraps to two
+                  lines, and the two figures sat on different baselines. */}
+              <div className="grid grid-cols-2 items-end gap-4">
                 <div>
                   <p className="font-mono text-micro uppercase tracking-[0.12em] text-white/40">
                     Safe to spend today
